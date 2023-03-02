@@ -7,43 +7,58 @@ using System.Text;
 
 // namespace TableNS{ 
 public unsafe class Table{
-
     internal uint id;
     internal long size;
     internal int rowSize;
-    // public FieldInfo[] fields;
-    public ConcurrentDictionary<string, (int, int)> catalog;
-    public ConcurrentDictionary<string, byte[]> data; // {ch[]: byte[]} | ch[]: tuple
+    // TODO: bool can be a single bit
+    internal ConcurrentDictionary<string, (bool, int, int)> metadata;
+    internal ConcurrentDictionary<string, byte[]> data;
     // public Dictionary index; 
 
-    // TODO: using dynamic vs T?? in the future, could be interface! 
-    public Table(Dictionary<string, int> schema){
-        this.catalog = new ConcurrentDictionary<string,(int, int)>();
+    public Table(Dictionary<string, (bool, int)> schema){
+        this.metadata = new ConcurrentDictionary<string,(bool, int, int)>();
         
         int offset = 0;
         int size = 0;
         foreach (var entry in schema) {
-            size = entry.Value;
-            this.catalog[entry.Key] = (size, offset);
-            offset += size;
+            size = entry.Value.Item1 ? -1 : entry.Value.Item2;
+            this.metadata[entry.Key] = (entry.Value.Item1, size, offset);
+            offset += entry.Value.Item1 ? IntPtr.Size : size;
         }
         this.rowSize = offset;
         this.data = new ConcurrentDictionary<string, byte[]>();
     }
 
     public ReadOnlySpan<byte> Get(string key, string attribute){
-        (int size, int offset) = this.catalog[attribute];
+        (bool varLen, int size, int offset) = this.metadata[attribute];
+        if (varLen) { // address to pointer
+            // get the address from memory
+            byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, offset+IntPtr.Size)).ToArray();
+            System.Console.WriteLine(BitConverter.ToInt64(addr));
+            byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
+            return new ReadOnlySpan<byte>(ptr, size);
+        }
         return new ReadOnlySpan<byte>(this.data[key], offset, offset+size);
     }
-    public void Set(string key, string attribute, byte[] value){
-        (int size, int offset) = this.catalog[attribute];
+    public ReadOnlySpan<byte> Set(string key, string attribute, byte[] value){
+        (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]);
-        for (int i = 0; i < value.Length; i++) {
-            if (offset + i > size) break;
-            row[offset+i] = value[i];
+        byte[] valueToWrite = value;
+        if (varLen) {
+            this.metadata[attribute] = (varLen, value.Length, offset);
+            fixed (byte* valuePtr = &value[0]) {
+                IntPtr addr = new IntPtr(valuePtr);
+                System.Console.WriteLine(addr.ToInt64());
+                valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
+            }
+            size = IntPtr.Size;
         }
-        // Span<byte> slot = new Span<byte>(row, offset, offset+size);
-        // slot = value;
+        // TODO: Alternatively, look into Marshal?
+        for (int i = 0; i < valueToWrite.Length; i++) {
+            if (offset + i > size) break;
+            row[offset+i] = valueToWrite[i];
+        }
+        return new ReadOnlySpan<byte>(this.data[key], offset, offset+size);
     }
 
     // public void debug(){
