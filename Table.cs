@@ -46,6 +46,7 @@ public unsafe class Table{
         byte[] valueToWrite = value;
         if (varLen) {
             this.metadata[attribute] = (varLen, value.Length, offset);
+            // row[offset] = valueToWrite;
             fixed (byte* valuePtr = &value[0]) {
                 IntPtr addr = new IntPtr(valuePtr);
                 System.Console.WriteLine(addr.ToInt64());
