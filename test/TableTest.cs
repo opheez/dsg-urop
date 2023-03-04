@@ -38,14 +38,13 @@ namespace TableTests
         [TestMethod]
         public void TestVarLength(){
             Dictionary<string,(bool,int)> schema = new Dictionary<string, (bool,int)>();
-            schema.Add("uhoh", (true,0));
+            schema.Add("attrName", (true,0));
 
             Table test = new Table(schema);
-            byte[] name = Encoding.ASCII.GetBytes("123456789");
-            var written = test.Set("a", "uhoh", name);
-            System.Console.WriteLine(BitConverter.ToInt64(written.ToArray()));
-            var y = test.Get("a", "uhoh");
-            System.Console.WriteLine(Encoding.ASCII.GetString(y));
+            byte[] input = Encoding.ASCII.GetBytes("123456789");
+            var written = test.Set("key1", "attrName", input);
+            var y = test.Get("key1", "attrName");
+            CollectionAssert.AreEqual(input, y.ToArray());
         }
     }
 }

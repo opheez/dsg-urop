@@ -31,28 +31,34 @@ public unsafe class Table{
 
     public ReadOnlySpan<byte> Get(string key, string attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
-        if (varLen) { // address to pointer
-            // get the address from memory
-            byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, offset+IntPtr.Size)).ToArray();
-            System.Console.WriteLine(BitConverter.ToInt64(addr));
-            byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
+        if (varLen) {
+            byte* ptr = GetVarLenAddr(key, offset);
             return new ReadOnlySpan<byte>(ptr, size);
         }
         return new ReadOnlySpan<byte>(this.data[key], offset, offset+size);
     }
+
+    internal byte* GetVarLenAddr(string key, int offset){
+        byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, offset+IntPtr.Size)).ToArray();
+        // System.Console.WriteLine(BitConverter.ToInt64(addr));
+        byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
+        return ptr;
+    }
     public ReadOnlySpan<byte> Set(string key, string attribute, byte[] value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
-        byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]);
+        byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value;
         if (varLen) {
             this.metadata[attribute] = (varLen, value.Length, offset);
-            // row[offset] = valueToWrite;
-            fixed (byte* valuePtr = &value[0]) {
-                IntPtr addr = new IntPtr(valuePtr);
-                System.Console.WriteLine(addr.ToInt64());
-                valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
-            }
+            IntPtr addr = Marshal.AllocHGlobal(value.Length);
+            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
+            valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
             size = IntPtr.Size;
+            // fixed (byte* valuePtr = &cloned[0]) {
+                // IntPtr addr = new IntPtr(valuePtr);
+                // System.Console.WriteLine(addr.ToInt64());
+                // valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
+            // }
         }
         // TODO: Alternatively, look into Marshal?
         for (int i = 0; i < valueToWrite.Length; i++) {
