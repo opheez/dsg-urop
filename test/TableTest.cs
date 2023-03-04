@@ -7,19 +7,6 @@ namespace TableTests
     public unsafe class TableTests
     {
 
-        [TestMethod]
-        public void TestStorePointer(){
-            byte[] x = new byte[]{(byte)'a'};
-            fixed (byte* ptr = &x[0]){
-                IntPtr addr = new IntPtr(ptr);
-                byte[] memory = BitConverter.GetBytes(addr.ToInt64());
-                System.Console.WriteLine(addr.ToInt64());
-                System.Console.WriteLine(BitConverter.ToInt64(memory));
-                byte* decodedPtr = (byte*)(new IntPtr(BitConverter.ToInt64(memory))).ToPointer();
-                // byte* decodedPtr = (byte*)addr.ToPointer();
-                Console.WriteLine(*decodedPtr);
-            }
-        }
 
         [TestMethod]
         public void TestInsertRead(){
@@ -29,10 +16,12 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("Ophelia");
-            test.Set("a", "name", name);
-
-            var y = test.Get("a", "name");
-            System.Console.WriteLine(Encoding.ASCII.GetString(y));
+            test.Set("key1", "name", name);
+            test.Set("key1", "age", BitConverter.GetBytes(21));
+            var retName = test.Get("key1", "name");
+            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName).TrimEnd((Char)0));
+            var retAge = test.Get("key1", "age");
+            Assert.AreEqual(21, BitConverter.ToInt64(retAge.ToArray()));
         }
 
         [TestMethod]

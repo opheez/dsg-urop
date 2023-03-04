@@ -35,11 +35,11 @@ public unsafe class Table{
             byte* ptr = GetVarLenAddr(key, offset);
             return new ReadOnlySpan<byte>(ptr, size);
         }
-        return new ReadOnlySpan<byte>(this.data[key], offset, offset+size);
+        return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
     internal byte* GetVarLenAddr(string key, int offset){
-        byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, offset+IntPtr.Size)).ToArray();
+        byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
         // System.Console.WriteLine(BitConverter.ToInt64(addr));
         byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
         return ptr;
@@ -54,18 +54,13 @@ public unsafe class Table{
             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
             valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
             size = IntPtr.Size;
-            // fixed (byte* valuePtr = &cloned[0]) {
-                // IntPtr addr = new IntPtr(valuePtr);
-                // System.Console.WriteLine(addr.ToInt64());
-                // valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
-            // }
+        } else if (value.Length > size) {
+            throw new ArgumentException("Value you are trying to write is too large");
         }
-        // TODO: Alternatively, look into Marshal?
         for (int i = 0; i < valueToWrite.Length; i++) {
-            if (offset + i > size) break;
             row[offset+i] = valueToWrite[i];
         }
-        return new ReadOnlySpan<byte>(this.data[key], offset, offset+size);
+        return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
     // public void debug(){
