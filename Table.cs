@@ -21,6 +21,9 @@ public unsafe class Table{
         int offset = 0;
         int size = 0;
         foreach (var entry in schema) {
+            if (!entry.Value.Item1 && entry.Value.Item2 <= 0) {
+                throw new ArgumentException();
+            }
             size = entry.Value.Item1 ? -1 : entry.Value.Item2;
             this.metadata[entry.Key] = (entry.Value.Item1, size, offset);
             offset += entry.Value.Item1 ? IntPtr.Size : size;
@@ -54,8 +57,8 @@ public unsafe class Table{
             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
             valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
             size = IntPtr.Size;
-        } else if (value.Length > size) {
-            throw new ArgumentException("Value you are trying to write is too large");
+        } else if (value.Length > size || value.Length <= 0) {
+            throw new ArgumentException("Value must be nonempty and less than schema-specified size");
         }
         for (int i = 0; i < valueToWrite.Length; i++) {
             row[offset+i] = valueToWrite[i];
