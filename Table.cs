@@ -11,12 +11,12 @@ public unsafe class Table{
     internal long size;
     internal int rowSize;
     // TODO: bool can be a single bit
-    internal ConcurrentDictionary<string, (bool, int, int)> metadata;
-    internal ConcurrentDictionary<string, byte[]> data;
+    internal ConcurrentDictionary<long, (bool, int, int)> metadata;
+    internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
-    public Table(Dictionary<string, (bool, int)> schema){
-        this.metadata = new ConcurrentDictionary<string,(bool, int, int)>();
+    public Table(Dictionary<long, (bool, int)> schema){
+        this.metadata = new ConcurrentDictionary<long,(bool, int, int)>();
         
         int offset = 0;
         int size = 0;
@@ -29,10 +29,10 @@ public unsafe class Table{
             offset += entry.Value.Item1 ? IntPtr.Size : size;
         }
         this.rowSize = offset;
-        this.data = new ConcurrentDictionary<string, byte[]>();
+        this.data = new ConcurrentDictionary<long, byte[]>();
     }
 
-    public ReadOnlySpan<byte> Get(string key, string attribute){
+    public ReadOnlySpan<byte> Get(long key, long attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
             byte* ptr = GetVarLenAddr(key, offset);
@@ -41,13 +41,13 @@ public unsafe class Table{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    internal byte* GetVarLenAddr(string key, int offset){
+    internal byte* GetVarLenAddr(long key, int offset){
         byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
         // System.Console.WriteLine(BitConverter.ToInt64(addr));
         byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
         return ptr;
     }
-    public ReadOnlySpan<byte> Set(string key, string attribute, byte[] value){
+    public ReadOnlySpan<byte> Set(long key, long attribute, byte[] value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value;
@@ -72,7 +72,7 @@ public unsafe class Table{
     //         for (int i=0; i < entry.Value.Length; i++) {
     //             System.Console.Write(entry.Value[i] + ",");
     //         }
-    //         Console.WriteLine("\n" + Encoding.ASCII.GetString(entry.Value));
+    //         Console.WriteLine("\n" + Encoding.ASCII.Getlong(entry.Value));
     //     }
     // }
 
