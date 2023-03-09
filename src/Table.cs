@@ -32,7 +32,7 @@ public unsafe class Table{
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
 
-    public ReadOnlySpan<byte> Get(long key, long attribute){
+    public ReadOnlySpan<byte> Read(long key, long attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
             byte* ptr = GetVarLenAddr(key, offset);
@@ -47,7 +47,7 @@ public unsafe class Table{
         byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
         return ptr;
     }
-    public ReadOnlySpan<byte> Set(long key, long attribute, byte[] value){
+    public ReadOnlySpan<byte> Upsert(long key, long attribute, byte[] value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value;

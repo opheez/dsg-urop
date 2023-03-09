@@ -31,7 +31,7 @@ namespace TableTests
             schema.Add(67890, (false, 32));
 
             Table test = new Table(schema);
-            var retName = test.Get(11111, 12345);
+            var retName = test.Read(11111, 12345);
         }
 
         [TestMethod]
@@ -43,9 +43,9 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            test.Set(11111, 12345, name);
+            test.Upsert(11111, 12345, name);
             long attrAsLong = BitConverter.ToInt64(Encoding.ASCII.GetBytes("occupation"));
-            var retName = test.Get(11111, attrAsLong);
+            var retName = test.Read(11111, attrAsLong);
         }
 
         [TestMethod]
@@ -56,11 +56,11 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            test.Set(11111, 12345, name);
-            test.Set(11111, 67890, BitConverter.GetBytes(21));
-            var retName = test.Get(11111, 12345);
+            test.Upsert(11111, 12345, name);
+            test.Upsert(11111, 67890, BitConverter.GetBytes(21));
+            var retName = test.Read(11111, 12345);
             Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName).TrimEnd((Char)0));
-            var retAge = test.Get(11111, 67890);
+            var retAge = test.Read(11111, 67890);
             Assert.AreEqual(21, BitConverter.ToInt64(retAge.ToArray()));
         }
 
@@ -72,14 +72,14 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            test.Set(11111, 12345, name);
-            test.Set(11111, 67890, BitConverter.GetBytes(21));
-            test.Set(11111, 67890, BitConverter.GetBytes(40));
+            test.Upsert(11111, 12345, name);
+            test.Upsert(11111, 67890, BitConverter.GetBytes(21));
+            test.Upsert(11111, 67890, BitConverter.GetBytes(40));
             name = Encoding.ASCII.GetBytes("Johnathan Doever");
-            test.Set(11111, 12345, name);
+            test.Upsert(11111, 12345, name);
 
-            var retName = test.Get(11111, 12345);
-            var retAge = test.Get(11111, 67890);
+            var retName = test.Read(11111, 12345);
+            var retAge = test.Read(11111, 67890);
 
             Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName).TrimEnd((Char)0));
             Assert.AreEqual(40, BitConverter.ToInt64(retAge.ToArray()));
@@ -93,7 +93,7 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
-            test.Set(11111, 12345, name);
+            test.Upsert(11111, 12345, name);
         }
 
         [TestMethod]
@@ -104,7 +104,7 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("");
-            test.Set(11111, 12345, name);
+            test.Upsert(11111, 12345, name);
         }
 
         [TestMethod]
@@ -114,8 +114,8 @@ namespace TableTests
 
             Table test = new Table(schema);
             byte[] input = Encoding.ASCII.GetBytes("123456789");
-            var written = test.Set(11111, 12345, input);
-            var y = test.Get(11111, 12345);
+            var written = test.Upsert(11111, 12345, input);
+            var y = test.Read(11111, 12345);
             CollectionAssert.AreEqual(input, y.ToArray());
             input = Encoding.ASCII.GetBytes("555555555");
             CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("123456789"), y.ToArray());
