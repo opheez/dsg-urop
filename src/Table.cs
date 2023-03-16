@@ -66,15 +66,15 @@ public unsafe class Table{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    // public void debug(){
-    //     foreach (var entry in data){
-    //         Console.WriteLine(entry.Key);
-    //         for (int i=0; i < entry.Value.Length; i++) {
-    //             System.Console.Write(entry.Value[i] + ",");
-    //         }
-    //         Console.WriteLine("\n" + Encoding.ASCII.Getlong(entry.Value));
-    //     }
-    // }
+    public void debug(){
+        foreach (var entry in data){
+            Console.WriteLine(entry.Key);
+            // for (int i=0; i < entry.Value.Length; i++) {
+            //     System.Console.Write(entry.Value[i] + ",");
+            // }
+            // Console.WriteLine("\n");// + Encoding.ASCII.GetBytes(entry.Value));
+        }
+    }
 
 }
 
