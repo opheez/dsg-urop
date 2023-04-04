@@ -6,12 +6,12 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 // namespace TableNS{ 
-public unsafe class Table{
+public unsafe class Table : IDisposable{
     internal uint id;
     internal long size;
     internal int rowSize;
     // TODO: bool can be a single bit
-    internal ConcurrentDictionary<long, (bool, int, int)> metadata;
+    internal ConcurrentDictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
@@ -35,17 +35,19 @@ public unsafe class Table{
     public ReadOnlySpan<byte> Read(long key, long attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
-            byte* ptr = GetVarLenAddr(key, offset);
+            byte* ptr = GetVarLenPtr(key, offset);
             return new ReadOnlySpan<byte>(ptr, size);
         }
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    internal byte* GetVarLenAddr(long key, int offset){
+    internal byte* GetVarLenPtr(long key, int offset){
+        return (byte*)(GetVarLenAddr(key, offset)).ToPointer();
+    }
+    internal IntPtr GetVarLenAddr(long key, int offset){
         byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
-        // System.Console.WriteLine(BitConverter.ToInt64(addr));
-        byte* ptr = (byte*)(new IntPtr(BitConverter.ToInt64(addr))).ToPointer();
-        return ptr;
+        // Console.WriteLine(addr.ToString());
+        return new IntPtr(BitConverter.ToInt64(addr));
     }
     public ReadOnlySpan<byte> Upsert(long key, long attribute, byte[] value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
@@ -66,13 +68,36 @@ public unsafe class Table{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
+    public void Dispose(){
+        // iterate through all of the table to find pointers and dispose of 
+        foreach (var field in metadata){
+            if (field.Value.Item1 && field.Value.Item2 != -1) {
+                int offset = field.Value.Item3;
+                foreach (var entry in data){
+                    IntPtr ptrToFree = GetVarLenAddr(entry.Key, offset);
+                    if (ptrToFree != IntPtr.Zero){
+                        Marshal.FreeHGlobal(ptrToFree);
+                    }
+                }
+            }
+        }
+    }
+
     public void debug(){
-        foreach (var entry in data){
-            Console.WriteLine(entry.Key);
+        Console.WriteLine("Metadata: ");
+        foreach (var field in metadata){
+            Console.Write($"{field.Key} is {field.Value.Item1} {field.Value.Item2} {field.Value.Item3}\n");
             // for (int i=0; i < entry.Value.Length; i++) {
             //     System.Console.Write(entry.Value[i] + ",");
             // }
             // Console.WriteLine("\n");// + Encoding.ASCII.GetBytes(entry.Value));
+        }
+        foreach (var entry in data){
+            Console.WriteLine(entry.Key);
+            for (int i=0; i < entry.Value.Length; i++) {
+                System.Console.Write(entry.Value[i] + ",");
+            }
+            Console.WriteLine("\n");// + Encoding.ASCII.GetBytes(entry.Value));
         }
     }
 
