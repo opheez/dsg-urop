@@ -49,10 +49,10 @@ public unsafe class Table : IDisposable{
         // Console.WriteLine(addr.ToString());
         return new IntPtr(BitConverter.ToInt64(addr));
     }
-    public ReadOnlySpan<byte> Upsert(long key, long attribute, byte[] value){
+    public ReadOnlySpan<byte> Upsert(long key, long attribute, Span<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
-        byte[] valueToWrite = value;
+        byte[] valueToWrite = value.ToArray();
         if (varLen) {
             this.metadata[attribute] = (varLen, value.Length, offset);
             IntPtr addr = Marshal.AllocHGlobal(value.Length);
