@@ -6,17 +6,17 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 // namespace TableNS{ 
-public unsafe class Table : IDisposable{
+public unsafe class Table<Key> : IDisposable{
     internal uint id;
     internal long size;
     internal int rowSize;
     // TODO: bool can be a single bit
-    internal ConcurrentDictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
-    internal ConcurrentDictionary<long, byte[]> data;
+    internal ConcurrentDictionary<Key, (bool, int, int)> metadata; // (varLen, size, offset)
+    internal ConcurrentDictionary<Key, byte[]> data;
     // public Dictionary index; 
 
-    public Table(Dictionary<long, (bool, int)> schema){
-        this.metadata = new ConcurrentDictionary<long,(bool, int, int)>();
+    public Table(Dictionary<Key, (bool, int)> schema){
+        this.metadata = new ConcurrentDictionary<Key,(bool, int, int)>();
         
         int offset = 0;
         int size = 0;
@@ -29,10 +29,10 @@ public unsafe class Table : IDisposable{
             offset += entry.Value.Item1 ? IntPtr.Size : size;
         }
         this.rowSize = offset;
-        this.data = new ConcurrentDictionary<long, byte[]>();
+        this.data = new ConcurrentDictionary<Key, byte[]>();
     }
 
-    public ReadOnlySpan<byte> Read(long key, long attribute){
+    public ReadOnlySpan<byte> Read(Key key, Key attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
             byte* ptr = GetVarLenPtr(key, offset);
@@ -41,15 +41,15 @@ public unsafe class Table : IDisposable{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    internal byte* GetVarLenPtr(long key, int offset){
+    internal byte* GetVarLenPtr(Key key, int offset){
         return (byte*)(GetVarLenAddr(key, offset)).ToPointer();
     }
-    internal IntPtr GetVarLenAddr(long key, int offset){
+    internal IntPtr GetVarLenAddr(Key key, int offset){
         byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
         // Console.WriteLine(addr.ToString());
         return new IntPtr(BitConverter.ToInt64(addr));
     }
-    public ReadOnlySpan<byte> Upsert(long key, long attribute, Span<byte> value){
+    public ReadOnlySpan<byte> Upsert(Key key, Key attribute, Span<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();

@@ -15,7 +15,7 @@ public class TableBenchmarkDotNet
     private static long[] attrs;
     private static byte[][] values;
     private static Dictionary<long,(bool,int)> schema;
-    private static Table tbl;
+    private static Table<long> tbl;
     private static Thread[] workers;
 
     public TableBenchmarkDotNet(){
@@ -35,7 +35,7 @@ public class TableBenchmarkDotNet
             r.NextBytes(values[i]);
         }
 
-        tbl = new Table(schema);
+        tbl = new Table<long>(schema);
         Setup();
     }
 
