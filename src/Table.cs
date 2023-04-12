@@ -4,8 +4,16 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Runtime.CompilerServices;
 
 // namespace TableNS{ 
+
+/// <summary>
+/// Stores data as a byte array (TODO: change to generic type)
+/// Always uses Span<byte> with the user
+/// </summary>
+/// <typeparam name="Key"></typeparam>
+[assembly:InternalsVisibleTo("TableTests")]
 public unsafe class Table<Key> : IDisposable{
     internal uint id;
     internal long size;
@@ -32,7 +40,7 @@ public unsafe class Table<Key> : IDisposable{
         this.data = new ConcurrentDictionary<Key, byte[]>();
     }
 
-    public ReadOnlySpan<byte> Read(Key key, Key attribute){
+    internal ReadOnlySpan<byte> Read(Key key, Key attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
             byte* ptr = GetVarLenPtr(key, offset);
@@ -41,15 +49,15 @@ public unsafe class Table<Key> : IDisposable{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    internal byte* GetVarLenPtr(Key key, int offset){
+    protected byte* GetVarLenPtr(Key key, int offset){
         return (byte*)(GetVarLenAddr(key, offset)).ToPointer();
     }
-    internal IntPtr GetVarLenAddr(Key key, int offset){
+    protected IntPtr GetVarLenAddr(Key key, int offset){
         byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
         // Console.WriteLine(addr.ToString());
         return new IntPtr(BitConverter.ToInt64(addr));
     }
-    public ReadOnlySpan<byte> Upsert(Key key, Key attribute, Span<byte> value){
+    internal ReadOnlySpan<byte> Upsert(Key key, Key attribute, Span<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();
