@@ -1,27 +1,31 @@
+// using System.Runtime.InteropServices;
 
-/// <summary>
-/// 
-/// </summary>
-public class TransactionContext<Key, Value> {
+// namespace DB {
+// /// <summary>
+// /// 
+// /// </summary>
+// public class TransactionContext {
 
-    public enum Status {
-        Idle,
-        Pending,
-        Committed
-    }
+//     internal TransactionStatus status;
+//     internal Dictionary<KeyAttr, (bool, byte[])> RWset;
 
-    public struct KeyAttr{
-        Key key;
-        Key attr;
-    }
+//     public byte[]? Get(KeyAttr keyAttr){
+//         if (RWset.ContainsKey(keyAttr)){
+//             return RWset[keyAttr];
+//         }
+//         return null;
+//     }
 
-    internal Dictionary<KeyAttr, Value> ReadSet;
-    internal Dictionary<KeyAttr, Value> WriteSet;
+//     public void Set(KeyAttr keyAttr, Span<byte> val){
+//         RWset[keyAttr] = (true, val);
+//     }
 
-    public Value? ReadContext(){
-        
-    }
-    public Value? UpsertContext(){
+//     public Dictionary<KeyAttr, byte[]> GetReadset(){
+//         return RWset.Where(item => !item.Value.Item1).ToDictionary(item => item.Key, item => item.Value.Item2);
+//     }
+//     public Dictionary<KeyAttr, byte[]> GetWriteset(){
+//         return RWset.Where(item => item.Value.Item1).ToDictionary(item => item.Key, item => item.Value.Item2);
+//     }
+// }
 
-    }
-}
+// }

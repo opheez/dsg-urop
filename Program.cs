@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Text;
 using BenchmarkDotNet.Running;
+using DB;
 unsafe class Program {
 
     public static void Main(){
@@ -16,10 +17,9 @@ unsafe class Program {
         schema.Add(12345, (false,100));
         schema.Add(67890, (false, 32));
 
-        Table<long> test = new Table<long>(schema);
+        Table test = new Table(schema);
         
-        ClientSession<long, byte[]> session = new ClientSession<long, byte[]>(tbl);
-        session.Read();
+        
 
     }
 

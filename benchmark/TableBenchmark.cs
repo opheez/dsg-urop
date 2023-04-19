@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Diagnostics;
+using DB;
 public abstract class TableBenchmark
 {
     public static int PerThreadDataCount = 100000; // enough to be larger than l3 cache
@@ -27,7 +28,7 @@ public abstract class TableBenchmark
         values = new byte[DatasetSize][];
     }
 
-    internal void MultiThreadedUpserts(Table<long> tbl)
+    internal void MultiThreadedUpserts(Table tbl)
     {
         for (int thread = 0; thread < ThreadCount; thread++) {
             int t = thread;
@@ -39,7 +40,7 @@ public abstract class TableBenchmark
         }
     }
 
-    internal void MultiThreadedUpsertsReads(Table<long> tbl, double ratio)
+    internal void MultiThreadedUpsertsReads(Table tbl, double ratio)
     {
         for (int thread = 0; thread < ThreadCount; thread++) {
             int t = thread;
@@ -51,13 +52,13 @@ public abstract class TableBenchmark
         }
     }
 
-    internal void Upserts(Table<long> tbl, int thread_idx){
+    internal void Upserts(Table tbl, int thread_idx){
         for (int i = 0; i < PerThreadDataCount; i++){
             int loc = i + (PerThreadDataCount * thread_idx);
             tbl.Upsert(keys[loc],attrs[loc%AttrCount],values[loc]);
         }
     }
-    internal void UpsertsReads(Table<long> tbl, int thread_idx, double ratio){
+    internal void UpsertsReads(Table tbl, int thread_idx, double ratio){
         for (int i = 0; i < PerThreadDataCount; i++){
             int loc = i + (PerThreadDataCount * thread_idx);
             if (keys[loc] < Int64.MaxValue * ratio) {
@@ -70,7 +71,7 @@ public abstract class TableBenchmark
 
     public void Run(){
         for (int i = 0; i < IterationCount; i++){
-            using (Table<long> tbl = new Table<long>(schema)) {
+            using (Table tbl = new Table(schema)) {
                 var insertSw = Stopwatch.StartNew();
                 MultiThreadedUpserts(tbl); // setup
                 insertSw.Stop();

@@ -6,25 +6,24 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Runtime.CompilerServices;
 
-// namespace TableNS{ 
+[assembly:InternalsVisibleTo("TableTests")]
+namespace DB { 
 
 /// <summary>
 /// Stores data as a byte array (TODO: change to generic type)
 /// Always uses Span<byte> with the user
 /// </summary>
-/// <typeparam name="Key"></typeparam>
-[assembly:InternalsVisibleTo("TableTests")]
-public unsafe class Table<Key> : IDisposable{
+public unsafe class Table : IDisposable{
     internal uint id;
     internal long size;
     internal int rowSize;
     // TODO: bool can be a single bit
-    internal ConcurrentDictionary<Key, (bool, int, int)> metadata; // (varLen, size, offset)
-    internal ConcurrentDictionary<Key, byte[]> data;
+    internal ConcurrentDictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
+    internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
-    public Table(Dictionary<Key, (bool, int)> schema){
-        this.metadata = new ConcurrentDictionary<Key,(bool, int, int)>();
+    public Table(Dictionary<long, (bool, int)> schema){
+        this.metadata = new ConcurrentDictionary<long,(bool, int, int)>();
         
         int offset = 0;
         int size = 0;
@@ -37,10 +36,10 @@ public unsafe class Table<Key> : IDisposable{
             offset += entry.Value.Item1 ? IntPtr.Size : size;
         }
         this.rowSize = offset;
-        this.data = new ConcurrentDictionary<Key, byte[]>();
+        this.data = new ConcurrentDictionary<long, byte[]>();
     }
 
-    internal ReadOnlySpan<byte> Read(Key key, Key attribute){
+    internal ReadOnlySpan<byte> Read(long key, long attribute){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
             byte* ptr = GetVarLenPtr(key, offset);
@@ -49,15 +48,21 @@ public unsafe class Table<Key> : IDisposable{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    protected byte* GetVarLenPtr(Key key, int offset){
+    // public ReadOnlySpan<byte> Read(KeyAttr keyAttr, TransactionContext ctx){
+    //     // TODO: raise wrong table error if KeyAttr does not exist in this table
+
+    //     // if it does, read from the table and add it to the context
+    // }
+
+    protected byte* GetVarLenPtr(long key, int offset){
         return (byte*)(GetVarLenAddr(key, offset)).ToPointer();
     }
-    protected IntPtr GetVarLenAddr(Key key, int offset){
+    protected IntPtr GetVarLenAddr(long key, int offset){
         byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
         // Console.WriteLine(addr.ToString());
         return new IntPtr(BitConverter.ToInt64(addr));
     }
-    internal ReadOnlySpan<byte> Upsert(Key key, Key attribute, Span<byte> value){
+    internal ReadOnlySpan<byte> Upsert(long key, long attribute, Span<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();
@@ -75,6 +80,10 @@ public unsafe class Table<Key> : IDisposable{
         }
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
+
+    // public ReadOnlySpan<byte> Upsert(KeyAttr keyAttr, Span<byte> value, TransactionContext ctx){
+    //     ctx.Set(keyAttr, value);
+    // }
 
     public void Dispose(){
         // iterate through all of the table to find pointers and dispose of 
@@ -111,5 +120,5 @@ public unsafe class Table<Key> : IDisposable{
 
 }
 
-// }
+}
 

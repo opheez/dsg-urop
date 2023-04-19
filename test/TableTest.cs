@@ -2,7 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
 using System.Runtime.InteropServices;
 
-namespace TableTests
+namespace DB
 {
     [TestClass]
     public unsafe class TableTests
@@ -13,7 +13,7 @@ namespace TableTests
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 0));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
         }
 
         [TestMethod]
@@ -21,7 +21,7 @@ namespace TableTests
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (true, -1));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
         }
 
         [TestMethod]
@@ -31,7 +31,7 @@ namespace TableTests
             schema.Add(12345, (false,100));
             schema.Add(67890, (false, 32));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             var retName = test.Read(11111, 12345);
         }
 
@@ -42,7 +42,7 @@ namespace TableTests
             schema.Add(12345, (false,100));
             schema.Add(67890, (false, 32));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             test.Upsert(11111, 12345, name.AsSpan());
             long attrAsLong = BitConverter.ToInt64(Encoding.ASCII.GetBytes("occupation"));
@@ -55,7 +55,7 @@ namespace TableTests
             schema.Add(12345, (false,100));
             schema.Add(67890, (false, 32));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             test.Upsert(11111, 12345, name.AsSpan());
             test.Upsert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
@@ -71,7 +71,7 @@ namespace TableTests
             schema.Add(12345, (false,100));
             schema.Add(67890, (false, 32));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             test.Upsert(11111, 12345, name.AsSpan());
             test.Upsert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
@@ -92,7 +92,7 @@ namespace TableTests
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 10));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
             test.Upsert(11111, 12345, name.AsSpan());
         }
@@ -103,7 +103,7 @@ namespace TableTests
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 10));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("");
             test.Upsert(11111, 12345, name.AsSpan());
         }
@@ -113,7 +113,7 @@ namespace TableTests
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (true,0));
 
-            Table<long> test = new Table<long>(schema);
+            Table test = new Table(schema);
             byte[] input = Encoding.ASCII.GetBytes("123456789");
             var written = test.Upsert(11111, 12345, input.AsSpan());
             var y = test.Read(11111, 12345);

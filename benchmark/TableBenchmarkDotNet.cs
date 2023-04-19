@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Diagnostics;
 using BenchmarkDotNet.Attributes;
+using DB;
 [ThreadingDiagnoser]
 public class TableBenchmarkDotNet
 {
@@ -15,7 +16,7 @@ public class TableBenchmarkDotNet
     private static long[] attrs;
     private static byte[][] values;
     private static Dictionary<long,(bool,int)> schema;
-    private static Table<long> tbl;
+    private static Table tbl;
     private static Thread[] workers;
 
     public TableBenchmarkDotNet(){
@@ -35,7 +36,7 @@ public class TableBenchmarkDotNet
             r.NextBytes(values[i]);
         }
 
-        tbl = new Table<long>(schema);
+        tbl = new Table(schema);
         Setup();
     }
 
