@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -45,14 +46,29 @@ public unsafe class Table : IDisposable{
             byte* ptr = GetVarLenPtr(key, offset);
             return new ReadOnlySpan<byte>(ptr, size);
         }
+        // TODO: handle if key not found return null instead of error
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    // public ReadOnlySpan<byte> Read(KeyAttr keyAttr, TransactionContext ctx){
-    //     // TODO: raise wrong table error if KeyAttr does not exist in this table
+    public ReadOnlySpan<byte> Read(KeyAttr keyAttr, TransactionContext ctx){
+        if (!this.metadata.ContainsKey(keyAttr.Attr)){
+            throw new KeyNotFoundException();
+        }
 
-    //     // if it does, read from the table and add it to the context
-    // }
+        // assumes key exists
+        byte[]? ctxRead = ctx.GetFromContext(keyAttr);
+        if (ctxRead != null) {
+            return ctxRead.AsSpan();
+        } else {
+            ReadOnlySpan<byte> currVal = this.Read(keyAttr.Key, keyAttr.Attr);
+            var spanBytes = new Span<byte>();
+            currVal.CopyTo(spanBytes);
+            ctx.SetInContext(keyAttr, spanBytes, false);
+            return currVal;
+        }
+
+        return ReadOnlySpan<byte>.Empty;
+    }
 
     protected byte* GetVarLenPtr(long key, int offset){
         return (byte*)(GetVarLenAddr(key, offset)).ToPointer();
@@ -81,9 +97,14 @@ public unsafe class Table : IDisposable{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    // public ReadOnlySpan<byte> Upsert(KeyAttr keyAttr, Span<byte> value, TransactionContext ctx){
-    //     ctx.Set(keyAttr, value);
-    // }
+    public ReadOnlySpan<byte> Upsert(KeyAttr keyAttr, Span<byte> value, TransactionContext ctx){
+        if (!this.metadata.ContainsKey(keyAttr.Attr)){
+            throw new KeyNotFoundException();
+        }
+
+        ctx.SetInContext(keyAttr, value, true);
+        return this.Read(keyAttr, ctx);
+    }
 
     public void Dispose(){
         // iterate through all of the table to find pointers and dispose of 
