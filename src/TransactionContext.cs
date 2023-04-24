@@ -2,14 +2,18 @@ using System.Runtime.InteropServices;
 
 namespace DB {
 /// <summary>
-/// Data structure holding transaction context, should be used for a single table but not tied to one
+/// Data structure holding transaction context, used for a single table
 /// </summary>
 public class TransactionContext {
 
+    internal Table tbl;
     internal TransactionStatus status;
+    internal uint startTxn;
     internal Dictionary<KeyAttr, (bool, byte[]?)> RWset;
 
-    public TransactionContext(){
+    public TransactionContext(Table tbl, uint startTxn){
+        this.tbl = tbl;
+        this.startTxn = startTxn;
         status = TransactionStatus.Idle;
         RWset = new Dictionary<KeyAttr, (bool, byte[]?)>();
     }
@@ -21,7 +25,7 @@ public class TransactionContext {
         return null;
     }
 
-    public void SetInContext(KeyAttr keyAttr, Span<byte> val, bool write){
+    public void SetInContext(KeyAttr keyAttr, ReadOnlySpan<byte> val, bool write){
         RWset[keyAttr] = (write, val.ToArray());
     }
 

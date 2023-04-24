@@ -61,9 +61,7 @@ public unsafe class Table : IDisposable{
             return ctxRead.AsSpan();
         } else {
             ReadOnlySpan<byte> currVal = this.Read(keyAttr.Key, keyAttr.Attr);
-            var spanBytes = new Span<byte>();
-            currVal.CopyTo(spanBytes);
-            ctx.SetInContext(keyAttr, spanBytes, false);
+            ctx.SetInContext(keyAttr, currVal, false);
             return currVal;
         }
 
@@ -78,7 +76,7 @@ public unsafe class Table : IDisposable{
         // Console.WriteLine(addr.ToString());
         return new IntPtr(BitConverter.ToInt64(addr));
     }
-    internal ReadOnlySpan<byte> Upsert(long key, long attribute, Span<byte> value){
+    internal ReadOnlySpan<byte> Upsert(long key, long attribute, ReadOnlySpan<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();
@@ -97,7 +95,7 @@ public unsafe class Table : IDisposable{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    public ReadOnlySpan<byte> Upsert(KeyAttr keyAttr, Span<byte> value, TransactionContext ctx){
+    public ReadOnlySpan<byte> Upsert(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
         if (!this.metadata.ContainsKey(keyAttr.Attr)){
             throw new KeyNotFoundException();
         }

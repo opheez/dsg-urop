@@ -18,13 +18,18 @@ unsafe class Program {
         schema.Add(67890, (false, 32));
 
         Table table = new Table(schema);
-        TransactionContext t = TransactionManager.Begin();
+        TransactionManager.Run();
+        TransactionContext t = TransactionManager.Begin(table);
         var v3 = table.Upsert(new KeyAttr(1,12345), BitConverter.GetBytes(21).AsSpan(), t);
         var v1 = table.Read(new KeyAttr(1,12345), t);
         // var v2 = table.Read(new KeyAttr(2,12345), t);
         var success = TransactionManager.Commit(t);
         if (success) {
+            System.Console.WriteLine("success! :)");
         // send v3 back to client, or some other logic from the upper level execution engine
+        } else {
+            System.Console.WriteLine("fail ):");
+
         }
 
     }

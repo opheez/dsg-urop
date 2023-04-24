@@ -4,7 +4,8 @@ namespace DB {
     public enum TransactionStatus {
         Idle,
         Pending,
-        Committed
+        Committed,
+        Aborted
     }
     public struct KeyAttr{
 
