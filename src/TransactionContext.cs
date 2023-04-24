@@ -6,13 +6,11 @@ namespace DB {
 /// </summary>
 public class TransactionContext {
 
-    internal Table tbl;
     internal TransactionStatus status;
     internal uint startTxn;
     internal Dictionary<KeyAttr, (bool, byte[]?)> RWset;
 
-    public TransactionContext(Table tbl, uint startTxn){
-        this.tbl = tbl;
+    public TransactionContext(uint startTxn){
         this.startTxn = startTxn;
         status = TransactionStatus.Idle;
         RWset = new Dictionary<KeyAttr, (bool, byte[]?)>();

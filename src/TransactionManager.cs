@@ -14,8 +14,8 @@ public class TransactionManager {
     /// </summary>
     /// <param name="tbl">Table that the transaction context belongs to</param>
     /// <returns>Newly created transaction context</returns>
-    public static TransactionContext Begin(Table tbl){
-        return new TransactionContext(tbl, txnc);
+    public static TransactionContext Begin(){
+        return new TransactionContext(txnc);
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ public class TransactionManager {
                         foreach (var item in ctx.GetWriteset()){
                             KeyAttr keyAttr = item.Key;
                             byte[] val = item.Value;
-                            ctx.tbl.Upsert(keyAttr.Key, keyAttr.Attr, val.AsSpan());
+                            keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr, val.AsSpan());
                         }
                         Interlocked.Increment(ref txnc);
                         tidToCtx[txnc] = ctx;
