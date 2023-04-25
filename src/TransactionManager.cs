@@ -26,14 +26,14 @@ public class TransactionManager {
     public static bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);
-        while (ctx.status == TransactionStatus.Pending){
-            Thread.Sleep(100);
-        }
+        Monitor.Enter(ctx);
+        Monitor.Wait(ctx);
         if (ctx.status == TransactionStatus.Aborted){
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
             return true;
         }
+        Monitor.Exit(ctx);
         return false;
     }
 
@@ -64,9 +64,15 @@ public class TransactionManager {
                     Interlocked.Increment(ref txnc);
                     tidToCtx[txnc] = ctx;
                     // assign num 
+                    Monitor.Enter(ctx);
                     ctx.status = TransactionStatus.Committed;
+                    Monitor.Pulse(ctx);
+                    Monitor.Exit(ctx);
                 } else {
+                    Monitor.Enter(ctx);
                     ctx.status = TransactionStatus.Aborted;
+                    Monitor.Pulse(ctx);
+                    Monitor.Exit(ctx);
                 }
             }
         });
