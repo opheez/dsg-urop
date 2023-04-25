@@ -5,7 +5,7 @@ using System.Threading;
 namespace DB {
 public class TransactionManager {
 
-    internal static ConcurrentQueue<TransactionContext> txnQueue = new ConcurrentQueue<TransactionContext>();
+    internal static BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
     internal static Dictionary<uint, TransactionContext> tidToCtx = new Dictionary<uint, TransactionContext>();
     internal static uint txnc = 0;
 
@@ -25,7 +25,7 @@ public class TransactionManager {
     /// <returns>True if the transaction committed, false otherwise</returns>
     public static bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
-        txnQueue.Enqueue(ctx);
+        txnQueue.Add(ctx);
         while (ctx.status == TransactionStatus.Pending){
             Thread.Sleep(100);
         }
@@ -44,32 +44,29 @@ public class TransactionManager {
     public static void Run(){
         Thread committer = new Thread(() => {
             while (true) {
-                if (txnQueue.TryDequeue(out TransactionContext ctx)){
-                    uint finishTxn = txnc;
-                    bool valid = true;
-                    // validate
-                    for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
-                        if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
-                            valid = false;
-                            break;
-                        }
+                TransactionContext ctx = txnQueue.Take();
+                uint finishTxn = txnc;
+                bool valid = true;
+                // validate
+                for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
+                    if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
+                        valid = false;
+                        break;
                     }
-                    if (valid) {
-                        // write phase
-                        foreach (var item in ctx.GetWriteset()){
-                            KeyAttr keyAttr = item.Key;
-                            byte[] val = item.Value;
-                            keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr, val.AsSpan());
-                        }
-                        Interlocked.Increment(ref txnc);
-                        tidToCtx[txnc] = ctx;
-                        // assign num 
-                        ctx.status = TransactionStatus.Committed;
-                    } else {
-                        ctx.status = TransactionStatus.Aborted;
+                }
+                if (valid) {
+                    // write phase
+                    foreach (var item in ctx.GetWriteset()){
+                        KeyAttr keyAttr = item.Key;
+                        byte[] val = item.Value;
+                        keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr, val.AsSpan());
                     }
+                    Interlocked.Increment(ref txnc);
+                    tidToCtx[txnc] = ctx;
+                    // assign num 
+                    ctx.status = TransactionStatus.Committed;
                 } else {
-                    Thread.Sleep(50);
+                    ctx.status = TransactionStatus.Aborted;
                 }
             }
         });
