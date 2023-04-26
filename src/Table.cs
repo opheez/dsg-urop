@@ -41,12 +41,14 @@ public unsafe class Table : IDisposable{
     }
 
     internal ReadOnlySpan<byte> Read(long key, long attribute){
+        if (!this.data.ContainsKey(key)){
+            return ReadOnlySpan<byte>.Empty;
+        }
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
             byte* ptr = GetVarLenPtr(key, offset);
             return new ReadOnlySpan<byte>(ptr, size);
         }
-        // TODO: handle if key not found return null instead of error
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
@@ -64,8 +66,6 @@ public unsafe class Table : IDisposable{
             ctx.SetInContext(keyAttr, currVal, false);
             return currVal;
         }
-
-        return ReadOnlySpan<byte>.Empty;
     }
 
     protected byte* GetVarLenPtr(long key, int offset){

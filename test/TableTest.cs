@@ -25,7 +25,6 @@ namespace DB
         }
 
         [TestMethod]
-        [ExpectedException(typeof(KeyNotFoundException))]
         public void TestInvalidKey(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false,100));
@@ -33,6 +32,7 @@ namespace DB
 
             Table test = new Table(schema);
             var retName = test.Read(11111, 12345);
+            Assert.IsTrue(retName.IsEmpty);
         }
 
         [TestMethod]
