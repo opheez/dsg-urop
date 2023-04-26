@@ -48,7 +48,9 @@ public class TransactionManager {
                 uint finishTxn = txnc;
                 bool valid = true;
                 // validate
+                // System.Console.WriteLine("My readset: " + ctx.GetReadset().Count + "\nMy writeset:" + ctx.GetWriteset().Count);
                 for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
+                    // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
                     if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
                         valid = false;
                         break;
@@ -80,6 +82,18 @@ public class TransactionManager {
         committer.Start();
 
     }
+
+    // internal class KeyAttrComparer : IEqualityComparer<KeyAttr> {
+    //     public bool Equals(KeyAttr k1, KeyAttr k2)
+    //     {
+    //         return k1.Equals(k2);
+    //     }
+        
+    //     public int GetHashCode(KeyAttr k)
+    //     {
+    //         return k.GetHashCode();
+    //     }
+    // }
 }
 
 }
