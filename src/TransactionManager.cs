@@ -5,16 +5,16 @@ using System.Threading;
 namespace DB {
 public class TransactionManager {
 
-    internal static BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
-    internal static Dictionary<uint, TransactionContext> tidToCtx = new Dictionary<uint, TransactionContext>();
-    internal static uint txnc = 0;
+    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
+    internal Dictionary<uint, TransactionContext> tidToCtx = new Dictionary<uint, TransactionContext>();
+    internal uint txnc = 0;
 
     /// <summary>
     /// Create a new transaction context 
     /// </summary>
     /// <param name="tbl">Table that the transaction context belongs to</param>
     /// <returns>Newly created transaction context</returns>
-    public static TransactionContext Begin(){
+    public TransactionContext Begin(){
         return new TransactionContext(txnc);
     }
 
@@ -23,7 +23,7 @@ public class TransactionManager {
     /// </summary>
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
-    public static bool Commit(TransactionContext ctx){
+    public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);
         Monitor.Enter(ctx);
@@ -41,7 +41,7 @@ public class TransactionManager {
     /// Spawns a thread that continuously polls the queue to 
     /// validate and commit a transaction context
     /// </summary>
-    public static void Run(){
+    public void Run(){
         Thread committer = new Thread(() => {
             while (true) {
                 TransactionContext ctx = txnQueue.Take();
