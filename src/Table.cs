@@ -57,7 +57,6 @@ public unsafe class Table : IDisposable{
             throw new KeyNotFoundException();
         }
 
-        // assumes key exists
         byte[]? ctxRead = ctx.GetFromContext(keyAttr);
         if (ctxRead != null) {
             return ctxRead.AsSpan();
