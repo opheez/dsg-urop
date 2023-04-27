@@ -1,4 +1,4 @@
-
+using System;
 namespace DB {
 
     public enum TransactionStatus {
@@ -7,6 +7,23 @@ namespace DB {
         Committed,
         Aborted
     }
+
+    public unsafe struct Pointer {
+        public Pointer(IntPtr ptr, int size){
+            Size = size;
+            IntPointer = ptr;
+            Ptr = ptr.ToPointer();
+        }
+        public Pointer(void* ptr, int size){
+            Size = size;
+            IntPointer = new IntPtr(ptr);
+            Ptr = ptr;
+        }
+        public int Size;
+        public IntPtr IntPointer;
+        public void* Ptr;
+    }
+
     public struct KeyAttr{ //} : IEquatable<KeyAttr>{
 
         public KeyAttr(long key, long attr, Table t){

@@ -124,11 +124,18 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] input = Encoding.ASCII.GetBytes("123456789");
-            var written = test.Upsert(11111, 12345, input.AsSpan());
+            test.Upsert(11111, 12345, input.AsSpan());
             var y = test.Read(11111, 12345);
             CollectionAssert.AreEqual(input, y.ToArray());
-            input = Encoding.ASCII.GetBytes("555555555");
+            
+            input = Encoding.ASCII.GetBytes("short");
+            test.Upsert(22222, 12345, input.AsSpan());
+            var y1 = test.Read(11111, 12345);
+            var y2 = test.Read(22222, 12345);
+
             CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("123456789"), y.ToArray());
+            CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("123456789"), y1.ToArray());
+            CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("short"), y2.ToArray());
         }
     }
 }

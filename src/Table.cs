@@ -12,7 +12,8 @@ namespace DB {
 
 /// <summary>
 /// Stores data as a byte array (TODO: change to generic type)
-/// Always uses Span<byte> with the user
+/// Variable length pointers are stored as {size_of_variable}{address_of_variable}
+/// Always uses ReadOnlySpan<byte> with the user
 /// </summary>
 public unsafe class Table : IDisposable{
     internal uint id;
@@ -32,9 +33,9 @@ public unsafe class Table : IDisposable{
             if (!entry.Value.Item1 && entry.Value.Item2 <= 0) {
                 throw new ArgumentException();
             }
-            size = entry.Value.Item1 ? -1 : entry.Value.Item2;
+            size = entry.Value.Item1 ? IntPtr.Size * 2 : entry.Value.Item2;
             this.metadata[entry.Key] = (entry.Value.Item1, size, offset);
-            offset += entry.Value.Item1 ? IntPtr.Size : size;
+            offset += entry.Value.Item1 ? IntPtr.Size * 2 : size;
         }
         this.rowSize = offset;
         this.data = new ConcurrentDictionary<long, byte[]>();
@@ -46,8 +47,8 @@ public unsafe class Table : IDisposable{
         }
         (bool varLen, int size, int offset) = this.metadata[attribute];
         if (varLen) {
-            byte* ptr = GetVarLenPtr(key, offset);
-            return new ReadOnlySpan<byte>(ptr, size);
+            Pointer ptr = GetVarLenPtr(key, offset);
+            return new ReadOnlySpan<byte>(ptr.Ptr, ptr.Size);
         }
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
@@ -67,25 +68,25 @@ public unsafe class Table : IDisposable{
         }
     }
 
-    protected byte* GetVarLenPtr(long key, int offset){
-        return (byte*)(GetVarLenAddr(key, offset)).ToPointer();
-    }
-    protected IntPtr GetVarLenAddr(long key, int offset){
-        byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
-        // Console.WriteLine(addr.ToString());
-        return new IntPtr(BitConverter.ToInt64(addr));
+    protected Pointer GetVarLenPtr(long key, int offset){
+        byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset + IntPtr.Size, IntPtr.Size)).ToArray();
+        byte[] size = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
+        IntPtr res = new IntPtr(BitConverter.ToInt64(addr)); //TODO convert based on nint size
+        return new Pointer(res, BitConverter.ToInt32(size));
     }
     internal ReadOnlySpan<byte> Upsert(long key, long attribute, ReadOnlySpan<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();
         if (varLen) {
-            this.metadata[attribute] = (varLen, value.Length, offset);
             IntPtr addr = Marshal.AllocHGlobal(value.Length);
             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-            valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
-            size = IntPtr.Size;
-        } else if (value.Length != size || value.Length <= 0) {
+            valueToWrite = new byte[IntPtr.Size * 2];
+            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
+            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
+        }
+
+        if (valueToWrite.Length != size || valueToWrite.Length <= 0) {
             throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
         }
         for (int i = 0; i < valueToWrite.Length; i++) {
@@ -113,7 +114,7 @@ public unsafe class Table : IDisposable{
             if (field.Value.Item1 && field.Value.Item2 != -1) {
                 int offset = field.Value.Item3;
                 foreach (var entry in data){
-                    IntPtr ptrToFree = GetVarLenAddr(entry.Key, offset);
+                    IntPtr ptrToFree = GetVarLenPtr(entry.Key, offset).IntPointer;
                     if (ptrToFree != IntPtr.Zero){
                         Marshal.FreeHGlobal(ptrToFree);
                     }
