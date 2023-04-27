@@ -28,7 +28,6 @@ namespace DB
         public void TestInvalidKey(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false,100));
-            schema.Add(67890, (false, 32));
 
             Table test = new Table(schema);
             var retName = test.Read(11111, 12345);
@@ -39,8 +38,7 @@ namespace DB
         [ExpectedException(typeof(KeyNotFoundException))]
         public void TestInvalidAttribute(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false,100));
-            schema.Add(67890, (false, 32));
+            schema.Add(12345, (false, 8));
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
@@ -52,38 +50,38 @@ namespace DB
         [TestMethod]
         public void TestInsertRead(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false,100));
-            schema.Add(67890, (false, 32));
+            schema.Add(12345, (false, 8));
+            schema.Add(67890, (false, 4));
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             test.Upsert(11111, 12345, name.AsSpan());
             test.Upsert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
             var retName = test.Read(11111, 12345);
-            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName).TrimEnd((Char)0));
+            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName));
             var retAge = test.Read(11111, 67890);
-            Assert.AreEqual(21, BitConverter.ToInt64(retAge.ToArray()));
+            Assert.AreEqual(21, BitConverter.ToInt32(retAge.ToArray()));
         }
 
         [TestMethod]
         public void TestMultipleInsertRead(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false,100));
-            schema.Add(67890, (false, 32));
+            schema.Add(12345, (false, 8));
+            schema.Add(67890, (false, 4));
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             test.Upsert(11111, 12345, name.AsSpan());
             test.Upsert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
             test.Upsert(11111, 67890, BitConverter.GetBytes(40).AsSpan());
-            name = Encoding.ASCII.GetBytes("Johnathan Doever");
+            name = Encoding.ASCII.GetBytes("Anna Lee");
             test.Upsert(11111, 12345, name.AsSpan());
 
             var retName = test.Read(11111, 12345);
             var retAge = test.Read(11111, 67890);
 
-            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName).TrimEnd((Char)0));
-            Assert.AreEqual(40, BitConverter.ToInt64(retAge.ToArray()));
+            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName));
+            Assert.AreEqual(40, BitConverter.ToInt32(retAge.ToArray()));
         }
 
         [TestMethod]
@@ -94,6 +92,17 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
+            test.Upsert(11111, 12345, name.AsSpan());
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentException))]
+        public void TestUndersizeInsert(){
+            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
+            schema.Add(12345, (false, 10));
+
+            Table test = new Table(schema);
+            byte[] name = Encoding.ASCII.GetBytes("a");
             test.Upsert(11111, 12345, name.AsSpan());
         }
 

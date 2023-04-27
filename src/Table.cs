@@ -85,8 +85,8 @@ public unsafe class Table : IDisposable{
             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
             valueToWrite = BitConverter.GetBytes(addr.ToInt64()); // TODO: change based on size of intptr
             size = IntPtr.Size;
-        } else if (value.Length > size || value.Length <= 0) {
-            throw new ArgumentException("Value must be nonempty and less than schema-specified size");
+        } else if (value.Length != size || value.Length <= 0) {
+            throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
         }
         for (int i = 0; i < valueToWrite.Length; i++) {
             row[offset+i] = valueToWrite[i];
@@ -99,6 +99,10 @@ public unsafe class Table : IDisposable{
             throw new KeyNotFoundException();
         }
 
+        (bool varLen, int size, int offset) = this.metadata[keyAttr.Attr];
+        if (!varLen && value.Length != size) {
+            throw new ArgumentException($"Value to insert must be of size {size}");
+        }
         ctx.SetInContext(keyAttr, value, true);
         return this.Read(keyAttr, ctx);
     }
