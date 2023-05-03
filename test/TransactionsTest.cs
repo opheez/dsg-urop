@@ -49,9 +49,7 @@ namespace DB
 
             TransactionContext t2 = txnManager.Begin();
             var v5 = table.Read(new KeyAttr(2,12345, table), t2);
-            System.Console.WriteLine(t2);
             table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
-            System.Console.WriteLine(t2);
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
 
@@ -82,15 +80,15 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v2 = table.Read(new KeyAttr(2,12345, table), t);
-            Thread thread = new Thread(() => Commit(txnManager, t)); 
+            // Thread thread = new Thread(() => Commit(txnManager, t)); 
 
             TransactionContext t2 = txnManager.Begin();
             var v5 = table.Read(new KeyAttr(2,12345, table), t2);
             table.Upsert(new KeyAttr(2,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
 
-            thread.Start();
-            while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
-            // TODO: make sure t2 doesn't finish commit until t1
+            // thread.Start();
+            // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
+            var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
 
             TransactionContext t3 = txnManager.Begin();
@@ -150,16 +148,16 @@ namespace DB
 
             // TransactionContext t = txnManager.Begin();
             // table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            // Thread thread = new Thread(() => {
-            //     var success = Commit(txnManager, t);
-            //     Assert.IsTrue(success, "Transaction was unable to commit");
-            // }); 
+            // // Thread thread = new Thread(() => {
+            // //     var success = Commit(txnManager, t);
+            // //     Assert.IsTrue(success, "Transaction was unable to commit");
+            // // }); 
 
             // TransactionContext t2 = txnManager.Begin();
             // table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
-            // thread.Start();
-            // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
-            // // var success = txnManager.Commit(t);
+            // // thread.Start();
+            // // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
+            // var success = txnManager.Commit(t);
             // var success2 = txnManager.Commit(t2);
 
             // Assert.IsFalse(success2, "Transaction 2 should abort");
