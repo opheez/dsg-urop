@@ -1,3 +1,4 @@
+//** Tianyu: remove unused usings
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -16,14 +17,19 @@ namespace DB {
 /// Always uses ReadOnlySpan<byte> with the user
 /// </summary>
 public unsafe class Table : IDisposable{
+    //** Tianyu: These two fields appear unused.
     internal uint id;
     internal long size;
     internal int rowSize;
     // TODO: bool can be a single bit
+    //** Tianyu: Alternatively, you can also use a special value of the  size field (e.g., INTMIN) to denote varlen
+    //** to save the bit. Also, because metadata does not change in your implementation, it might be a good idea to use a
+    //** read-only flat array instead of a (concurrent)dictionary.
     internal ConcurrentDictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
+    //** Tianyu: (nit) maybe can just use a vararg of size field instead of schema?
     public Table(Dictionary<long, (bool, int)> schema){
         this.metadata = new ConcurrentDictionary<long,(bool, int, int)>();
         
@@ -41,6 +47,9 @@ public unsafe class Table : IDisposable{
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
 
+    //** Tianyu: the API should have variants that allow users to read multiple attributes in one lookup for
+    //** performance and ease of use. Alternatively, it is also ok to just read the entire tuple (in your implementation
+    //** there is no copying (materialization) involved, so it comes with little overhead)
     internal ReadOnlySpan<byte> Read(long key, long attribute){
         if (!this.data.ContainsKey(key)){
             return ReadOnlySpan<byte>.Empty;
@@ -53,6 +62,7 @@ public unsafe class Table : IDisposable{
         return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
+    //** Tianyu: similar comment to above.
     public ReadOnlySpan<byte> Read(KeyAttr keyAttr, TransactionContext ctx){
         if (!this.metadata.ContainsKey(keyAttr.Attr)){
             throw new KeyNotFoundException();
@@ -73,6 +83,9 @@ public unsafe class Table : IDisposable{
         IntPtr res = new IntPtr(BitConverter.ToInt64(addr)); //TODO convert based on nint size
         return new Pointer(res, BitConverter.ToInt32(size));
     }
+    
+    //** Tianyu: similar comment to above. It might also be a good idea to differentiate between update and insert in
+    //** this particular case, where insert returns a key (tuple id).
     internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer

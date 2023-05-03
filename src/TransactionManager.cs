@@ -6,6 +6,8 @@ namespace DB {
 public class TransactionManager {
 
     internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
+    //** Tianyu: Performance nit: can you use a circular buffer/array instead of a dictionary if all you do is scan it
+    //** sequentially from some starting point?
     internal Dictionary<uint, TransactionContext> tidToCtx = new Dictionary<uint, TransactionContext>();
     internal uint txnc = 0;
 
@@ -15,6 +17,7 @@ public class TransactionManager {
     /// <param name="tbl">Table that the transaction context belongs to</param>
     /// <returns>Newly created transaction context</returns>
     public TransactionContext Begin(){
+        //** Tianyu: For performance, should probably use pooled objects instead of creating new ones
         return new TransactionContext(txnc);
     }
 
@@ -26,6 +29,7 @@ public class TransactionManager {
     public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);
+        //** Tianyu: I am not sure I understand why it's necessary to lock ctx here?
         Monitor.Enter(ctx);
         // while (true) {
             Monitor.Wait(ctx);
@@ -44,6 +48,8 @@ public class TransactionManager {
     /// validate and commit a transaction context
     /// </summary>
     public void Run(){
+        //** Tianyu: Should probably store this object somewhere and join() on it later --- as it stands this thread will
+        //** never cleanly exit 
         Thread committer = new Thread(() => {
             while (true) {
                 TransactionContext ctx = txnQueue.Take();
@@ -54,6 +60,8 @@ public class TransactionManager {
                 System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
                 for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
                     // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
+                    
+                    //** Tianyu: (nit) I believe the way LINQ is implemented means you will materialize this set instead of short-circuit on the first entry.
                     if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
                         foreach (var x in tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys)) {
                         System.Console.WriteLine(x);

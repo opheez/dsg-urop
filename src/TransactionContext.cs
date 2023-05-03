@@ -10,11 +10,16 @@ public class TransactionContext {
     internal uint startTxn;
     internal Dictionary<KeyAttr, byte[]?> Rset;
     internal Dictionary<KeyAttr, byte[]?> Wset;
+    //** Tianyu: Not used?
     public object l;
 
+    //** Tianyu: I would highly recommend having a Reset() function here as we likely want to keep a pool of
+    //** TransactionContext objects for replay and avoid allocating new ones frequently
     public TransactionContext(uint startTxn){
         this.startTxn = startTxn;
         status = TransactionStatus.Idle;
+        //** Tianyu: I am pretty sure OCC works on a tuple level rather than an attribute level? i.e., two writes
+        //** overlap even if they update disjoint attributes in a tuple. 
         Rset = new Dictionary<KeyAttr, byte[]?>();
         Wset = new Dictionary<KeyAttr, byte[]?>();
     }
