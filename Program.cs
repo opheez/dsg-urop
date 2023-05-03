@@ -21,7 +21,7 @@ unsafe class Program {
         TransactionManager txnManager = new TransactionManager();
         txnManager.Run();
         TransactionContext t = txnManager.Begin();
-        var v3 = table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+        table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
         var v1 = table.Read(new KeyAttr(1,12345, table), t);
         // var v2 = table.Read(new KeyAttr(2,12345), t);
         var success = txnManager.Commit(t);

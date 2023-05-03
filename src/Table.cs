@@ -63,7 +63,6 @@ public unsafe class Table : IDisposable{
             return ctxRead.AsSpan();
         } else {
             ReadOnlySpan<byte> currVal = this.Read(keyAttr.Key, keyAttr.Attr);
-            ctx.SetInContext(keyAttr, currVal, false);
             return currVal;
         }
     }
@@ -74,7 +73,7 @@ public unsafe class Table : IDisposable{
         IntPtr res = new IntPtr(BitConverter.ToInt64(addr)); //TODO convert based on nint size
         return new Pointer(res, BitConverter.ToInt32(size));
     }
-    internal ReadOnlySpan<byte> Upsert(long key, long attribute, ReadOnlySpan<byte> value){
+    internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
         (bool varLen, int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();
@@ -92,10 +91,9 @@ public unsafe class Table : IDisposable{
         for (int i = 0; i < valueToWrite.Length; i++) {
             row[offset+i] = valueToWrite[i];
         }
-        return new ReadOnlySpan<byte>(this.data[key], offset, size);
     }
 
-    public ReadOnlySpan<byte> Upsert(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
+    public void Upsert(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
         if (!this.metadata.ContainsKey(keyAttr.Attr)){
             throw new KeyNotFoundException();
         }
@@ -104,8 +102,8 @@ public unsafe class Table : IDisposable{
         if (!varLen && value.Length != size) {
             throw new ArgumentException($"Value to insert must be of size {size}");
         }
-        ctx.SetInContext(keyAttr, value, true);
-        return this.Read(keyAttr, ctx);
+        ctx.SetInContext(keyAttr, value);
+        return;
     }
 
     public void Dispose(){

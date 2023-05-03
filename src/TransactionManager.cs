@@ -27,12 +27,14 @@ public class TransactionManager {
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);
         Monitor.Enter(ctx);
-        Monitor.Wait(ctx);
-        if (ctx.status == TransactionStatus.Aborted){
-            return false;
-        } else if (ctx.status == TransactionStatus.Committed) {
-            return true;
-        }
+        // while (true) {
+            Monitor.Wait(ctx);
+            if (ctx.status == TransactionStatus.Aborted){
+                return false;
+            } else if (ctx.status == TransactionStatus.Committed) {
+                return true;
+            }
+        // }
         Monitor.Exit(ctx);
         return false;
     }
@@ -49,13 +51,21 @@ public class TransactionManager {
                 bool valid = true;
                 // validate
                 // System.Console.WriteLine("My readset: " + ctx.GetReadset().Count + "\nMy writeset:" + ctx.GetWriteset().Count);
+                System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
                 for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
                     // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
                     if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
+                        foreach (var x in tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys)) {
+                        System.Console.WriteLine(x);
+                        }
                         valid = false;
                         break;
                     }
                 }
+                // Monitor.Enter(ctx);
+                ctx.status = TransactionStatus.Validated;
+                // Monitor.Pulse(ctx);
+                // Monitor.Exit(ctx);
                 if (valid) {
                     // write phase
                     foreach (var item in ctx.GetWriteset()){
@@ -63,9 +73,13 @@ public class TransactionManager {
                         byte[] val = item.Value;
                         keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr, val.AsSpan());
                     }
+                    // assign num 
+                    // wait on 
+                    // Monitor.Enter(ctx.l);
+                    // Monitor.Wait(ctx.l);
+                    // Monitor.Exit(ctx.l);
                     Interlocked.Increment(ref txnc);
                     tidToCtx[txnc] = ctx;
-                    // assign num 
                     Monitor.Enter(ctx);
                     ctx.status = TransactionStatus.Committed;
                     Monitor.Pulse(ctx);

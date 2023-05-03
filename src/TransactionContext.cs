@@ -10,6 +10,7 @@ public class TransactionContext {
     internal uint startTxn;
     internal Dictionary<KeyAttr, byte[]?> Rset;
     internal Dictionary<KeyAttr, byte[]?> Wset;
+    public object l;
 
     public TransactionContext(uint startTxn){
         this.startTxn = startTxn;
@@ -19,15 +20,20 @@ public class TransactionContext {
     }
 
     public byte[]? GetFromContext(KeyAttr keyAttr){
+        byte[]? val = null;
         if (Wset.ContainsKey(keyAttr)){
-            return Wset[keyAttr];
+            val = Wset[keyAttr];
         } else if (Rset.ContainsKey(keyAttr)){
-            return Rset[keyAttr];
+            val = Rset[keyAttr];
         }
-        return null;
+        SetInContext(keyAttr, val, false);
+        return val;
     }
 
-    public void SetInContext(KeyAttr keyAttr, ReadOnlySpan<byte> val, bool write){
+    public void SetInContext(KeyAttr keyAttr, ReadOnlySpan<byte> val){
+        SetInContext(keyAttr, val, true);
+    }
+    private void SetInContext(KeyAttr keyAttr, ReadOnlySpan<byte> val, bool write){
         if (write){
             Wset[keyAttr] = val.ToArray();
         } else {
@@ -40,6 +46,10 @@ public class TransactionContext {
     }
     public Dictionary<KeyAttr, byte[]?> GetWriteset(){
         return Wset;
+    }
+
+    public override string ToString(){
+        return $"Readset: {string.Join(Environment.NewLine, GetReadset())}\nWriteset: {string.Join(Environment.NewLine, GetWriteset())}";
     }
 }
 

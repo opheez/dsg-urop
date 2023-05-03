@@ -4,6 +4,7 @@ namespace DB {
     public enum TransactionStatus {
         Idle,
         Pending,
+        Validated,
         Committed,
         Aborted
     }
@@ -34,6 +35,10 @@ namespace DB {
         public long Key;
         public long Attr;
         public Table Table;
+
+        public override string ToString(){
+            return $"({Key}, {Attr})";
+        }
 
         // public bool Equals(KeyAttr o){
         //     return Key == o.Key && Attr == o.Attr && Table == o.Table;
