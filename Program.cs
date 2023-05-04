@@ -7,7 +7,7 @@ unsafe class Program {
 
     public static void Main(){
         Console.WriteLine("Hello, World!");
-        TableBenchmark b = new FixedLenTableBenchmark(12345, 0.5);
+        TableBenchmark b = new TransactionalFixedLenTableBenchmark(12345, 0.5);
         b.RunTransactions();
         // b = new VarLenTableBenchmark(12345, 0.5);
         // b.Run();
