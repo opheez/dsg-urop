@@ -5,7 +5,7 @@ using DB;
 public abstract class TableBenchmark
 {
     public static int PerThreadDataCount = 100000; // enough to be larger than l3 cache
-    internal static int ThreadCount = 8;
+    internal static int ThreadCount = 2;
     internal static int AttrCount = 8;
     internal static int DatasetSize = PerThreadDataCount * ThreadCount;    
     internal static long[] keys;
@@ -14,7 +14,7 @@ public abstract class TableBenchmark
     internal static Dictionary<long,(bool,int)> schema;
     internal static Thread[] workers;
     internal BenchmarkStatistics stats;
-    internal int IterationCount = 10;
+    internal int IterationCount = 1;
     internal double ratio;
     internal int seed;
     public TableBenchmark(int seed, double ratio){
@@ -40,11 +40,35 @@ public abstract class TableBenchmark
         }
     }
 
+    internal void MultiThreadedUpsertTransactions(Table tbl, TransactionManager txnManager)
+    {
+        for (int thread = 0; thread < ThreadCount; thread++) {
+            int t = thread;
+            workers[thread] = new Thread(() => UpsertTransactions(tbl, txnManager, t));
+            workers[thread].Start();
+        }
+        for (int thread = 0; thread < ThreadCount; thread++) {
+            workers[thread].Join();
+        }
+    }
+
     internal void MultiThreadedUpsertsReads(Table tbl, double ratio)
     {
         for (int thread = 0; thread < ThreadCount; thread++) {
             int t = thread;
             workers[thread] = new Thread(() => UpsertsReads(tbl, t, ratio));
+            workers[thread].Start();
+        }
+        for (int thread = 0; thread < ThreadCount; thread++) {
+            workers[thread].Join();
+        }
+    }
+
+    internal void MultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
+    {
+        for (int thread = 0; thread < ThreadCount; thread++) {
+            int t = thread;
+            workers[thread] = new Thread(() => Transactions(tbl, txnManager, t, ratio));
             workers[thread].Start();
         }
         for (int thread = 0; thread < ThreadCount; thread++) {
@@ -58,6 +82,16 @@ public abstract class TableBenchmark
             tbl.Upsert(keys[loc],attrs[loc%AttrCount],values[loc]);
         }
     }
+
+    internal void UpsertTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
+        TransactionContext t = txnManager.Begin();
+        for (int i = 0; i < PerThreadDataCount; i++){
+            int loc = i + (PerThreadDataCount * thread_idx);
+            tbl.Upsert(new KeyAttr(keys[loc], attrs[loc%AttrCount], tbl), values[loc].AsSpan(), t);
+        }
+        txnManager.Commit(t);
+    }
+
     internal void UpsertsReads(Table tbl, int thread_idx, double ratio){
         for (int i = 0; i < PerThreadDataCount; i++){
             int loc = i + (PerThreadDataCount * thread_idx);
@@ -67,6 +101,19 @@ public abstract class TableBenchmark
                 tbl.Read(keys[loc], attrs[loc%AttrCount]);
             }
         }
+    }
+
+    internal void Transactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
+        TransactionContext t = txnManager.Begin();
+        for (int i = 0; i < PerThreadDataCount; i++){
+            int loc = i + (PerThreadDataCount * thread_idx);
+            if (keys[loc] < Int64.MaxValue * ratio) {
+                tbl.Upsert(new KeyAttr(keys[loc+DatasetSize],attrs[loc%AttrCount], tbl), values[loc].AsSpan(), t);
+            } else {
+                tbl.Read(new KeyAttr(keys[loc],attrs[loc%AttrCount], tbl), t);
+            }
+        }
+        txnManager.Commit(t);
     }
 
     public void Run(){
@@ -85,7 +132,26 @@ public abstract class TableBenchmark
         }
         stats.ShowAllStats();
         stats.SaveStatsToFile();
-        // return stats;
+    }
+
+    public void RunTransactions(){
+        for (int i = 0; i < IterationCount; i++){
+            TransactionManager txnManager = new TransactionManager();
+            txnManager.Run();
+            using (Table tbl = new Table(schema)) {
+                var insertSw = Stopwatch.StartNew();
+                MultiThreadedUpsertTransactions(tbl, txnManager); // setup
+                insertSw.Stop();
+                long insertMs = insertSw.ElapsedMilliseconds;
+                var opSw = Stopwatch.StartNew();
+                MultiThreadedTransactions(tbl, txnManager, ratio);
+                opSw.Stop();
+                long opMs = opSw.ElapsedMilliseconds;
+                stats.AddResult((insertMs, opMs));
+            }
+        }
+        stats.ShowAllStats();
+        stats.SaveStatsToFile();
     }
 }
 

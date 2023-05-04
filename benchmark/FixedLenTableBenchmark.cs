@@ -23,7 +23,7 @@ public class FixedLenTableBenchmark : TableBenchmark
             r.NextBytes(values[i]);
         }
         stats = new BenchmarkStatistics("FixedLenTableBenchmark", inserts, DatasetSize);
-
+        System.Console.WriteLine("Done init");
     }
 
 }
