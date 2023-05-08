@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Threading;
-// using Microsoft.Extensions.ObjectPool;
+using Microsoft.Extensions.ObjectPool;
 
 namespace DB {
 public class TransactionManager {
@@ -10,7 +10,7 @@ public class TransactionManager {
     internal Dictionary<uint, TransactionContext> tidToCtx = new Dictionary<uint, TransactionContext>();
     internal uint txnc = 0;
     internal Thread committer;
-    // internal ObjectPool<TransactionContext> ctxPool;
+    internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
 
     /// <summary>
     /// Create a new transaction context 
@@ -18,7 +18,10 @@ public class TransactionManager {
     /// <param name="tbl">Table that the transaction context belongs to</param>
     /// <returns>Newly created transaction context</returns>
     public TransactionContext Begin(){
-        return new TransactionContext(txnc);
+        var ctx = ctxPool.Get();
+        ctx.Init(txnc);
+        return ctx;
+        // return new TransactionContext(txnc);
     }
 
     /// <summary>
@@ -39,6 +42,7 @@ public class TransactionManager {
             return true;
         }
         Monitor.Exit(ctx);
+        ctxPool.Return(ctx);
         return false;
     }
 

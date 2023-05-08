@@ -11,7 +11,10 @@ public class TransactionContext {
     internal Dictionary<KeyAttr, byte[]?> Rset;
     internal Dictionary<KeyAttr, byte[]?> Wset;
 
-    public TransactionContext(uint startTxn){
+    public TransactionContext(){
+
+    }
+    public void Init(uint startTxn){
         this.startTxn = startTxn;
         status = TransactionStatus.Idle;
         Rset = new Dictionary<KeyAttr, byte[]?>();
