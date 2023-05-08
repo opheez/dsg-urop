@@ -181,6 +181,7 @@ public abstract class TableBenchmark
                 long opMs = opSw.ElapsedMilliseconds;
                 stats.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
             }
+            txnManager.Terminate();
         }
         stats.ShowAllStats();
         stats.SaveStatsToFile();
@@ -188,10 +189,10 @@ public abstract class TableBenchmark
 }
 
 public class BenchmarkStatistics {
-    internal readonly List<long> insMsPerRun = new();
-    internal readonly List<long> opsMsPerRun = new();
-    internal readonly List<int> insAbortsPerRun = new();
-    internal readonly List<int> txnAbortsPerRun = new();
+    internal readonly List<long> insMsPerRun = new List<long>();
+    internal readonly List<long> opsMsPerRun = new List<long>();
+    internal readonly List<int> insAbortsPerRun = new List<int>();
+    internal readonly List<int> txnAbortsPerRun = new List<int>();
     internal string name;
     internal int inserts;
     internal int operations;
@@ -218,6 +219,7 @@ public class BenchmarkStatistics {
     }
 
     internal void ShowAllStats(){
+        System.Console.WriteLine("-----STATS-----");
         Console.WriteLine(GetInsDataString(operations, insMsPerRun));
         Console.WriteLine(GetOpsDataString(inserts, operations-inserts, opsMsPerRun));
         if (insAbortsPerRun.Count != 0){
@@ -227,6 +229,7 @@ public class BenchmarkStatistics {
     }
 
     internal async void SaveStatsToFile(){
+        System.Console.WriteLine("-----STATS-----");
         string[] data = new string[]{
             GetInsDataString(operations, insMsPerRun),
             GetOpsDataString(inserts, operations-inserts, opsMsPerRun)
@@ -235,7 +238,7 @@ public class BenchmarkStatistics {
             GetTxnAbortDataString(txnAbortsPerRun)
         } : new string[0]).ToArray();
         string now = DateTime.Now.ToString("yyyyMMdd-HHmmss"); 
-        await File.WriteAllLinesAsync($"{name}-{now}.txt", data);
+        await File.WriteAllLinesAsync($"benchmark/benchmarkResults/{name}-{now}.txt", data);
     }
 
     internal static string GetOpsDataString(int inserts, int reads, List<long> opsMsPerRun) => $"{(inserts+reads)/opsMsPerRun.Average()} operations/ms ({inserts+reads} operations ({inserts} inserts, {reads} reads) in {opsMsPerRun.Average()} ms)";

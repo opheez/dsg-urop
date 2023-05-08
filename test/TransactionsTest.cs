@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System.Text;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace DB
 {
@@ -27,6 +28,7 @@ namespace DB
             table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v1 = table.Read(new KeyAttr(1,12345, table), t);
             var success = txnManager.Commit(t);
+            txnManager.Terminate();
             Assert.IsTrue(success, "Transaction was unable to commit");
             CollectionAssert.AreEqual(v1.ToArray(), BitConverter.GetBytes(21));
         }
@@ -37,12 +39,13 @@ namespace DB
         /// W(Ti) does not intersect R(Tj), W(Ti) intersects W(Tj) (Key 1), R(Ti) intersects W(Tj) (Key 1)
         /// </summary>
         public void TestWRNoIntersectWWIntersectWRIntersect(){
+            System.Console.WriteLine("here");
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 4));
             Table table = new Table(schema);
             TransactionManager txnManager = new TransactionManager();
             txnManager.Run();
-
+            System.Console.WriteLine("agafd");
             TransactionContext t = txnManager.Begin();
             table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v2 = table.Read(new KeyAttr(1,12345, table), t);
@@ -57,6 +60,7 @@ namespace DB
             TransactionContext t3 = txnManager.Begin();
             var v6 = table.Read(new KeyAttr(1,12345, table), t3);
             var success3 = txnManager.Commit(t3);
+            txnManager.Terminate();
 
             Assert.IsTrue(success2, "Transaction 2 was unable to commit");
             Assert.IsTrue(success3, "Transaction 3 was unable to commit");
@@ -95,6 +99,7 @@ namespace DB
             var v6 = table.Read(new KeyAttr(1,12345, table), t3);
             var v7 = table.Read(new KeyAttr(2,12345, table), t3);
             var success3 = txnManager.Commit(t3);
+            txnManager.Terminate();
 
             Assert.IsTrue(success2, "Transaction 2 was unable to commit");
             Assert.IsTrue(success3, "Transaction 3 was unable to commit");
@@ -127,6 +132,7 @@ namespace DB
 
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
+            txnManager.Terminate();
 
             Assert.IsTrue(v3.IsEmpty, "New context should not read uncommitted value");
             Assert.IsTrue(success, "Transaction was unable to commit");
