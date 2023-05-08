@@ -16,16 +16,14 @@ namespace DB {
 /// Always uses ReadOnlySpan<byte> with the user
 /// </summary>
 public unsafe class Table : IDisposable{
-    internal uint id;
-    internal long size;
     internal int rowSize;
     // TODO: bool can be a single bit
-    internal ConcurrentDictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
+    internal Dictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
     public Table(Dictionary<long, (bool, int)> schema){
-        this.metadata = new ConcurrentDictionary<long,(bool, int, int)>();
+        this.metadata = new Dictionary<long,(bool, int, int)>();
         
         int offset = 0;
         int size = 0;

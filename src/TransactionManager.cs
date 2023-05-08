@@ -25,16 +25,16 @@ public class TransactionManager {
     /// <returns>True if the transaction committed, false otherwise</returns>
     public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
-        txnQueue.Add(ctx);
         Monitor.Enter(ctx);
-        // while (true) {
-            Monitor.Wait(ctx);
-            if (ctx.status == TransactionStatus.Aborted){
-                return false;
-            } else if (ctx.status == TransactionStatus.Committed) {
-                return true;
-            }
-        // }
+        txnQueue.Add(ctx);
+        Monitor.Wait(ctx);
+        if (ctx.status == TransactionStatus.Aborted){
+            Monitor.Exit(ctx);
+            return false;
+        } else if (ctx.status == TransactionStatus.Committed) {
+            Monitor.Exit(ctx);
+            return true;
+        }
         Monitor.Exit(ctx);
         return false;
     }
@@ -50,14 +50,13 @@ public class TransactionManager {
                 uint finishTxn = txnc;
                 bool valid = true;
                 // validate
-                // System.Console.WriteLine("My readset: " + ctx.GetReadset().Count + "\nMy writeset:" + ctx.GetWriteset().Count);
-                System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
+                // System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
                 for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
                     // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
                     if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
-                        foreach (var x in tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys)) {
-                        System.Console.WriteLine(x);
-                        }
+                        // foreach (var x in tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys)) {
+                        // System.Console.WriteLine(x);
+                        // }
                         valid = false;
                         break;
                     }

@@ -10,7 +10,6 @@ public class TransactionContext {
     internal uint startTxn;
     internal Dictionary<KeyAttr, byte[]?> Rset;
     internal Dictionary<KeyAttr, byte[]?> Wset;
-    public object l;
 
     public TransactionContext(uint startTxn){
         this.startTxn = startTxn;
