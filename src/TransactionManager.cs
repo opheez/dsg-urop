@@ -7,8 +7,9 @@ namespace DB {
 public class TransactionManager {
 
     internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
-    internal Dictionary<uint, TransactionContext> tidToCtx = new Dictionary<uint, TransactionContext>();
-    internal uint txnc = 0;
+    internal static int pastTidCircularBufferSize = 10000;
+    internal TransactionContext[] tidToCtx = new TransactionContext[pastTidCircularBufferSize];
+    internal int txnc = 0;
     internal Thread committer;
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
 
@@ -42,7 +43,6 @@ public class TransactionManager {
             return true;
         }
         Monitor.Exit(ctx);
-        ctxPool.Return(ctx);
         return false;
     }
 
@@ -55,13 +55,13 @@ public class TransactionManager {
             try {
                 while (true) {
                     TransactionContext ctx = txnQueue.Take();
-                    uint finishTxn = txnc;
+                    int finishTxn = txnc;
                     bool valid = true;
                     // validate
                     // System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
-                    for (uint i = ctx.startTxn + 1; i <= finishTxn; i++){
+                    for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
                         // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
-                        if (tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
+                        if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
                             // foreach (var x in tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys)) {
                             // System.Console.WriteLine(x);
                             // }
@@ -85,7 +85,10 @@ public class TransactionManager {
                         // Monitor.Enter(ctx.l);
                         // Monitor.Wait(ctx.l);
                         // Monitor.Exit(ctx.l);
-                        Interlocked.Increment(ref txnc);
+                        Interlocked.Increment(ref txnc); // TODO: deal with int overflow
+                        if (tidToCtx[txnc] != null){
+                            ctxPool.Return(tidToCtx[txnc]);
+                        }
                         tidToCtx[txnc] = ctx;
                         Monitor.Enter(ctx);
                         ctx.status = TransactionStatus.Committed;

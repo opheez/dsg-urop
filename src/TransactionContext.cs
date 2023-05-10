@@ -7,14 +7,14 @@ namespace DB {
 public class TransactionContext {
 
     internal TransactionStatus status;
-    internal uint startTxn;
+    internal int startTxn;
     internal Dictionary<KeyAttr, byte[]?> Rset;
     internal Dictionary<KeyAttr, byte[]?> Wset;
 
     public TransactionContext(){
 
     }
-    public void Init(uint startTxn){
+    public void Init(int startTxn){
         this.startTxn = startTxn;
         status = TransactionStatus.Idle;
         Rset = new Dictionary<KeyAttr, byte[]?>();
