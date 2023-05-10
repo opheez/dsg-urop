@@ -10,12 +10,14 @@ public class TransactionContext {
     internal int startTxn;
     internal Dictionary<KeyAttr, byte[]?> Rset;
     internal Dictionary<KeyAttr, byte[]?> Wset;
+    public ManualResetEvent mre = new ManualResetEvent(false);
 
     public TransactionContext(){
 
     }
     public void Init(int startTxn){
         this.startTxn = startTxn;
+        mre.Reset();
         status = TransactionStatus.Idle;
         Rset = new Dictionary<KeyAttr, byte[]?>(new OCCComparer());
         Wset = new Dictionary<KeyAttr, byte[]?>(new OCCComparer());

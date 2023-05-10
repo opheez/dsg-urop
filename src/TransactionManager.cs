@@ -32,17 +32,13 @@ public class TransactionManager {
     /// <returns>True if the transaction committed, false otherwise</returns>
     public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
-        Monitor.Enter(ctx);
-        txnQueue.Add(ctx);
-        Monitor.Wait(ctx);
+        txnQueue.Add(ctx);        
+        ctx.mre.WaitOne();
         if (ctx.status == TransactionStatus.Aborted){
-            Monitor.Exit(ctx);
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
-            Monitor.Exit(ctx);
             return true;
         }
-        Monitor.Exit(ctx);
         return false;
     }
 
@@ -71,10 +67,7 @@ public class TransactionManager {
                             break;
                         }
                     }
-                    // Monitor.Enter(ctx);
                     ctx.status = TransactionStatus.Validated;
-                    // Monitor.Pulse(ctx);
-                    // Monitor.Exit(ctx);
                     if (valid) {
                         // write phase
                         foreach (var item in ctx.GetWriteset()){
@@ -84,24 +77,16 @@ public class TransactionManager {
                         }
                         // assign num 
                         // wait on 
-                        // Monitor.Enter(ctx.l);
-                        // Monitor.Wait(ctx.l);
-                        // Monitor.Exit(ctx.l);
                         Interlocked.Increment(ref txnc); // TODO: deal with int overflow
                         if (tidToCtx[txnc] != null){
                             ctxPool.Return(tidToCtx[txnc]);
                         }
                         tidToCtx[txnc] = ctx;
-                        Monitor.Enter(ctx);
                         ctx.status = TransactionStatus.Committed;
-                        Monitor.Pulse(ctx);
-                        Monitor.Exit(ctx);
                     } else {
-                        Monitor.Enter(ctx);
                         ctx.status = TransactionStatus.Aborted;
-                        Monitor.Pulse(ctx);
-                        Monitor.Exit(ctx);
                     }
+                    ctx.mre.Set();
                 }
             } catch (ThreadInterruptedException e){
                 System.Console.WriteLine("Terminated");
