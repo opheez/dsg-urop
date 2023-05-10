@@ -78,10 +78,10 @@ public class TransactionManager {
                         // assign num 
                         // wait on 
                         Interlocked.Increment(ref txnc); // TODO: deal with int overflow
-                        if (tidToCtx[txnc] != null){
-                            ctxPool.Return(tidToCtx[txnc]);
+                        if (tidToCtx[txnc % pastTidCircularBufferSize] != null){
+                            ctxPool.Return(tidToCtx[txnc % pastTidCircularBufferSize]);
                         }
-                        tidToCtx[txnc] = ctx;
+                        tidToCtx[txnc % pastTidCircularBufferSize] = ctx;
                         ctx.status = TransactionStatus.Committed;
                     } else {
                         ctx.status = TransactionStatus.Aborted;
