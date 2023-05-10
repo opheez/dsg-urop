@@ -12,18 +12,18 @@ namespace DB {
 
 /// <summary>
 /// Stores data as a byte array (TODO: change to generic type)
-/// Variable length pointers are stored as {size_of_variable}{address_of_variable}
+/// Variable length pointers are stored as {size_of_variable}{address_of_variable} and have a size of IntPtr.Size * 2
 /// Always uses ReadOnlySpan<byte> with the user
 /// </summary>
 public unsafe class Table : IDisposable{
     internal int rowSize;
     // TODO: bool can be a single bit
-    internal Dictionary<long, (bool, int, int)> metadata; // (varLen, size, offset)
+    internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
     public Table(Dictionary<long, (bool, int)> schema){
-        this.metadata = new Dictionary<long,(bool, int, int)>();
+        this.metadata = new Dictionary<long,(int, int)>();
         
         int offset = 0;
         int size = 0;
@@ -31,8 +31,8 @@ public unsafe class Table : IDisposable{
             if (!entry.Value.Item1 && entry.Value.Item2 <= 0) {
                 throw new ArgumentException();
             }
-            size = entry.Value.Item1 ? IntPtr.Size * 2 : entry.Value.Item2;
-            this.metadata[entry.Key] = (entry.Value.Item1, size, offset);
+            size = entry.Value.Item1 ? -1 : entry.Value.Item2;
+            this.metadata[entry.Key] = (size, offset);
             offset += entry.Value.Item1 ? IntPtr.Size * 2 : size;
         }
         this.rowSize = offset;
@@ -43,8 +43,8 @@ public unsafe class Table : IDisposable{
         if (!this.data.ContainsKey(key)){
             return ReadOnlySpan<byte>.Empty;
         }
-        (bool varLen, int size, int offset) = this.metadata[attribute];
-        if (varLen) {
+        (int size, int offset) = this.metadata[attribute];
+        if (size == -1) {
             Pointer ptr = GetVarLenPtr(key, offset);
             return new ReadOnlySpan<byte>(ptr.Ptr, ptr.Size);
         }
@@ -72,10 +72,10 @@ public unsafe class Table : IDisposable{
         return new Pointer(res, BitConverter.ToInt32(size));
     }
     internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
-        (bool varLen, int size, int offset) = this.metadata[attribute];
+        (int size, int offset) = this.metadata[attribute];
         byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
         byte[] valueToWrite = value.ToArray();
-        if (varLen) {
+        if (size == -1) {
             IntPtr addr = Marshal.AllocHGlobal(value.Length);
             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
             valueToWrite = new byte[IntPtr.Size * 2];
@@ -83,7 +83,7 @@ public unsafe class Table : IDisposable{
             BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
         }
 
-        if (valueToWrite.Length != size || valueToWrite.Length <= 0) {
+        if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
             throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
         }
         for (int i = 0; i < valueToWrite.Length; i++) {
@@ -96,8 +96,8 @@ public unsafe class Table : IDisposable{
             throw new KeyNotFoundException();
         }
 
-        (bool varLen, int size, int offset) = this.metadata[keyAttr.Attr];
-        if (!varLen && value.Length != size) {
+        (int size, int offset) = this.metadata[keyAttr.Attr];
+        if (size != -1 && value.Length != size) {
             throw new ArgumentException($"Value to insert must be of size {size}");
         }
         ctx.SetInContext(keyAttr, value);
@@ -107,8 +107,8 @@ public unsafe class Table : IDisposable{
     public void Dispose(){
         // iterate through all of the table to find pointers and dispose of 
         foreach (var field in metadata){
-            if (field.Value.Item1 && field.Value.Item2 != -1) {
-                int offset = field.Value.Item3;
+            if (field.Value.Item1 == -1) {
+                int offset = field.Value.Item2;
                 foreach (var entry in data){
                     IntPtr ptrToFree = GetVarLenPtr(entry.Key, offset).IntPointer;
                     if (ptrToFree != IntPtr.Zero){
@@ -122,7 +122,7 @@ public unsafe class Table : IDisposable{
     public void debug(){
         Console.WriteLine("Metadata: ");
         foreach (var field in metadata){
-            Console.Write($"{field.Key} is {field.Value.Item1} {field.Value.Item2} {field.Value.Item3}\n");
+            Console.Write($"{field.Key} is {field.Value.Item1 == -1} {field.Value.Item1} {field.Value.Item2}\n");
             // for (int i=0; i < entry.Value.Length; i++) {
             //     System.Console.Write(entry.Value[i] + ",");
             // }
