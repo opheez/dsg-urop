@@ -112,7 +112,6 @@ public abstract class TableBenchmark
             // System.Console.WriteLine(c);
             // System.Console.WriteLine($"{thread_idx}: {c}");
         }
-        System.Console.WriteLine(abortCount);
         return abortCount;
     }
 
@@ -132,9 +131,9 @@ public abstract class TableBenchmark
         for (int i = 0; i < PerThreadDataCount; i += PerTransactionCount){
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < PerTransactionCount; j++){
-                int loc = i + j + (PerThreadDataCount * thread_idx);
-                if (keys[loc] < Int64.MaxValue * ratio) {
-                    tbl.Upsert(new KeyAttr(keys[loc+DatasetSize],attrs[loc%AttrCount], tbl), values[loc].AsSpan(), t);
+                int loc = i + j + (PerThreadDataCount);
+                if (keys[i + j + (PerThreadDataCount * thread_idx)] < Int64.MaxValue * ratio) {
+                    tbl.Upsert(new KeyAttr(keys[loc],attrs[loc%AttrCount], tbl), values[loc].AsSpan(), t);
                 } else {
                     tbl.Read(new KeyAttr(keys[loc],attrs[loc%AttrCount], tbl), t);
                 }
