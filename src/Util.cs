@@ -59,5 +59,18 @@ namespace DB {
         
     }
 
+    public class OCCComparer : IEqualityComparer<KeyAttr>
+    {
+        public bool Equals(KeyAttr x, KeyAttr y)
+        {
+            return x.Key == y.Key && x.Table == y.Table;
+        }
+
+        public int GetHashCode(KeyAttr obj)
+        {
+            return (int)obj.Key + obj.Table.GetHashCode(); //Already an int
+        }
+    }
+
 
 }

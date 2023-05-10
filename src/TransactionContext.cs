@@ -17,8 +17,8 @@ public class TransactionContext {
     public void Init(int startTxn){
         this.startTxn = startTxn;
         status = TransactionStatus.Idle;
-        Rset = new Dictionary<KeyAttr, byte[]?>();
-        Wset = new Dictionary<KeyAttr, byte[]?>();
+        Rset = new Dictionary<KeyAttr, byte[]?>(new OCCComparer());
+        Wset = new Dictionary<KeyAttr, byte[]?>(new OCCComparer());
     }
 
     public byte[]? GetFromContext(KeyAttr keyAttr){

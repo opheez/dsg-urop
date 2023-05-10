@@ -118,6 +118,7 @@ namespace DB
         public void TestWRIntersectRWIntersectWWNoIntersect(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 4));
+            schema.Add(56789, (false, 4));
             Table table = new Table(schema);
             TransactionManager txnManager = new TransactionManager();
             txnManager.Run();
@@ -127,7 +128,7 @@ namespace DB
             var v2 = table.Read(new KeyAttr(1,12345, table), t);
 
             TransactionContext t2 = txnManager.Begin();
-            var v3 = table.Read(new KeyAttr(1,12345, table), t2);
+            var v3 = table.Read(new KeyAttr(1,56789, table), t2);
             table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
 
             var success = txnManager.Commit(t);

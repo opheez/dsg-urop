@@ -61,11 +61,13 @@ public class TransactionManager {
                     // System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
                     for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
                         // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
-                        if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys).Count() != 0) {
-                            // foreach (var x in tidToCtx[i].GetWriteset().Keys.Intersect(ctx.GetReadset().Keys)) {
-                            // System.Console.WriteLine(x);
-                            // }
-                            valid = false;
+                        foreach (KeyAttr keyAttr in ctx.GetReadset().Keys){
+                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().ContainsKey(keyAttr)){
+                                valid = false;
+                                break;
+                            }
+                        }
+                        if (!valid){
                             break;
                         }
                     }
