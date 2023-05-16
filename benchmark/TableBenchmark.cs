@@ -6,7 +6,7 @@ public abstract class TableBenchmark
 {
     public static int PerThreadDataCount = 100000; // enough to be larger than l3 cache
     public static int PerTransactionCount = 5;
-    internal static int ThreadCount = 2;
+    internal static int ThreadCount = 16;
     internal static int AttrCount = 8;
     internal static int DatasetSize = PerThreadDataCount * ThreadCount;    
     internal static long[] keys;
@@ -15,7 +15,7 @@ public abstract class TableBenchmark
     internal static Dictionary<long,(bool,int)> schema;
     internal static Thread[] workers;
     internal BenchmarkStatistics stats;
-    internal int IterationCount = 1;
+    internal int IterationCount = 10;
     internal double ratio;
     internal int seed;
     public TableBenchmark(int seed, double ratio){

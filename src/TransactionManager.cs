@@ -100,6 +100,7 @@ public class TransactionManager {
         if (committer != null){
             committer.Interrupt();
         }
+        
     }
 
     // internal class KeyAttrComparer : IEqualityComparer<KeyAttr> {
