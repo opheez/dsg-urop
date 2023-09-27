@@ -64,6 +64,23 @@ namespace DB
         }
 
         [TestMethod]
+        public void TestInsertReadRecord(){
+            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
+            schema.Add(12345, (false, 8));
+            schema.Add(67890, (false, 4));
+
+            Table test = new Table(schema);
+            byte[] name = Encoding.ASCII.GetBytes("John Doe");
+            Span<byte> record = new byte[test.rowSize]; //todo: accesing rowSize internal var
+            name.AsSpan().CopyTo(record);
+            BitConverter.GetBytes(21).AsSpan().CopyTo(record.Slice(8, 4));
+            test.Upsert(11111, record);
+            var retName = test.Read(11111);
+            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName.Slice(0, 8)));
+            Assert.AreEqual(21, BitConverter.ToInt32(retName.Slice(8, 4).ToArray()));
+        }
+
+        [TestMethod]
         public void TestMultipleInsertRead(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 8));
