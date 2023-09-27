@@ -72,8 +72,15 @@ public class TransactionManager {
                         // write phase
                         foreach (var item in ctx.GetWriteset()){
                             KeyAttr keyAttr = item.Key;
-                            byte[] val = item.Value;
-                            keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr, val.AsSpan());
+                            byte[]? val = item.Value;
+                            if (val != null) {
+                                if (keyAttr.Attr.HasValue){
+                                    keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr.Value, val.AsSpan());
+                                } else {
+                                    keyAttr.Table.Upsert(keyAttr.Key, val.AsSpan());
+
+                                }
+                            }
                         }
                         // assign num 
                         // wait on 

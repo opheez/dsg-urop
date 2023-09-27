@@ -17,6 +17,23 @@ namespace DB
         }
 
         [TestMethod]
+        public void TestNoAttribute(){
+            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
+            schema.Add(12345, (false, 4));
+            Table table = new Table(schema);
+            TransactionManager txnManager = new TransactionManager();
+            txnManager.Run();
+
+            TransactionContext t = txnManager.Begin();
+            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            var v1 = table.Read(new KeyAttr(1,12345, table), t);
+            var success = txnManager.Commit(t);
+            txnManager.Terminate();
+            Assert.IsTrue(success, "Transaction was unable to commit");
+            CollectionAssert.AreEqual(v1.ToArray(), BitConverter.GetBytes(21));
+        }
+
+        [TestMethod]
         public void TestSerial(){
             Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
             schema.Add(12345, (false, 4));

@@ -33,7 +33,7 @@ namespace DB {
             Table = t;
         }
         public long Key;
-        public long Attr;
+        public long? Attr;
         public Table Table;
 
         public override string ToString(){
