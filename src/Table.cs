@@ -20,22 +20,26 @@ public unsafe class Table : IDisposable{
     private long lastId = 0;
     internal int rowSize;
     // TODO: bool can be a single bit
+    internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
-    public Table(Dictionary<long, (bool, int)> schema){
+    public Table((long, int)[] schema){
         this.metadata = new Dictionary<long,(int, int)>();
+        this.metadataOrder = new long[schema.Length];
         
         int offset = 0;
         int size = 0;
-        foreach (var entry in schema) {
-            if (!entry.Value.Item1 && entry.Value.Item2 <= 0) {
+        for(int i = 0; i < schema.Length; i++) {
+            long attr = schema[i].Item1;
+            size = schema[i].Item2;
+            if (size <= 0 && size != -1) {
                 throw new ArgumentException();
             }
-            size = entry.Value.Item1 ? -1 : entry.Value.Item2;
-            this.metadata[entry.Key] = (size, offset);
-            offset += entry.Value.Item1 ? IntPtr.Size * 2 : size;
+            this.metadata[attr] = (size, offset);
+            this.metadataOrder[i] = attr;
+            offset += (size == -1) ? IntPtr.Size * 2 : size;
         }
         this.rowSize = offset;
         this.data = new ConcurrentDictionary<long, byte[]>();

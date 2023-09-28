@@ -10,26 +10,23 @@ namespace DB
         [TestMethod]
         [ExpectedException(typeof(ArgumentException))]
         public void TestInvalidSizeSchema(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false, 0));
-
+            (long,int)[] schema = {(12345,0)};
+        
             Table test = new Table(schema);
         }
 
         [TestMethod]
         public void TestValidVarLenSchema(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (true, -1));
+            (long,int)[] schema = {(12345,-1)};
 
             Table test = new Table(schema);
         }
 
         [TestMethod]
         public void TestInvalidKey(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false,100));
-
+            (long,int)[] schema = {(12345,100)};
             Table test = new Table(schema);
+
             TupleDesc[] td = {new TupleDesc(12345, 100)};
             var retName = test.Read(11111, td);
             Assert.IsTrue(retName.IsEmpty);
@@ -38,10 +35,9 @@ namespace DB
         [TestMethod]
         [ExpectedException(typeof(KeyNotFoundException))]
         public void TestInvalidAttribute(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false, 8));
-
+            (long,int)[] schema = {(12345,8)};
             Table test = new Table(schema);
+
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             TupleDesc[] td = {new TupleDesc(12345, 8)};
             test.Insert(11111, td, name.AsSpan());
@@ -52,11 +48,9 @@ namespace DB
 
         [TestMethod]
         public void TestInsertRead(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false, 8));
-            schema.Add(67890, (false, 4));
-
+            (long,int)[] schema = {(12345,8), (67890, 4)};
             Table test = new Table(schema);
+
             byte[] input = Encoding.ASCII.GetBytes("John Doe");
             TupleDesc[] td = {new TupleDesc(12345, 8)};
             test.Insert(11111, td, input);
@@ -83,11 +77,9 @@ namespace DB
 
         [TestMethod]
         public void TestMultipleInsertRead(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false, 8));
-            schema.Add(67890, (false, 4));
-
+            (long,int)[] schema = {(12345,8), (67890, 4)};
             Table test = new Table(schema);
+            
             byte[] input = Encoding.ASCII.GetBytes("John Doe").Concat(BitConverter.GetBytes(21)).ToArray();
             TupleDesc[] td = {new TupleDesc(12345, 8), new TupleDesc(67890, 4)};
             test.Insert(11111, td, input);
@@ -138,10 +130,9 @@ namespace DB
 
         [TestMethod]
         public void TestVarLength(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (true,0));
-
+            (long,int)[] schema = {(12345,-1)};
             Table test = new Table(schema);
+            
             byte[] input = Encoding.ASCII.GetBytes("123456789");
             TupleDesc[] td = {new TupleDesc(12345, input.Length)};
             test.Insert(11111, td, input);
