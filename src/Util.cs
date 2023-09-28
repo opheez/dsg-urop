@@ -89,16 +89,31 @@ namespace DB {
         public int Size;
     }
 
-    public class OCCComparer : IEqualityComparer<TupleId>
+    public struct KeyAttr {
+        public KeyAttr(long key, long attr, Table t){
+            Key = key;
+            Attr = attr;
+            Table = t;
+        }
+        public long Key;
+        public long Attr;
+        public Table Table;
+
+        public override string ToString(){
+            return $"({Key}, {Attr})";
+        }
+    }
+
+    public class OCCComparer : IEqualityComparer<KeyAttr>
     {
-        public bool Equals(TupleId x, TupleId y)
+        public bool Equals(KeyAttr x, KeyAttr y)
         {
-            return x.Key == y.Key && x.Table == y.Table;
+            return x.Key == y.Key && x.Attr == y.Attr && x.Table == y.Table;
         }
 
-        public int GetHashCode(TupleId obj)
+        public int GetHashCode(KeyAttr obj)
         {
-            return (int)obj.Key + obj.Table.GetHashCode(); //Already an int
+            return (int)obj.Key + (int)obj.Attr + obj.Table.GetHashCode(); //Already an int
         }
     }
 
