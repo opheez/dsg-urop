@@ -11,10 +11,6 @@ namespace DB
     [TestClass]
     public unsafe class TrasactionTests
     {
-        private bool Commit(TransactionManager txnManager, TransactionContext t){
-            var success = txnManager.Commit(t);
-            return success;
-        }
 
         [TestMethod]
         public void TestNoAttribute(){
@@ -25,12 +21,14 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            var v1 = table.Read(new KeyAttr(1,12345, table), t);
+            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            byte[] value = BitConverter.GetBytes(21);
+            TupleId id = table.Insert(td, value, t);
+            var v1 = table.Read(id, td, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
             Assert.IsTrue(success, "Transaction was unable to commit");
-            CollectionAssert.AreEqual(v1.ToArray(), BitConverter.GetBytes(21));
+            CollectionAssert.AreEqual(value, v1.ToArray());
         }
 
         [TestMethod]
@@ -42,8 +40,8 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            var v1 = table.Read(new KeyAttr(1,12345, table), t);
+            table.Insert(new TupleId(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            var v1 = table.Read(new TupleId(1,12345, table), t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
             Assert.IsTrue(success, "Transaction was unable to commit");
@@ -64,18 +62,18 @@ namespace DB
             txnManager.Run();
             System.Console.WriteLine("agafd");
             TransactionContext t = txnManager.Begin();
-            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            var v2 = table.Read(new KeyAttr(1,12345, table), t);
+            table.Insert(new TupleId(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            var v2 = table.Read(new TupleId(1,12345, table), t);
 
             TransactionContext t2 = txnManager.Begin();
-            var v5 = table.Read(new KeyAttr(2,12345, table), t2);
-            table.Update(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            var v5 = table.Read(new TupleId(2,12345, table), t2);
+            table.Update(new TupleId(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
 
 
             TransactionContext t3 = txnManager.Begin();
-            var v6 = table.Read(new KeyAttr(1,12345, table), t3);
+            var v6 = table.Read(new TupleId(1,12345, table), t3);
             var success3 = txnManager.Commit(t3);
             txnManager.Terminate();
 
@@ -99,13 +97,13 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            var v2 = table.Read(new KeyAttr(2,12345, table), t);
+            table.Insert(new TupleId(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            var v2 = table.Read(new TupleId(2,12345, table), t);
             // Thread thread = new Thread(() => Commit(txnManager, t)); 
 
             TransactionContext t2 = txnManager.Begin();
-            var v5 = table.Read(new KeyAttr(2,12345, table), t2);
-            table.Insert(new KeyAttr(2,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            var v5 = table.Read(new TupleId(2,12345, table), t2);
+            table.Insert(new TupleId(2,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
 
             // thread.Start();
             // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
@@ -113,8 +111,8 @@ namespace DB
             var success2 = txnManager.Commit(t2);
 
             TransactionContext t3 = txnManager.Begin();
-            var v6 = table.Read(new KeyAttr(1,12345, table), t3);
-            var v7 = table.Read(new KeyAttr(2,12345, table), t3);
+            var v6 = table.Read(new TupleId(1,12345, table), t3);
+            var v7 = table.Read(new TupleId(2,12345, table), t3);
             var success3 = txnManager.Commit(t3);
             txnManager.Terminate();
 
@@ -141,12 +139,12 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            var v2 = table.Read(new KeyAttr(1,12345, table), t);
+            table.Insert(new TupleId(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            var v2 = table.Read(new TupleId(1,12345, table), t);
 
             TransactionContext t2 = txnManager.Begin();
-            var v3 = table.Read(new KeyAttr(1,56789, table), t2);
-            table.Update(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            var v3 = table.Read(new TupleId(1,56789, table), t2);
+            table.Update(new TupleId(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
 
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
@@ -171,14 +169,14 @@ namespace DB
             // txnManager.Run();
 
             // TransactionContext t = txnManager.Begin();
-            // table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            // table.Upsert(new TupleId(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             // // Thread thread = new Thread(() => {
             // //     var success = Commit(txnManager, t);
             // //     Assert.IsTrue(success, "Transaction was unable to commit");
             // // }); 
 
             // TransactionContext t2 = txnManager.Begin();
-            // table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            // table.Upsert(new TupleId(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
             // // thread.Start();
             // // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
             // var success = txnManager.Commit(t);

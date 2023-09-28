@@ -41,61 +41,36 @@ public unsafe class Table : IDisposable{
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
 
-    internal ReadOnlySpan<byte> Read(long key, long attribute){
-        if (!this.data.ContainsKey(key)){
-            return ReadOnlySpan<byte>.Empty;
+    public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
+        Validate(tupleDescs, null, false);
+        var ctxRead = ctx.GetFromContext(tupleId);
+        if (ctxRead != null) {
+            return ctxRead.AsSpan();
         }
-        (int size, int offset) = this.metadata[attribute];
-        if (size == -1) {
-            Pointer ptr = GetVarLenPtr(key, offset);
-            return new ReadOnlySpan<byte>(ptr.Ptr, ptr.Size);
-        }
-        return new ReadOnlySpan<byte>(this.data[key], offset, size);
+        return this.Read(tupleId.Key, tupleDescs);
     }
 
-    /// <summary>
-    /// Reads entire record by repeatedly reading its attributes 
-    /// and stitching it together in a single span
-    /// </summary>
-    /// <param name="key">key to read</param>
-    /// <returns></returns> <summary>
-    internal ReadOnlySpan<byte> Read(long key){
+    internal ReadOnlySpan<byte> Read(long key, TupleDesc[] tupleDescs){
         if (!this.data.ContainsKey(key)){
             return ReadOnlySpan<byte>.Empty;
         }
-        // Span<byte> result = new byte[rowSize];
-        List<byte> result = new List<byte>();
-        foreach (KeyValuePair<long, (int, int)> entry in this.metadata) {
-            (int size, int offset) = entry.Value;
-            // Read(key, entry.Key).CopyTo(result.Slice(offset, size));
-            result.AddRange(Read(key, entry.Key).ToArray());
+        List<byte> result = new();
+        byte[] tuple = this.data[key];
+        int writeOffset = 0;
+        foreach (TupleDesc desc in tupleDescs) {
+            (int size, int readOffset) = this.metadata[desc.Attr];
+            if (size == -1) {
+                Pointer ptr = GetVarLenPtr(key, readOffset);
+                result.AddRange(new ReadOnlySpan<byte>(ptr.Ptr, ptr.Size).ToArray());
+                size = ptr.Size;
+            } else {
+                for (int i = readOffset; i < readOffset+size; i++) {
+                    result.Add(tuple[i]);
+                }
+            }
+            writeOffset += size;
         }
         return result.ToArray();
-    }
-
-    public ReadOnlySpan<byte> Read(KeyAttr keyAttr, TransactionContext ctx){
-        if (keyAttr.Attr.HasValue) {
-            long attr = keyAttr.Attr.Value;
-            if (!this.metadata.ContainsKey(attr)){
-                throw new KeyNotFoundException();
-            }
-        
-            byte[]? ctxRead = ctx.GetFromContext(keyAttr);
-            if (ctxRead != null) {
-                return ctxRead.AsSpan();
-            } else {
-                ReadOnlySpan<byte> currVal = this.Read(keyAttr.Key, attr);
-                return currVal;
-            }
-        } else { // Read entire record
-            byte[]? ctxRead = ctx.GetFromContext(keyAttr);
-            if (ctxRead != null) {
-                return ctxRead.AsSpan();
-            } else {
-                ReadOnlySpan<byte> currVal = this.Read(keyAttr.Key);
-                return currVal;
-            }
-        }
     }
 
     protected Pointer GetVarLenPtr(long key, int offset){
@@ -112,190 +87,99 @@ public unsafe class Table : IDisposable{
     //     }
     // }
 
-    internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
-        (int size, int offset) = this.metadata[attribute];
-        byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
-        byte[] valueToWrite = value.ToArray();
-        if (size == -1) {
-            IntPtr addr = Marshal.AllocHGlobal(value.Length);
-            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-            valueToWrite = new byte[IntPtr.Size * 2];
-            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-        }
-
-        if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
-            throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
-        }
-        for (int i = 0; i < valueToWrite.Length; i++) {
-            row[offset+i] = valueToWrite[i];
-        }
-    }
-
-    /// <summary>
-    /// Transactionally updates
-    /// </summary>
-    /// <param name="keyAttr"></param>
-    /// <param name="value"></param>
-    /// <param name="ctx"></param>
-    /// <exception cref="KeyNotFoundException"></exception>
-    /// <exception cref="ArgumentException"></exception>
-    public void Upsert(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
-        if (keyAttr.Attr.HasValue) {
-            if (!this.metadata.ContainsKey(keyAttr.Attr.Value)){
-                throw new KeyNotFoundException();
-            }
-
-            (int size, int offset) = this.metadata[keyAttr.Attr.Value];
-            if (size != -1 && value.Length != size) {
-                throw new ArgumentException($"Value to insert must be of size {size}");
-            }
-        } // TODO: add assertion checks if possible?
-        ctx.SetInContext(keyAttr, value);
-        return;
-    }
-
-    // public long Insert(ReadOnlySpan<byte> value, TransactionContext ctx){
-    //     long id = NewRecordId();
-    //     KeyAttr keyAttr = new(id, null, this);
-
-    //     // TODO add assertion check size if possible
-    //     ctx.SetInContext(keyAttr, value);
-    //     return id;
-    // }
-
-    // throws exception if attr not provided
-    public void Insert(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
-        if (!this.metadata.ContainsKey(keyAttr.Attr.Value)){
-            throw new KeyNotFoundException();
-        }
-
-        (int size, int offset) = this.metadata[keyAttr.Attr.Value];
-        if (size != -1 && value.Length != size) {
-            throw new ArgumentException($"Value to insert must be of size {size}");
-        }
-        // TODO add assertion check size if possible
-        ctx.SetInContext(keyAttr, value);
-        return;
-    }
-
-    // /// <summary>
-    // /// Insert record
-    // /// </summary>
-    // /// <param name="key"></param>
-    // /// <param name="value"></param>
-    // internal void Insert(ReadOnlySpan<byte> value){
-    //     long key = NewRecordId();
-    //     byte[] row = new byte[this.rowSize];
+    // internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
+    //     (int size, int offset) = this.metadata[attribute];
+    //     byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
     //     byte[] valueToWrite = value.ToArray();
-    //     foreach (KeyValuePair<long, (int,int)> entry in this.metadata) {
-    //         (int size, int offset) = entry.Value;
-    //         Insert(new KeyAttr(key, entry.Key, this), value.Slice(offset, size));
+    //     if (size == -1) {
+    //         IntPtr addr = Marshal.AllocHGlobal(value.Length);
+    //         Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
+    //         valueToWrite = new byte[IntPtr.Size * 2];
+    //         BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
+    //         BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
     //     }
-    //     this.data[key] = row;
+
+    //     if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
+    //         throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
+    //     }
+    //     for (int i = 0; i < valueToWrite.Length; i++) {
+    //         row[offset+i] = valueToWrite[i];
+    //     }
     // }
-
-    /// <summary>
-    /// Insert specific attribute for a record
-    /// </summary>
-    /// <param name="key"></param>
-    /// <param name="value"></param>
-    /// <exception cref="NullReferenceException">If attribute is not supplied</exception>
-    /// <exception cref="KeyNotFoundException">If attribute is not in this table</exception>
-    /// <exception cref="ArgumentException">If attribute for the key is already populated</exception>
-    internal void Insert(long key, long attribute, ReadOnlySpan<byte> value){
-        if (!this.metadata.ContainsKey(attribute)){
-            throw new KeyNotFoundException();
-        }
-
-        if (!Util.IsEmpty(Read(key, attribute))) {
-            throw new ArgumentException();
-        }
-
-        (int size, int offset) = this.metadata[attribute];
-        byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]);
-        byte[] valueToWrite = value.ToArray();
-        if (size == -1) {
-            IntPtr addr = Marshal.AllocHGlobal(value.Length);
-            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-            valueToWrite = new byte[IntPtr.Size * 2];
-            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-        }
-
-        if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
-            throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
-        }
-        for (int i = 0; i < valueToWrite.Length; i++) {
-            row[offset+i] = valueToWrite[i];
-        }
-    }
-
-    public void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
-        if (!this.metadata.ContainsKey(keyAttr.Attr.Value)){
-            throw new KeyNotFoundException();
-        }
-
-        (int size, int offset) = this.metadata[keyAttr.Attr.Value];
-        if (size != -1 && value.Length != size) {
-            throw new ArgumentException($"Value to insert must be of size {size}");
-        }
-        // TODO add assertion check size if possible
-        ctx.SetInContext(keyAttr, value);
-        return;
-    }
-
-
-    /// <summary>
-    /// Updates record by attribute
-    /// </summary>
-    /// <param name="key"></param>
-    /// <param name="attribute"></param>
-    /// <param name="value"></param>
-    /// <exception cref="KeyNotFoundException">Throws if key is not in data or if attribute is not in metadata </exception>
-    /// <exception cref="ArgumentException">Throws if value is empty or not equal to specified size for non-variable length attributes</exception>
-    internal void Update(long key, long attribute, ReadOnlySpan<byte> value){
-        (int size, int offset) = this.metadata[attribute];
-        byte[] row = this.data[key];
-
-        if (Util.IsEmpty(Read(key, attribute))) {
-            throw new ArgumentException("Field is empty. Use Insert() instead");
-        }
-
-        byte[] valueToWrite = value.ToArray();
-        if (size == -1) {
-            IntPtr addr = Marshal.AllocHGlobal(value.Length);
-            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-            valueToWrite = new byte[IntPtr.Size * 2];
-            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-        }
-
-        if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
-            throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
-        }
-        for (int i = 0; i < valueToWrite.Length; i++) {
-            row[offset+i] = valueToWrite[i];
-        }
-    }
 
     // /// <summary>
-    // /// Updates entire record 
+    // /// Transactionally updates
     // /// </summary>
-    // /// <param name="key"></param>
+    // /// <param name="tupleId"></param>
     // /// <param name="value"></param>
-    // /// <exception cref="KeyNotFoundException">Throws if key is not in data or if attribute is not in metadata </exception>
-    // /// <exception cref="ArgumentException">Throws if value is empty or not equal to the table's rowSize</exception>
-    // internal void Update(long key, ReadOnlySpan<byte> value){
-    //     byte[] row = this.data[key];
-    //     if (value.Length == 0) {
-    //         throw new ArgumentException($"Value must not be empty");
-    //     }
-    //     foreach (KeyValuePair<long, (int,int)> entry in this.metadata) {
-    //         (int size, int offset) = entry.Value;
-    //         Update(key, entry.Key, value.Slice(offset, size));
-    //     }
+    // /// <param name="ctx"></param>
+    // /// <exception cref="KeyNotFoundException"></exception>
+    // /// <exception cref="ArgumentException"></exception>
+    // public void Upsert(TupleId tupleId, ReadOnlySpan<byte> value, TransactionContext ctx){
+    //     if (tupleId.Attr.HasValue) {
+    //         if (!this.metadata.ContainsKey(tupleId.Attr.Value)){
+    //             throw new KeyNotFoundException();
+    //         }
+
+    //         (int size, int offset) = this.metadata[tupleId.Attr.Value];
+    //         if (size != -1 && value.Length != size) {
+    //             throw new ArgumentException($"Value to insert must be of size {size}");
+    //         }
+    //     } // TODO: add assertion checks if possible?
+    //     ctx.SetInContext(tupleId, value);
+    //     return;
     // }
+
+    public TupleId Insert(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+        Validate(tupleDescs, value, true);
+
+        long id = NewRecordId();
+        TupleId tupleId = new(id, this);
+
+        ctx.SetInContext(OperationType.Insert, tupleId, tupleDescs, value);
+        return new TupleId(id, this);
+    }
+
+    internal void Insert(long key, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value){
+        if (this.data.ContainsKey(key)) {
+            throw new ArgumentException($"Key {key} already exists");
+        }
+        this.data[key] = new byte[rowSize];
+        Write(key, tupleDescs, value);
+    }
+
+    public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+        Validate(tupleDescs, value, true);
+
+        ctx.SetInContext(OperationType.Update, tupleId, tupleDescs, value);
+    }
+
+    internal void Update(long key, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value){
+        if (!this.data.ContainsKey(key)) {
+            throw new ArgumentException($"Key {key} does not exist: try inserting instead");
+        }
+        Write(key, tupleDescs, value);
+    }
+
+    // tupleDescs: varlenattr, size = 
+    internal void Write(long key, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value){
+        int readOffset = 0;
+        foreach (TupleDesc desc in tupleDescs) {
+            (int size, int writeOffset) = this.metadata[desc.Attr];
+            byte[] valueToWrite = value.Slice(readOffset, desc.Size).ToArray(); //TODO: possibly optimize and not ToArray()
+            if (size == -1) {
+                IntPtr addr = Marshal.AllocHGlobal(desc.Size);
+                Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
+                valueToWrite = new byte[IntPtr.Size * 2];
+                BitConverter.GetBytes(desc.Size).CopyTo(valueToWrite, 0);
+                BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
+            }
+            for (int i = 0; i < valueToWrite.Length; i++) {
+                this.data[key][writeOffset+i] = valueToWrite[i];
+            }
+            readOffset += desc.Size;
+        }
+    }
 
     public void Dispose(){
         // iterate through all of the table to find pointers and dispose of 
@@ -332,6 +216,20 @@ public unsafe class Table : IDisposable{
 
     private long NewRecordId() {
         return Interlocked.Increment(ref lastId);
+    }
+
+    private void Validate(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, bool write) {
+        int totalSize = 0;
+        foreach (TupleDesc desc in tupleDescs) {
+            if (!this.metadata.ContainsKey(desc.Attr)) {
+                throw new ArgumentException($"Attribute {desc.Attr} is not a valid attribute for this table");
+            }
+            totalSize += desc.Size;
+        }
+        Console.WriteLine($"{write} {totalSize} = {value.Length}?");
+        if (write && totalSize != value.Length) {
+            throw new ArgumentException($"Expected size {totalSize} from tuple description but instead got size {value.Length}");
+        }
     }
 
 }
