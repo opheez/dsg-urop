@@ -54,11 +54,15 @@ public class TransactionManager {
                     int finishTxn = txnc;
                     bool valid = true;
                     // validate
-                    // System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
+                    // Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
                     for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
-                        // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
-                        foreach (TupleId tupleId in ctx.GetReadset().Keys){
-                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().ContainsKey(tupleId)){
+                        // Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
+                        // foreach (var x in tidToCtx[i % pastTidCircularBufferSize].GetWriteset()){
+                        //     Console.Write($"{x.Key}, ");
+                        // }
+                        foreach (KeyAttr keyAttr in ctx.GetReadset().Keys){
+                            // Console.WriteLine($"scanning for {keyAttr}");
+                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().ContainsKey(keyAttr)){
                                 valid = false;
                                 break;
                             }
@@ -72,11 +76,13 @@ public class TransactionManager {
                         // write phase
                         foreach (var item in ctx.GetWriteset()){
                             Operation op = item.Value;
-                            TupleId tupleId = item.Key;
+                            KeyAttr keyAttr = item.Key;
+                            // should not throw exception here, but if it does, abort. 
+                            // failure here means crashed before commit. would need to rollback
                             if (op.Type == OperationType.Insert){
-                                tupleId.Table.Insert(tupleId.Key, op.TupleDescs, op.Value);
+                                keyAttr.Table.Insert(keyAttr, op.Value);
                             } else if (op.Type == OperationType.Update) {
-                                tupleId.Table.Update(tupleId.Key, op.TupleDescs, op.Value);
+                                keyAttr.Table.Update(keyAttr, op.Value); // todo: a little messy with op.value 
                             }
                         }
                         // assign num 
