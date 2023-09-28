@@ -14,8 +14,10 @@ namespace DB {
 /// Stores data as a byte array (TODO: change to generic type)
 /// Variable length pointers are stored as {size_of_variable}{address_of_variable} and have a size of IntPtr.Size * 2
 /// Always uses ReadOnlySpan<byte> with the user
+/// Assumes schema is never changed after creation 
 /// </summary>
 public unsafe class Table : IDisposable{
+    private long lastId = 0;
     internal int rowSize;
     // TODO: bool can be a single bit
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
@@ -103,12 +105,12 @@ public unsafe class Table : IDisposable{
         return new Pointer(res, BitConverter.ToInt32(size));
     }
     
-    internal void Upsert(long key, ReadOnlySpan<byte> value){
-        foreach (KeyValuePair<long, (int, int)> entry in this.metadata) {
-            (int size, int offset) = entry.Value;
-            Upsert(key, entry.Key, value.Slice(offset, size));
-        }
-    }
+    // internal void Upsert(long key, ReadOnlySpan<byte> value){
+    //     foreach (KeyValuePair<long, (int, int)> entry in this.metadata) {
+    //         (int size, int offset) = entry.Value;
+    //         Upsert(key, entry.Key, value.Slice(offset, size));
+    //     }
+    // }
 
     internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
         (int size, int offset) = this.metadata[attribute];
@@ -153,62 +155,129 @@ public unsafe class Table : IDisposable{
         return;
     }
 
+    // public long Insert(ReadOnlySpan<byte> value, TransactionContext ctx){
+    //     long id = NewRecordId();
+    //     KeyAttr keyAttr = new(id, null, this);
+
+    //     // TODO add assertion check size if possible
+    //     ctx.SetInContext(keyAttr, value);
+    //     return id;
+    // }
+
+    // throws exception if attr not provided
+    public void Insert(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
+        if (!this.metadata.ContainsKey(keyAttr.Attr.Value)){
+            throw new KeyNotFoundException();
+        }
+
+        (int size, int offset) = this.metadata[keyAttr.Attr.Value];
+        if (size != -1 && value.Length != size) {
+            throw new ArgumentException($"Value to insert must be of size {size}");
+        }
+        // TODO add assertion check size if possible
+        ctx.SetInContext(keyAttr, value);
+        return;
+    }
+
     // /// <summary>
     // /// Insert record
     // /// </summary>
     // /// <param name="key"></param>
     // /// <param name="value"></param>
-    // /// <exception cref="ArgumentException">Throws if key already exists</exception>
-    // internal void Insert(long key, ReadOnlySpan<byte> value){
-    //     if (this.data.ContainsKey(key)){
-    //         throw new ArgumentException($"Key {key} already exists");
-    //     }
+    // internal void Insert(ReadOnlySpan<byte> value){
+    //     long key = NewRecordId();
     //     byte[] row = new byte[this.rowSize];
     //     byte[] valueToWrite = value.ToArray();
     //     foreach (KeyValuePair<long, (int,int)> entry in this.metadata) {
     //         (int size, int offset) = entry.Value;
-    //         if (size == -1) {
-    //             IntPtr addr = Marshal.AllocHGlobal(value.Length);
-    //             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-    //             valueToWrite = new byte[IntPtr.Size * 2];
-    //             BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-    //             BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-    //         }
-    //         for (int i = 0; i < valueToWrite.Length; i++) {
-    //             row[offset+i] = valueToWrite[i];
-    //         }
+    //         Insert(new KeyAttr(key, entry.Key, this), value.Slice(offset, size));
     //     }
     //     this.data[key] = row;
     // }
 
+    /// <summary>
+    /// Insert specific attribute for a record
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="value"></param>
+    /// <exception cref="NullReferenceException">If attribute is not supplied</exception>
+    /// <exception cref="KeyNotFoundException">If attribute is not in this table</exception>
+    /// <exception cref="ArgumentException">If attribute for the key is already populated</exception>
+    internal void Insert(long key, long attribute, ReadOnlySpan<byte> value){
+        if (!this.metadata.ContainsKey(attribute)){
+            throw new KeyNotFoundException();
+        }
 
-    // /// <summary>
-    // /// Updates record by attribute
-    // /// </summary>
-    // /// <param name="key"></param>
-    // /// <param name="attribute"></param>
-    // /// <param name="value"></param>
-    // /// <exception cref="KeyNotFoundException">Throws if key is not in data or if attribute is not in metadata </exception>
-    // /// <exception cref="ArgumentException">Throws if value is empty or not equal to specified size for non-variable length attributes</exception>
-    // internal void Update(long key, long attribute, ReadOnlySpan<byte> value){
-    //     (int size, int offset) = this.metadata[attribute];
-    //     byte[] row = this.data[key];
-    //     byte[] valueToWrite = value.ToArray();
-    //     if (size == -1) {
-    //         IntPtr addr = Marshal.AllocHGlobal(value.Length);
-    //         Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-    //         valueToWrite = new byte[IntPtr.Size * 2];
-    //         BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-    //         BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-    //     }
+        if (!Util.IsEmpty(Read(key, attribute))) {
+            throw new ArgumentException();
+        }
 
-    //     if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
-    //         throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
-    //     }
-    //     for (int i = 0; i < valueToWrite.Length; i++) {
-    //         row[offset+i] = valueToWrite[i];
-    //     }
-    // }
+        (int size, int offset) = this.metadata[attribute];
+        byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]);
+        byte[] valueToWrite = value.ToArray();
+        if (size == -1) {
+            IntPtr addr = Marshal.AllocHGlobal(value.Length);
+            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
+            valueToWrite = new byte[IntPtr.Size * 2];
+            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
+            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
+        }
+
+        if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
+            throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
+        }
+        for (int i = 0; i < valueToWrite.Length; i++) {
+            row[offset+i] = valueToWrite[i];
+        }
+    }
+
+    public void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value, TransactionContext ctx){
+        if (!this.metadata.ContainsKey(keyAttr.Attr.Value)){
+            throw new KeyNotFoundException();
+        }
+
+        (int size, int offset) = this.metadata[keyAttr.Attr.Value];
+        if (size != -1 && value.Length != size) {
+            throw new ArgumentException($"Value to insert must be of size {size}");
+        }
+        // TODO add assertion check size if possible
+        ctx.SetInContext(keyAttr, value);
+        return;
+    }
+
+
+    /// <summary>
+    /// Updates record by attribute
+    /// </summary>
+    /// <param name="key"></param>
+    /// <param name="attribute"></param>
+    /// <param name="value"></param>
+    /// <exception cref="KeyNotFoundException">Throws if key is not in data or if attribute is not in metadata </exception>
+    /// <exception cref="ArgumentException">Throws if value is empty or not equal to specified size for non-variable length attributes</exception>
+    internal void Update(long key, long attribute, ReadOnlySpan<byte> value){
+        (int size, int offset) = this.metadata[attribute];
+        byte[] row = this.data[key];
+
+        if (Util.IsEmpty(Read(key, attribute))) {
+            throw new ArgumentException("Field is empty. Use Insert() instead");
+        }
+
+        byte[] valueToWrite = value.ToArray();
+        if (size == -1) {
+            IntPtr addr = Marshal.AllocHGlobal(value.Length);
+            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
+            valueToWrite = new byte[IntPtr.Size * 2];
+            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
+            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
+        }
+
+        if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
+            throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
+        }
+        for (int i = 0; i < valueToWrite.Length; i++) {
+            row[offset+i] = valueToWrite[i];
+        }
+    }
 
     // /// <summary>
     // /// Updates entire record 
@@ -219,22 +288,12 @@ public unsafe class Table : IDisposable{
     // /// <exception cref="ArgumentException">Throws if value is empty or not equal to the table's rowSize</exception>
     // internal void Update(long key, ReadOnlySpan<byte> value){
     //     byte[] row = this.data[key];
-    //     if (value.Length == 0 || value.Length != this.rowSize) {
-    //         throw new ArgumentException($"Value must be span of length {this.rowSize}");
+    //     if (value.Length == 0) {
+    //         throw new ArgumentException($"Value must not be empty");
     //     }
     //     foreach (KeyValuePair<long, (int,int)> entry in this.metadata) {
     //         (int size, int offset) = entry.Value;
-    //         byte[] valueToWrite = value.Slice(offset, size).ToArray();
-    //         if (size == -1) {
-    //             IntPtr addr = Marshal.AllocHGlobal(value.Length);
-    //             Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-    //             valueToWrite = new byte[IntPtr.Size * 2];
-    //             BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-    //             BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-    //         }
-    //         for (int i = 0; i < valueToWrite.Length; i++) {
-    //             row[offset+i] = valueToWrite[offset+i];
-    //         }
+    //         Update(key, entry.Key, value.Slice(offset, size));
     //     }
     // }
 
@@ -253,7 +312,7 @@ public unsafe class Table : IDisposable{
         }
     }
 
-    public void debug(){
+    public void Debug(){
         Console.WriteLine("Metadata: ");
         foreach (var field in metadata){
             Console.Write($"{field.Key} is {field.Value.Item1 == -1} {field.Value.Item1} {field.Value.Item2}\n");
@@ -269,6 +328,10 @@ public unsafe class Table : IDisposable{
             }
             Console.WriteLine("\n");// + Encoding.ASCII.GetBytes(entry.Value));
         }
+    }
+
+    private long NewRecordId() {
+        return Interlocked.Increment(ref lastId);
     }
 
 }

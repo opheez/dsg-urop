@@ -9,6 +9,12 @@ namespace DB {
         Aborted
     }
 
+    public enum OperationType {
+        Read,
+        Insert,
+        Update
+    }
+
     public unsafe struct Pointer {
         public Pointer(IntPtr ptr, int size){
             Size = size;
@@ -25,9 +31,24 @@ namespace DB {
         public void* Ptr;
     }
 
+    public struct Operation {
+        public Operation(OperationType type, KeyAttr keyAttr, byte[]? val){
+            if (type != OperationType.Read && val == null) {
+                throw new ArgumentException("Writes must provide a non-null value");
+            }
+            Type = type;
+            Value = val;
+            KeyAttribute = keyAttr;
+        }
+        public OperationType Type;
+        public byte[]? Value;
+        public KeyAttr KeyAttribute;
+
+    }
+
     public struct KeyAttr{ //} : IEquatable<KeyAttr>{
 
-        public KeyAttr(long key, long attr, Table t){
+        public KeyAttr(long key, long? attr, Table t){
             Key = key;
             Attr = attr;
             Table = t;
@@ -72,5 +93,20 @@ namespace DB {
         }
     }
 
+    public class Util {
+        public static bool IsEmpty(ReadOnlySpan<byte> val){
+            if (val.IsEmpty) {
+                return true;
+            }
+            foreach (byte b in val)
+            {
+                if (b != 0)
+                {
+                    return false; // If any element is not 0, return false
+                }
+            }
+            return true; // All elements are 0
+        }
+    }
 
 }

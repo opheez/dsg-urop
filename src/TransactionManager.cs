@@ -74,12 +74,8 @@ public class TransactionManager {
                             KeyAttr keyAttr = item.Key;
                             byte[]? val = item.Value;
                             if (val != null) {
-                                if (keyAttr.Attr.HasValue){
-                                    keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr.Value, val.AsSpan());
-                                } else {
-                                    keyAttr.Table.Upsert(keyAttr.Key, val.AsSpan());
-
-                                }
+                                // TOD: create operation struct to allow for update 
+                                keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr.Value, val.AsSpan());
                             }
                         }
                         // assign num 
