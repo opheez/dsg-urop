@@ -8,8 +8,8 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxn;
-    internal Dictionary<KeyAttr, byte[]?> Rset;
-    internal Dictionary<KeyAttr, byte[]?> Wset;
+    internal Dictionary<TupleId, Operation> Rset;
+    internal Dictionary<TupleId, Operation> Wset;
     public ManualResetEvent mre = new ManualResetEvent(false);
 
     public TransactionContext(){
@@ -19,36 +19,35 @@ public class TransactionContext {
         this.startTxn = startTxn;
         mre.Reset();
         status = TransactionStatus.Idle;
-        Rset = new Dictionary<KeyAttr, byte[]?>(new OCCComparer());
-        Wset = new Dictionary<KeyAttr, byte[]?>(new OCCComparer());
+        Rset = new Dictionary<TupleId, Operation>(new OCCComparer());
+        Wset = new Dictionary<TupleId, Operation>(new OCCComparer());
     }
 
-    public byte[]? GetFromContext(KeyAttr keyAttr){
-        byte[]? val = null;
-        if (Wset.ContainsKey(keyAttr)){
-            val = Wset[keyAttr];
-        } else if (Rset.ContainsKey(keyAttr)){
-            val = Rset[keyAttr];
+    public byte[]? GetFromContext(TupleId tupleId){
+        Operation? val = null;
+        if (Wset.ContainsKey(tupleId)){
+            val = Wset[tupleId];
+        } else if (Rset.ContainsKey(tupleId)){
+            val = Rset[tupleId];
         }
-        SetInContext(keyAttr, val, false);
-        return val;
+        if (val != null) {
+            SetInContext(val.Value.Type, tupleId, val.Value.TupleDescs, val.Value.Value);
+        }
+        return val.Value.Value;
     }
 
-    public void SetInContext(KeyAttr keyAttr, ReadOnlySpan<byte> val){
-        SetInContext(keyAttr, val, true);
-    }
-    private void SetInContext(KeyAttr keyAttr, ReadOnlySpan<byte> val, bool write){
-        if (write){
-            Wset[keyAttr] = val.ToArray();
+    public void SetInContext(OperationType op, TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
+        if (op == OperationType.Read) {
+            Rset[tupleId] = new Operation(op, tupleId, tupleDescs, val);
         } else {
-            Rset[keyAttr] = val.ToArray();
+            Wset[tupleId] = new Operation(op, tupleId, tupleDescs, val);
         }
     }
 
-    public Dictionary<KeyAttr, byte[]?> GetReadset(){
+    public Dictionary<TupleId, Operation> GetReadset(){
         return Rset;
     }
-    public Dictionary<KeyAttr, byte[]?> GetWriteset(){
+    public Dictionary<TupleId, Operation> GetWriteset(){
         return Wset;
     }
 

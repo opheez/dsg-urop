@@ -57,8 +57,8 @@ public class TransactionManager {
                     // System.Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
                     for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
                         // System.Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
-                        foreach (KeyAttr keyAttr in ctx.GetReadset().Keys){
-                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().ContainsKey(keyAttr)){
+                        foreach (TupleId tupleId in ctx.GetReadset().Keys){
+                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().ContainsKey(tupleId)){
                                 valid = false;
                                 break;
                             }
@@ -71,11 +71,12 @@ public class TransactionManager {
                     if (valid) {
                         // write phase
                         foreach (var item in ctx.GetWriteset()){
-                            KeyAttr keyAttr = item.Key;
-                            byte[]? val = item.Value;
-                            if (val != null) {
-                                // TOD: create operation struct to allow for update 
-                                keyAttr.Table.Upsert(keyAttr.Key, keyAttr.Attr.Value, val.AsSpan());
+                            Operation op = item.Value;
+                            TupleId tupleId = item.Key;
+                            if (op.Type == OperationType.Insert){
+                                tupleId.Table.Insert(tupleId.Key, op.TupleDescs, op.Value);
+                            } else if (op.Type == OperationType.Update) {
+                                tupleId.Table.Update(tupleId.Key, op.TupleDescs, op.Value);
                             }
                         }
                         // assign num 
@@ -105,18 +106,6 @@ public class TransactionManager {
         }
         
     }
-
-    // internal class KeyAttrComparer : IEqualityComparer<KeyAttr> {
-    //     public bool Equals(KeyAttr k1, KeyAttr k2)
-    //     {
-    //         return k1.Equals(k2);
-    //     }
-        
-    //     public int GetHashCode(KeyAttr k)
-    //     {
-    //         return k.GetHashCode();
-    //     }
-    // }
 }
 
 }

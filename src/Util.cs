@@ -32,36 +32,36 @@ namespace DB {
     }
 
     public struct Operation {
-        public Operation(OperationType type, KeyAttr keyAttr, byte[]? val){
-            if (type != OperationType.Read && val == null) {
+        public Operation(OperationType type, TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
+            if (type != OperationType.Read && Util.IsEmpty(val)) {
                 throw new ArgumentException("Writes must provide a non-null value");
             }
             Type = type;
-            Value = val;
-            KeyAttribute = keyAttr;
+            TupleID = tupleId;
+            TupleDescs = tupleDescs;
+            Value = val.ToArray();
         }
         public OperationType Type;
-        public byte[]? Value;
-        public KeyAttr KeyAttribute;
+        public TupleId TupleID;
+        public TupleDesc[] TupleDescs;
+        public byte[] Value;
 
     }
 
-    public struct KeyAttr{ //} : IEquatable<KeyAttr>{
+    public struct TupleId{ //} : IEquatable<TupleId>{
 
-        public KeyAttr(long key, long? attr, Table t){
+        public TupleId(long key, Table t){
             Key = key;
-            Attr = attr;
             Table = t;
         }
         public long Key;
-        public long? Attr;
         public Table Table;
 
         public override string ToString(){
-            return $"({Key}, {Attr})";
+            return $"({Key})";
         }
 
-        // public bool Equals(KeyAttr o){
+        // public bool Equals(TupleId o){
         //     return Key == o.Key && Attr == o.Attr && Table == o.Table;
         // }
 
@@ -71,7 +71,7 @@ namespace DB {
         //     {
         //         return false;
         //     }
-        //     return Equals((KeyAttr)o);
+        //     return Equals((TupleId)o);
         // }
 
         // public override int GetHashCode(){
@@ -80,14 +80,23 @@ namespace DB {
         
     }
 
-    public class OCCComparer : IEqualityComparer<KeyAttr>
+    public struct TupleDesc {
+        public TupleDesc(long attr, int size){
+            Attr = attr;
+            Size = size;
+        }
+        public long Attr;
+        public int Size;
+    }
+
+    public class OCCComparer : IEqualityComparer<TupleId>
     {
-        public bool Equals(KeyAttr x, KeyAttr y)
+        public bool Equals(TupleId x, TupleId y)
         {
             return x.Key == y.Key && x.Table == y.Table;
         }
 
-        public int GetHashCode(KeyAttr obj)
+        public int GetHashCode(TupleId obj)
         {
             return (int)obj.Key + obj.Table.GetHashCode(); //Already an int
         }
