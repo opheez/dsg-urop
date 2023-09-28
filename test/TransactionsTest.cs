@@ -25,7 +25,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v1 = table.Read(new KeyAttr(1,12345, table), t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -42,7 +42,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v1 = table.Read(new KeyAttr(1,12345, table), t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -64,12 +64,12 @@ namespace DB
             txnManager.Run();
             System.Console.WriteLine("agafd");
             TransactionContext t = txnManager.Begin();
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v2 = table.Read(new KeyAttr(1,12345, table), t);
 
             TransactionContext t2 = txnManager.Begin();
             var v5 = table.Read(new KeyAttr(2,12345, table), t2);
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            table.Update(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
 
@@ -99,13 +99,13 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v2 = table.Read(new KeyAttr(2,12345, table), t);
             // Thread thread = new Thread(() => Commit(txnManager, t)); 
 
             TransactionContext t2 = txnManager.Begin();
             var v5 = table.Read(new KeyAttr(2,12345, table), t2);
-            table.Upsert(new KeyAttr(2,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            table.Insert(new KeyAttr(2,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
 
             // thread.Start();
             // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
@@ -141,12 +141,12 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
+            table.Insert(new KeyAttr(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
             var v2 = table.Read(new KeyAttr(1,12345, table), t);
 
             TransactionContext t2 = txnManager.Begin();
             var v3 = table.Read(new KeyAttr(1,56789, table), t2);
-            table.Upsert(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
+            table.Update(new KeyAttr(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
 
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);

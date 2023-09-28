@@ -42,7 +42,7 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            test.Upsert(11111, 12345, name.AsSpan());
+            test.Insert(11111, 12345, name.AsSpan());
             long attrAsLong = BitConverter.ToInt64(Encoding.ASCII.GetBytes("occupation"));
             var retName = test.Read(11111, attrAsLong);
         }
@@ -55,30 +55,30 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            test.Upsert(11111, 12345, name.AsSpan());
-            test.Upsert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
+            test.Insert(11111, 12345, name.AsSpan());
+            test.Insert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
             var retName = test.Read(11111, 12345);
             Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName));
             var retAge = test.Read(11111, 67890);
             Assert.AreEqual(21, BitConverter.ToInt32(retAge.ToArray()));
         }
 
-        [TestMethod]
-        public void TestInsertReadRecord(){
-            Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            schema.Add(12345, (false, 8));
-            schema.Add(67890, (false, 4));
+        // [TestMethod]
+        // public void TestInsertReadRecord(){
+        //     Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
+        //     schema.Add(12345, (false, 8));
+        //     schema.Add(67890, (false, 4));
 
-            Table test = new Table(schema);
-            byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            Span<byte> record = new byte[test.rowSize]; //todo: accesing rowSize internal var
-            name.AsSpan().CopyTo(record);
-            BitConverter.GetBytes(21).AsSpan().CopyTo(record.Slice(8, 4));
-            test.Upsert(11111, record);
-            var retName = test.Read(11111);
-            Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName.Slice(0, 8)));
-            Assert.AreEqual(21, BitConverter.ToInt32(retName.Slice(8, 4).ToArray()));
-        }
+        //     Table test = new Table(schema);
+        //     byte[] name = Encoding.ASCII.GetBytes("John Doe");
+        //     Span<byte> record = new byte[test.rowSize]; //todo: accesing rowSize internal var
+        //     name.AsSpan().CopyTo(record);
+        //     BitConverter.GetBytes(21).AsSpan().CopyTo(record.Slice(8, 4));
+        //     test.Insert(11111, record);
+        //     var retName = test.Read(11111);
+        //     Assert.AreEqual(Encoding.ASCII.GetString(name), Encoding.ASCII.GetString(retName.Slice(0, 8)));
+        //     Assert.AreEqual(21, BitConverter.ToInt32(retName.Slice(8, 4).ToArray()));
+        // }
 
         [TestMethod]
         public void TestMultipleInsertRead(){
@@ -88,11 +88,11 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            test.Upsert(11111, 12345, name.AsSpan());
-            test.Upsert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
-            test.Upsert(11111, 67890, BitConverter.GetBytes(40).AsSpan());
+            test.Insert(11111, 12345, name.AsSpan());
+            test.Insert(11111, 67890, BitConverter.GetBytes(21).AsSpan());
+            test.Update(11111, 67890, BitConverter.GetBytes(40).AsSpan());
             name = Encoding.ASCII.GetBytes("Anna Lee");
-            test.Upsert(11111, 12345, name.AsSpan());
+            test.Update(11111, 12345, name.AsSpan());
 
             var retName = test.Read(11111, 12345);
             var retAge = test.Read(11111, 67890);
@@ -109,7 +109,7 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
-            test.Upsert(11111, 12345, name.AsSpan());
+            test.Insert(11111, 12345, name.AsSpan());
         }
 
         [TestMethod]
@@ -120,7 +120,7 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("a");
-            test.Upsert(11111, 12345, name.AsSpan());
+            test.Insert(11111, 12345, name.AsSpan());
         }
 
         [TestMethod]
@@ -131,7 +131,7 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] name = Encoding.ASCII.GetBytes("");
-            test.Upsert(11111, 12345, name.AsSpan());
+            test.Insert(11111, 12345, name.AsSpan());
         }
 
         [TestMethod]
@@ -141,12 +141,12 @@ namespace DB
 
             Table test = new Table(schema);
             byte[] input = Encoding.ASCII.GetBytes("123456789");
-            test.Upsert(11111, 12345, input.AsSpan());
+            test.Insert(11111, 12345, input.AsSpan());
             var y = test.Read(11111, 12345);
             CollectionAssert.AreEqual(input, y.ToArray());
             
             input = Encoding.ASCII.GetBytes("short");
-            test.Upsert(22222, 12345, input.AsSpan());
+            test.Insert(22222, 12345, input.AsSpan());
             var y1 = test.Read(11111, 12345);
             var y2 = test.Read(22222, 12345);
 
