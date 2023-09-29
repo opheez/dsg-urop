@@ -24,6 +24,9 @@ public unsafe class Table : IDisposable{
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
+    // delegate void LogWAL();
+    internal LogWAL logWAL;
+
 
     public Table((long, int)[] schema){
         this.metadata = new Dictionary<long,(int, int)>();
@@ -45,6 +48,10 @@ public unsafe class Table : IDisposable{
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
 
+    public Table((long, int)[] schema, LogWAL log) : this(schema) {
+        this.logWAL = log;
+    }
+
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
 
@@ -53,7 +60,7 @@ public unsafe class Table : IDisposable{
         foreach (TupleDesc desc in tupleDescs) {
             byte[] valueToWrite;
             (int size, int readOffset) = this.metadata[desc.Attr];
-            KeyAttr ka = new KeyAttr(tupleId.Key, desc.Attr, tupleId.Table);
+            KeyAttr ka = new KeyAttr(tupleId.Key, desc.Attr, this);
             var ctxRead = ctx.GetFromContext(ka);
             if (ctxRead != null) {
                 valueToWrite = ctxRead;
@@ -142,7 +149,7 @@ public unsafe class Table : IDisposable{
         Validate(tupleDescs, value, true);
 
         long id = NewRecordId();
-        TupleId tupleId = new TupleId(id, this);
+        TupleId tupleId = new TupleId(id, this.GetHashCode());
         if (!Util.IsEmpty(Read(tupleId, tupleDescs, ctx))){
             throw new ArgumentException(""); // TODO ensure this aborts transaction
         }
@@ -178,6 +185,7 @@ public unsafe class Table : IDisposable{
     }
 
     internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
+
         this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
         (int size, int offset) = this.metadata[keyAttr.Attr];
         byte[] valueToWrite = value.ToArray(); //TODO: possibly optimize and not ToArray()

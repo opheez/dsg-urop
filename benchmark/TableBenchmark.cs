@@ -20,6 +20,8 @@ public abstract class TableBenchmark
     internal int IterationCount = 10;
     internal double ratio;
     internal int seed;
+    internal LogWAL logWal;
+
     public TableBenchmark(int seed, double ratio){
         schema = new (long, int)[AttrCount];
         workers = new Thread[ThreadCount];
@@ -30,6 +32,11 @@ public abstract class TableBenchmark
         attrs = new long[AttrCount];
         values = new byte[DatasetSize][];
     }
+
+    public void WithLogWAL(LogWAL logWal){
+        this.logWal = logWal;
+    }
+
 
     // internal void InsertSingleThreaded(Table tbl, int thread_idx){
     //     for (int i = 0; i < PerThreadDataCount; i++){
@@ -113,9 +120,9 @@ public abstract class TableBenchmark
                 TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
 
                 if (loc % groupSize == 0) {
-                    tbl.Update(new TupleId(key, tbl), td, values[loc], t);
+                    tbl.Update(new TupleId(key, tbl.GetHashCode()), td, values[loc], t);
                 } else {
-                    tbl.Read(new TupleId(key, tbl), td, t);
+                    tbl.Read(new TupleId(key, tbl.GetHashCode()), td, t);
                 }
             }
             var success = txnManager.Commit(t);
@@ -178,7 +185,7 @@ public abstract class TableBenchmark
         for (int i = 0; i < IterationCount; i++){
             TransactionManager txnManager = new TransactionManager();
             txnManager.Run();
-            using (Table tbl = new Table(schema)) {
+            using (Table tbl = new Table(schema, logWal)) {
                 var insertSw = Stopwatch.StartNew();
                 int insertAborts = InsertMultiThreadedTransactions(tbl, txnManager); // setup
                 insertSw.Stop();
