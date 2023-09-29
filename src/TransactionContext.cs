@@ -38,9 +38,9 @@ public class TransactionContext {
 
     public void SetInContext(OperationType op, KeyAttr keyAttr, ReadOnlySpan<byte> val){
         if (op == OperationType.Read) {
-            Rset[keyAttr] = new Operation(op, new TupleId(keyAttr.Key, keyAttr.Table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val);
+            Rset[keyAttr] = new Operation(op, new TupleId(keyAttr.Key, keyAttr.Table.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val);
         } else {
-            Wset[keyAttr] = new Operation(op, new TupleId(keyAttr.Key, keyAttr.Table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val);
+            Wset[keyAttr] = new Operation(op, new TupleId(keyAttr.Key, keyAttr.Table.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val);
         }
     }
 

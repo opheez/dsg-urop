@@ -137,7 +137,7 @@ namespace DB
             var res1 = table.Read(id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
-            var res2 = table.Read(new TupleId(2, table), td, t2);
+            var res2 = table.Read(new TupleId(2, table.GetHashCode()), td, t2);
 
             byte[] val2 = BitConverter.GetBytes(5);
             table.Update(id1, td, val2, t2);
@@ -172,7 +172,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
             TupleId id1 = table.Insert(td, val1, t);
-            TupleId id2 = new TupleId(2, table);
+            TupleId id2 = new TupleId(2, table.GetHashCode());
             var res1 = table.Read(id2, td, t);
             // Thread thread = new Thread(() => Commit(txnManager, t)); 
 

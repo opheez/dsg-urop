@@ -46,16 +46,57 @@ namespace DB {
         public TupleDesc[] TupleDescs;
         public byte[] Value;
 
+
+        public byte[] ToBytes(){
+            using (MemoryStream m = new MemoryStream()) {
+                using (BinaryWriter writer = new BinaryWriter(m)) {
+                    writer.Write(BitConverter.GetBytes((int)Type));
+                    writer.Write(TupleID.Key);
+                    writer.Write(TupleID.TableHash);
+                    writer.Write(TupleDescs.Count());
+                    foreach (TupleDesc desc in TupleDescs){
+                        writer.Write(desc.Attr);
+                        writer.Write(desc.Size);
+                    }
+                    writer.Write(Value);
+                }
+                return m.ToArray();
+            }
+        }
+
+        public static Operation FromBytes(byte[] data) {
+            Operation op = new Operation();
+            using (MemoryStream m = new MemoryStream(data)) {
+                using (BinaryReader reader = new BinaryReader(m)) {
+                    op.Type = (OperationType)reader.ReadInt32();
+
+                    long key = reader.ReadInt64();
+                    int tableHash = reader.ReadInt32();
+                    op.TupleID = new TupleId(key, tableHash);
+
+                    int tupleDescLength = reader.ReadInt32();
+                    TupleDesc[] descs = new TupleDesc[tupleDescLength];
+                    for (int i = 0; i < tupleDescLength; i++){
+                        TupleDesc desc = new TupleDesc();
+                        desc.Attr = reader.ReadInt64();
+                        desc.Size = reader.ReadInt32();
+                        descs[i] = desc;
+                    }
+                }
+            }
+            return op;
+        }
+
     }
 
     public struct TupleId{ //} : IEquatable<TupleId>{
 
-        public TupleId(long key, Table t){
+        public TupleId(long key, int tHash){
             Key = key;
-            Table = t;
+            TableHash = tHash;
         }
         public long Key;
-        public Table Table;
+        public int TableHash;
 
         public override string ToString(){
             return $"({Key})";
