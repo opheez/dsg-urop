@@ -1,4 +1,6 @@
 // using System;
+// namespace DB {
+
 // public class VarLenTableBenchmark : TableBenchmark
 // {
 //     public VarLenTableBenchmark(int seed, double ratio) : base(seed, ratio) {
@@ -25,4 +27,5 @@
 
 //         stats = new BenchmarkStatistics("VarLenTableBenchmark", inserts, DatasetSize);
 //     }
+// }
 // }
