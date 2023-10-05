@@ -60,9 +60,10 @@ public class TransactionManager {
                         // foreach (var x in tidToCtx[i % pastTidCircularBufferSize].GetWriteset()){
                         //     Console.Write($"{x.Key}, ");
                         // }
-                        foreach (KeyAttr keyAttr in ctx.GetReadset().Keys){
+                        foreach (var item in ctx.GetReadset()){
+                            KeyAttr keyAttr = item.Item1;
                             // Console.WriteLine($"scanning for {keyAttr}");
-                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteset().ContainsKey(keyAttr)){
+                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteSetKeyIndex(keyAttr) != -1){
                                 valid = false;
                                 break;
                             }
@@ -75,8 +76,8 @@ public class TransactionManager {
                     if (valid) {
                         // write phase
                         foreach (var item in ctx.GetWriteset()){
-                            byte[] val = item.Value;
-                            KeyAttr keyAttr = item.Key;
+                            byte[] val = item.Item2;
+                            KeyAttr keyAttr = item.Item1;
                             // should not throw exception here, but if it does, abort. 
                             // failure here means crashed before commit. would need to rollback
                             keyAttr.Table.Write(keyAttr, val);

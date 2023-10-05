@@ -8,8 +8,8 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxn;
-    internal Dictionary<KeyAttr, byte[]> Rset;
-    internal Dictionary<KeyAttr, byte[]> Wset;
+    internal List<(KeyAttr, byte[])> Rset;
+    internal List<(KeyAttr, byte[])> Wset;
     public ManualResetEvent mre = new ManualResetEvent(false);
 
     public TransactionContext(){
@@ -19,16 +19,38 @@ public class TransactionContext {
         this.startTxn = startTxn;
         mre.Reset();
         status = TransactionStatus.Idle;
-        Rset = new Dictionary<KeyAttr, byte[]>(new OCCComparer());
-        Wset = new Dictionary<KeyAttr, byte[]>(new OCCComparer());
+        Rset = new List<(KeyAttr, byte[])>();
+        Wset = new List<(KeyAttr, byte[])>();
+    }
+
+    public int GetWriteSetKeyIndex(KeyAttr keyAttr){
+        for (int i = Wset.Count-1; i >= 0; i--){
+            if (Wset[i].Item1.Key == keyAttr.Key && Wset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public int GetReadsetKeyIndex(KeyAttr keyAttr){
+        for (int i = Rset.Count-1; i >= 0; i--){
+            if (Rset[i].Item1.Key == keyAttr.Key && Rset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
+                return i;
+            }
+        }
+        return -1;
     }
 
     public byte[]? GetFromContext(KeyAttr keyAttr){
         byte[]? val = null;
-        if (Wset.ContainsKey(keyAttr)){
-            val = Wset[keyAttr];
-        } else if (Rset.ContainsKey(keyAttr)){
-            val = Rset[keyAttr];
+        int wi = GetWriteSetKeyIndex(keyAttr);
+        if (wi != -1){
+            val = Wset[wi].Item2;
+        } else {
+            int ri = GetReadsetKeyIndex(keyAttr);
+            if (ri != -1){
+                val = Rset[ri].Item2;
+            }
         }
         if (val != null) {
             SetInContext(OperationType.Read, keyAttr, val);
@@ -38,16 +60,16 @@ public class TransactionContext {
 
     public void SetInContext(OperationType op, KeyAttr keyAttr, ReadOnlySpan<byte> val){
         if (op == OperationType.Read) {
-            Rset[keyAttr] = val.ToArray();
+            Rset.Add((keyAttr, val.ToArray()));
         } else {
-            Wset[keyAttr] =val.ToArray();
+            Wset.Add((keyAttr, val.ToArray()));
         }
     }
 
-    public Dictionary<KeyAttr, byte[]> GetReadset(){
+    public List<(KeyAttr, byte[])> GetReadset(){
         return Rset;
     }
-    public Dictionary<KeyAttr, byte[]> GetWriteset(){
+    public List<(KeyAttr, byte[])> GetWriteset(){
         return Wset;
     }
 
