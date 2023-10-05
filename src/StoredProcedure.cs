@@ -21,6 +21,7 @@ public class StoredProcedure {
     public void Run(){
         TableBenchmark b = new TransactionalFixedLenTableBenchmark(seed, writeRatio);
         b.WithLogWAL(logWal);
+        b.RunTransactions();
     }
 
     public static StoredProcedure GetWorkloadAUpdateHeavy(LogWAL logWal){

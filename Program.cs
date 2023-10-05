@@ -23,7 +23,7 @@ unsafe class Program {
 
         private static void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
     {
-        var logDevice = new LocalStorageDevice($"D:\\w{me.guid}\\data.log", deleteOnClose: true);
+        var logDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data.log", deleteOnClose: true);
         var darqServer = new DarqServer(new DarqServerOptions
         {
             Port = 15721 + (int)me.guid,
