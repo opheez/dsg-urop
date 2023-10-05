@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using FASTER.client;
 using FASTER.core;
 using FASTER.darq;
@@ -25,7 +26,7 @@ public class TransactionProcessor : IDarqProcessor {
         switch (m.GetMessageType()){
             case DarqMessageType.IN:
             {
-                var storedProcedureName = m.GetMessageBody().ToString();
+                var storedProcedureName = Encoding.ASCII.GetString(m.GetMessageBody().ToArray());
                 var requestBuilder = new StepRequestBuilder(reusableRequest, me);
                 var schema = new (long, int)[]{};
                 switch (storedProcedureName){
