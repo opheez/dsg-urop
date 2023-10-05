@@ -94,6 +94,8 @@ namespace DB
             txnManager.Terminate();
 
             Assert.IsTrue(success, "Transaction was unable to commit");
+            Console.WriteLine(v1.ToArray());
+            Console.WriteLine(v1.ToArray().Length);
             CollectionAssert.AreEqual(value, v1.ToArray());
         }
 
