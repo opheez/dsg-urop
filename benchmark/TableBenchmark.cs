@@ -4,55 +4,79 @@ using System.Diagnostics;
 
 namespace DB {
 
+public struct BenchmarkConfig {
+    public int seed;
+    public double ratio;
+    public int threadCount;
+    public int attrCount;
+    public int perThreadDataCount; // enough to be larger than l3 cache
+    public int iterationCount;
+    public int datasetSize;
+    public int perTransactionCount; // TODO: ensure support for keys[] when this > 1
+    public LogWAL? logWal;
+
+    public BenchmarkConfig(
+        int seed,
+        double ratio,
+        LogWAL? logWal = null,
+        int threadCount = 16,
+        int attrCount = 2,
+        int perThreadDataCount = 100000,
+        int iterationCount = 10,
+        int perTransactionCount = 1){
+
+        this.seed = seed;
+        this.ratio = ratio;
+        this.threadCount = threadCount;
+        this.attrCount = attrCount;
+        this.perThreadDataCount = perThreadDataCount;
+        this.iterationCount = iterationCount;
+        this.perTransactionCount = perTransactionCount;
+        this.logWal = logWal;
+        this.datasetSize = perThreadDataCount * threadCount;
+    }
+
+    public override readonly string ToString(){
+        return $"seed: {seed}, ratio: {ratio}, threadCount: {threadCount}, attrCount: {attrCount}, perThreadDataCount: {perThreadDataCount}, iterationCount: {iterationCount}, perTransactionCount: {perTransactionCount}, datasetSize: {datasetSize}";
+    }
+}
+
 public abstract class TableBenchmark
 {
-    public static int PerThreadDataCount = 100000; // enough to be larger than l3 cache
-    public static int PerTransactionCount = 1; // TODO: get rid of, or ensure support for keys[] when this > 1
-    internal static int ThreadCount = 16;
-    internal static int AttrCount = 2;
-    internal static int DatasetSize = PerThreadDataCount * ThreadCount;    
+    internal BenchmarkConfig cfg;   
     internal long[] keys;
     internal long[] attrs;
     internal byte[][] values;
     internal (long, int)[] schema;
     internal Thread[] workers;
     internal BenchmarkStatistics stats;
-    internal int IterationCount = 10;
-    internal double ratio;
-    internal int seed;
     internal LogWAL logWal;
 
-    public TableBenchmark(int seed, double ratio){
-        schema = new (long, int)[AttrCount];
-        workers = new Thread[ThreadCount];
-        this.ratio = ratio;
-        this.seed = seed;
+    public TableBenchmark(BenchmarkConfig cfg){
+        this.cfg = cfg;
+        schema = new (long, int)[cfg.attrCount];
+        workers = new Thread[cfg.threadCount];
 
-        keys = new long[DatasetSize];
-        attrs = new long[AttrCount];
-        values = new byte[DatasetSize][];
+        keys = new long[cfg.datasetSize];
+        attrs = new long[cfg.attrCount];
+        values = new byte[cfg.datasetSize][];
     }
-
-    public void WithLogWAL(LogWAL logWal){
-        this.logWal = logWal;
-    }
-
 
     // internal void InsertSingleThreaded(Table tbl, int thread_idx){
-    //     for (int i = 0; i < PerThreadDataCount; i++){
-    //         int loc = i + (PerThreadDataCount * thread_idx);
-    //         tbl.Insert(new KeyAttr(keys[loc],attrs[loc%AttrCount], tbl), values[loc]);
+    //     for (int i = 0; i < cfg.perThreadDataCount; i++){
+    //         int loc = i + (cfg.perThreadDataCount * thread_idx);
+    //         tbl.Insert(new KeyAttr(keys[loc],attrs[loc%cfg.attrCount], tbl), values[loc]);
     //     }
     // }
 
     internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
         int abortCount = 0;
         int c = 0;
-        for (int i = 0; i < PerThreadDataCount; i += PerTransactionCount){
+        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
-            for (int j = 0; j < PerTransactionCount; j++) {
-                int loc = i + j + (PerThreadDataCount * thread_idx);
-                long attr = attrs[loc%AttrCount];
+            for (int j = 0; j < cfg.perTransactionCount; j++) {
+                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                long attr = attrs[loc%cfg.attrCount];
                 // TODO: different for varlen
                 TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
                 TupleId tupleId = tbl.Insert(td, values[loc], t);
@@ -70,12 +94,12 @@ public abstract class TableBenchmark
 
     // internal void InsertMultiThreaded(Table tbl)
     // {
-    //     for (int thread = 0; thread < ThreadCount; thread++) {
+    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
     //         int t = thread;
     //         workers[thread] = new Thread(() => InsertSingleThreaded(tbl, t));
     //         workers[thread].Start();
     //     }
-    //     for (int thread = 0; thread < ThreadCount; thread++) {
+    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
     //         workers[thread].Join();
     //     }
     // }
@@ -83,7 +107,7 @@ public abstract class TableBenchmark
     internal int InsertMultiThreadedTransactions(Table tbl, TransactionManager txnManager)
     {
         int totalAborts = 0;
-        for (int thread = 0; thread < ThreadCount; thread++) {
+        for (int thread = 0; thread < cfg.threadCount; thread++) {
             int t = thread;
             workers[thread] = new Thread(() => {
                 int aborts = InsertSingleThreadedTransactions(tbl, txnManager, t);
@@ -91,19 +115,19 @@ public abstract class TableBenchmark
             });
             workers[thread].Start();
         }
-        for (int thread = 0; thread < ThreadCount; thread++) {
+        for (int thread = 0; thread < cfg.threadCount; thread++) {
             workers[thread].Join();
         }
         return totalAborts;
     }
 
     // internal void WorkloadSingleThreaded(Table tbl, int thread_idx, double ratio){
-    //     for (int i = 0; i < PerThreadDataCount; i++){
-    //         int loc = i + (PerThreadDataCount * thread_idx);
+    //     for (int i = 0; i < cfg.perThreadDataCount; i++){
+    //         int loc = i + (cfg.perThreadDataCount * thread_idx);
     //         if (keys[loc] < Int64.MaxValue * ratio) {
-    //             tbl.Update(new KeyAttr(keys[loc+DatasetSize],attrs[loc%AttrCount], tbl),values[loc]);
+    //             tbl.Update(new KeyAttr(keys[loc+DatasetSize],attrs[loc%cfg.attrCount], tbl),values[loc]);
     //         } else {
-    //             tbl.Read(new KeyAttr(keys[loc], attrs[loc%AttrCount], tbl));
+    //             tbl.Read(new KeyAttr(keys[loc], attrs[loc%cfg.attrCount], tbl));
     //         }
     //     }
     // }
@@ -111,11 +135,11 @@ public abstract class TableBenchmark
     internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
         int abortCount = 0;
         int groupSize = (int)(1/(1-ratio));
-        for (int i = 0; i < PerThreadDataCount; i += PerTransactionCount){
+        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
-            for (int j = 0; j < PerTransactionCount; j++){
-                int loc = i + j + PerThreadDataCount;
-                long attr = attrs[loc%AttrCount];
+            for (int j = 0; j < cfg.perTransactionCount; j++){
+                int loc = i + j + cfg.perThreadDataCount;
+                long attr = attrs[loc%cfg.attrCount];
                 long key = keys[loc];
                 TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
 
@@ -135,12 +159,12 @@ public abstract class TableBenchmark
 
     // internal void WorkloadMultiThreaded(Table tbl, double ratio)
     // {
-    //     for (int thread = 0; thread < ThreadCount; thread++) {
+    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
     //         int t = thread;
     //         workers[thread] = new Thread(() => WorkloadSingleThreaded(tbl, t, ratio));
     //         workers[thread].Start();
     //     }
-    //     for (int thread = 0; thread < ThreadCount; thread++) {
+    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
     //         workers[thread].Join();
     //     }
     // }
@@ -148,7 +172,7 @@ public abstract class TableBenchmark
     internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
-        for (int thread = 0; thread < ThreadCount; thread++) {
+        for (int thread = 0; thread < cfg.threadCount; thread++) {
             int t = thread;
             workers[thread] = new Thread(() => {
                 int aborts = WorkloadSingleThreadedTransactions(tbl, txnManager, t, ratio);
@@ -156,7 +180,7 @@ public abstract class TableBenchmark
             });
             workers[thread].Start();
         }
-        for (int thread = 0; thread < ThreadCount; thread++) {
+        for (int thread = 0; thread < cfg.threadCount; thread++) {
             workers[thread].Join();
         }
         return totalAborts;
@@ -182,7 +206,7 @@ public abstract class TableBenchmark
     // }
 
     public void RunTransactions(){
-        for (int i = 0; i < IterationCount; i++){
+        for (int i = 0; i < cfg.iterationCount; i++){
             TransactionManager txnManager = new TransactionManager();
             txnManager.Run();
             using (Table tbl = new Table(schema, logWal)) {
@@ -192,7 +216,7 @@ public abstract class TableBenchmark
                 System.Console.WriteLine("done inserting");
                 long insertMs = insertSw.ElapsedMilliseconds;
                 var opSw = Stopwatch.StartNew();
-                int txnAborts = WorkloadMultiThreadedTransactions(tbl, txnManager, ratio);
+                int txnAborts = WorkloadMultiThreadedTransactions(tbl, txnManager, cfg.ratio);
                 opSw.Stop();
                 long opMs = opSw.ElapsedMilliseconds;
                 stats.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
@@ -210,11 +234,13 @@ public class BenchmarkStatistics {
     internal readonly List<int> insAbortsPerRun = new List<int>();
     internal readonly List<int> txnAbortsPerRun = new List<int>();
     internal string name;
+    internal BenchmarkConfig cfg;
     internal int inserts;
     internal int operations;
 
-    internal BenchmarkStatistics(string name, int inserts, int operations)
+    internal BenchmarkStatistics(string name, BenchmarkConfig cfg, int inserts, int operations)
     {
+        this.cfg = cfg;
         this.name = name;
         this.inserts = inserts;
         this.operations = operations;
@@ -234,33 +260,41 @@ public class BenchmarkStatistics {
         txnAbortsPerRun.Add(result.txnAborts);
     }
 
+    internal string[] GetStats() {
+        string[] data = new string[]{
+            $"Benchmark {name}",
+            "-----BENCHMARK CONFIG-----",
+            cfg.ToString(),
+            "-----STATS-----",
+            GetInsDataString(operations, insMsPerRun),
+            GetOpsDataString(inserts, operations-inserts, opsMsPerRun)
+        };
+
+        if (insAbortsPerRun.Count != 0) {
+            data = data.Concat(new string[]{
+                GetInsAbortDataString(insAbortsPerRun),
+                GetTxnAbortDataString(txnAbortsPerRun)
+            }).ToArray();
+        }
+
+        return data;
+    }
+
     internal void ShowAllStats(){
-        System.Console.WriteLine("-----STATS-----");
-        Console.WriteLine(GetInsDataString(operations, insMsPerRun));
-        Console.WriteLine(GetOpsDataString(inserts, operations-inserts, opsMsPerRun));
-        if (insAbortsPerRun.Count != 0){
-            Console.WriteLine(GetInsAbortDataString(insAbortsPerRun));
-            Console.WriteLine(GetTxnAbortDataString(txnAbortsPerRun));
+        foreach (string line in GetStats()){
+            Console.WriteLine(line);
         }
     }
 
     internal async void SaveStatsToFile(){
-        System.Console.WriteLine("-----STATS-----");
-        string[] data = new string[]{
-            GetInsDataString(operations, insMsPerRun),
-            GetOpsDataString(inserts, operations-inserts, opsMsPerRun)
-        }.Concat(insAbortsPerRun.Count != 0 ? new string[]{
-            GetInsAbortDataString(insAbortsPerRun),
-            GetTxnAbortDataString(txnAbortsPerRun)
-        } : new string[0]).ToArray();
         string now = DateTime.Now.ToString("yyyyMMdd-HHmmss"); 
-        await File.WriteAllLinesAsync($"benchmark/benchmarkResults/{name}-{now}.txt", data);
+        await File.WriteAllLinesAsync($"benchmark/benchmarkResults/{name}-{now}.txt", GetStats());
     }
 
-    internal static string GetOpsDataString(int inserts, int reads, List<long> opsMsPerRun) => $"{(inserts+reads)/opsMsPerRun.Average()} operations/ms ({inserts+reads} operations ({inserts} inserts, {reads} reads) in {opsMsPerRun.Average()} ms)";
-    internal static string GetInsDataString(int inserts, List<long> insMsPerRun) => $"{inserts/insMsPerRun.Average()} inserts/ms ({inserts} inserts in {insMsPerRun.Average()} ms)";
-    internal static string GetTxnAbortDataString(List<int> txnAborts) => $"Operations: Average {txnAborts.Average()} aborts out of {TableBenchmark.PerThreadDataCount/TableBenchmark.PerTransactionCount} transactions ({txnAborts.Average()/(TableBenchmark.PerThreadDataCount/TableBenchmark.PerTransactionCount)}% abort rate)";
-    internal static string GetInsAbortDataString(List<int> insAborts) => $"Insertions: Average {insAborts.Average()} aborts out of {TableBenchmark.PerThreadDataCount/TableBenchmark.PerTransactionCount} transactions ({insAborts.Average()/(TableBenchmark.PerThreadDataCount/TableBenchmark.PerTransactionCount)}% abort rate)";
+    internal string GetOpsDataString(int inserts, int reads, List<long> opsMsPerRun) => $"{(inserts+reads)/opsMsPerRun.Average()} operations/ms ({inserts+reads} operations ({inserts} inserts, {reads} reads) in {opsMsPerRun.Average()} ms)";
+    internal string GetInsDataString(int inserts, List<long> insMsPerRun) => $"{inserts/insMsPerRun.Average()} inserts/ms ({inserts} inserts in {insMsPerRun.Average()} ms)";
+    internal string GetTxnAbortDataString(List<int> txnAborts) => $"Operations: Average {txnAborts.Average()} aborts out of {cfg.perThreadDataCount/cfg.perTransactionCount} transactions ({txnAborts.Average()/(cfg.perThreadDataCount/cfg.perTransactionCount)}% abort rate)";
+    internal string GetInsAbortDataString(List<int> insAborts) => $"Insertions: Average {insAborts.Average()} aborts out of {cfg.perThreadDataCount/cfg.perTransactionCount} transactions ({insAborts.Average()/(cfg.perThreadDataCount/cfg.perTransactionCount)}% abort rate)";
 
     // internal static string GetLoadingTimeLine(double insertsPerSec, long elapsedMs)
     //     => $"##00; {InsPerSec}: {insertsPerSec:N2}; sec: {(double)elapsedMs / 1000:N3}";
