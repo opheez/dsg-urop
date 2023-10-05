@@ -27,7 +27,6 @@ public unsafe class Table : IDisposable{
     // delegate void LogWAL();
     internal LogWAL logWAL;
 
-
     public Table((long, int)[] schema){
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
@@ -52,10 +51,29 @@ public unsafe class Table : IDisposable{
         this.logWAL = log;
     }
 
+    /// <summary>
+    /// Returns byte array of the tuple of size of each attribute (can be unknown in case of varLen attributes)
+    /// </summary>
+    /// <param name="tupleId"></param>
+    /// <param name="tupleDescs"></param>
+    /// <param name="ctx"></param>
+    /// <returns></returns>
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
 
-        List<byte> result = new();
+        // get total size to return
+        int totalSize = 0;
+        foreach (TupleDesc desc in tupleDescs) {
+            (int size, int readOffset) = this.metadata[desc.Attr];
+            if (size == -1){
+                Pointer ptr = GetVarLenPtr(tupleId.Key, readOffset);
+                totalSize += ptr.Size;
+            } else {
+                totalSize += size;
+            }
+        }
+
+        byte[] result = new byte[totalSize];
         int writeOffset = 0; // TODO: need to return tupleDesc for varLen
         foreach (TupleDesc desc in tupleDescs) {
             byte[] valueToWrite;
@@ -68,11 +86,14 @@ public unsafe class Table : IDisposable{
                 valueToWrite = this.Read(new KeyAttr(tupleId.Key, desc.Attr, this)).ToArray();
                 ctx.SetInContext(OperationType.Read, ka, valueToWrite);
             }
-            result.AddRange(valueToWrite);
-            writeOffset += valueToWrite.Length;
+            foreach (byte b in valueToWrite) {
+                result[writeOffset++] = b;
+            }
+            // result.AddRange(valueToWrite);
+            // writeOffset += valueToWrite.Length;
         }
 
-        return result.ToArray();
+        return result;
     }
 
     // Assumes attribute is valid 
