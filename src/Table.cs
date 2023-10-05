@@ -150,22 +150,31 @@ public unsafe class Table : IDisposable{
 
         long id = NewRecordId();
         TupleId tupleId = new TupleId(id, this.GetHashCode());
-        if (!Util.IsEmpty(Read(tupleId, tupleDescs, ctx))){
-            throw new ArgumentException(""); // TODO ensure this aborts transaction
-        }
         foreach (TupleDesc desc in tupleDescs) {
             ctx.SetInContext(OperationType.Insert, new KeyAttr(id, desc.Attr ,this), value);
         }
 
         return tupleId;
     }
-
-    internal void Insert(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-        if (!Util.IsEmpty(Read(keyAttr))) { // should not happen if called by transaction context
-            throw new ArgumentException($"!!! This should not be thrown. Key and attribute ({keyAttr}) already exists");
+    public void Insert(TupleId id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+        if (this.data.ContainsKey(id.Key)){
+            throw new ArgumentException($"Key {id.Key} already exists in this table"); // TODO ensure this aborts transaction
         }
-        Write(keyAttr, value);
+        Validate(tupleDescs, value, true);
+
+        foreach (TupleDesc desc in tupleDescs) {
+            ctx.SetInContext(OperationType.Insert, new KeyAttr(id.Key, desc.Attr ,this), value);
+        }
+
+        return;
     }
+
+    // internal void Insert(KeyAttr keyAttr, ReadOnlySpan<byte> value){
+    //     if (!Util.IsEmpty(Read(keyAttr))) { // should not happen if called by transaction context
+    //         throw new ArgumentException($"!!! This should not be thrown. Key and attribute ({keyAttr}) already exists");
+    //     }
+    //     Write(keyAttr, value);
+    // }
 
     public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
@@ -177,12 +186,12 @@ public unsafe class Table : IDisposable{
         }
     }
 
-    internal void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-        // if (Util.IsEmpty(Read(keyAttr))) { // should not happen if called by transaction context
-        //     throw new ArgumentException($"!!! This should not be called. Key {keyAttr} does not exist: try inserting instead");
-        // }
-        Write(keyAttr, value);
-    }
+    // internal void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value){
+    //     // if (Util.IsEmpty(Read(keyAttr))) { // should not happen if called by transaction context
+    //     //     throw new ArgumentException($"!!! This should not be called. Key {keyAttr} does not exist: try inserting instead");
+    //     // }
+    //     Write(keyAttr, value);
+    // }
 
     internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
 
@@ -243,6 +252,9 @@ public unsafe class Table : IDisposable{
         foreach (TupleDesc desc in tupleDescs) {
             if (!this.metadata.ContainsKey(desc.Attr)) {
                 throw new ArgumentException($"Attribute {desc.Attr} is not a valid attribute for this table");
+            }
+            if (this.metadata[desc.Attr].Item1 != -1 && desc.Size != this.metadata[desc.Attr].Item1) {
+                throw new ArgumentException($"Expected size {this.metadata[desc.Attr].Item1} for attribute {desc.Attr} but instead got size {desc.Size}");
             }
             totalSize += desc.Size;
         }

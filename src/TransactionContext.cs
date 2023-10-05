@@ -8,8 +8,8 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxn;
-    internal Dictionary<KeyAttr, Operation> Rset;
-    internal Dictionary<KeyAttr, Operation> Wset;
+    internal Dictionary<KeyAttr, byte[]> Rset;
+    internal Dictionary<KeyAttr, byte[]> Wset;
     public ManualResetEvent mre = new ManualResetEvent(false);
 
     public TransactionContext(){
@@ -19,16 +19,16 @@ public class TransactionContext {
         this.startTxn = startTxn;
         mre.Reset();
         status = TransactionStatus.Idle;
-        Rset = new Dictionary<KeyAttr, Operation>(new OCCComparer());
-        Wset = new Dictionary<KeyAttr, Operation>(new OCCComparer());
+        Rset = new Dictionary<KeyAttr, byte[]>(new OCCComparer());
+        Wset = new Dictionary<KeyAttr, byte[]>(new OCCComparer());
     }
 
     public byte[]? GetFromContext(KeyAttr keyAttr){
         byte[]? val = null;
         if (Wset.ContainsKey(keyAttr)){
-            val = Wset[keyAttr].Value;
+            val = Wset[keyAttr];
         } else if (Rset.ContainsKey(keyAttr)){
-            val = Rset[keyAttr].Value;
+            val = Rset[keyAttr];
         }
         if (val != null) {
             SetInContext(OperationType.Read, keyAttr, val);
@@ -38,16 +38,16 @@ public class TransactionContext {
 
     public void SetInContext(OperationType op, KeyAttr keyAttr, ReadOnlySpan<byte> val){
         if (op == OperationType.Read) {
-            Rset[keyAttr] = new Operation(op, new TupleId(keyAttr.Key, keyAttr.Table.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val);
+            Rset[keyAttr] = val.ToArray();
         } else {
-            Wset[keyAttr] = new Operation(op, new TupleId(keyAttr.Key, keyAttr.Table.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val);
+            Wset[keyAttr] =val.ToArray();
         }
     }
 
-    public Dictionary<KeyAttr, Operation> GetReadset(){
+    public Dictionary<KeyAttr, byte[]> GetReadset(){
         return Rset;
     }
-    public Dictionary<KeyAttr, Operation> GetWriteset(){
+    public Dictionary<KeyAttr, byte[]> GetWriteset(){
         return Wset;
     }
 

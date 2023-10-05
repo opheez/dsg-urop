@@ -41,48 +41,36 @@ namespace DB
 
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             KeyAttr ka = new KeyAttr(11111, 12345, test);
-            test.Insert(ka, name);
+            test.Write(ka, name);
             long attrAsLong = BitConverter.ToInt64(Encoding.ASCII.GetBytes("occupation"));
             var retName = test.Read(new KeyAttr(11111, attrAsLong, test));
         }
 
         [TestMethod]
-        public void TestInsertRead(){
+        public void TestWriteRead(){
             (long,int)[] schema = {(12345,8), (67890, 4)};
             Table test = new Table(schema);
 
             byte[] input = Encoding.ASCII.GetBytes("John Doe");
             KeyAttr ka = new KeyAttr(11111, 12345, test);
-            test.Insert(ka, input);
+            test.Write(ka, input);
             var ret = test.Read(ka);
             CollectionAssert.AreEqual(input, ret.ToArray());
         }
 
         [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
-        public void TestMultipleInsertError(){
-            (long,int)[] schema = {(12345,8), (67890, 4)};
-            Table test = new Table(schema);
-            
-            byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            KeyAttr ka = new KeyAttr(11111, 12345, test);
-            test.Insert(ka, name);
-            test.Insert(ka, name);
-        }
-
-        [TestMethod]
-        public void TestMultipleInsertRead(){
+        public void TestMultipleWriteRead(){
             (long,int)[] schema = {(12345,8), (67890, 4)};
             Table test = new Table(schema);
             
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             KeyAttr ka = new KeyAttr(11111, 12345, test);
             KeyAttr ka2 = new KeyAttr(11111, 67890, test);
-            test.Insert(ka, name);
-            test.Insert(ka2, BitConverter.GetBytes(21));
-            test.Update(ka2, BitConverter.GetBytes(40));
+            test.Write(ka, name);
+            test.Write(ka2, BitConverter.GetBytes(21));
+            test.Write(ka2, BitConverter.GetBytes(40));
             name = Encoding.ASCII.GetBytes("Anna Lee");
-            test.Update(ka, name);
+            test.Write(ka, name);
 
             var retName = test.Read(ka);
             var retAge = test.Read(ka2);
@@ -98,13 +86,13 @@ namespace DB
             
             byte[] input = Encoding.ASCII.GetBytes("123456789");
             KeyAttr ka = new KeyAttr(11111, 12345, test);
-            test.Insert(ka, input);
+            test.Write(ka, input);
             var y = test.Read(ka);
             CollectionAssert.AreEqual(input, y.ToArray());
             
             byte[] input2 = Encoding.ASCII.GetBytes("short");
             KeyAttr ka2 = new KeyAttr(22222, 12345, test);
-            test.Insert(ka2, input2);
+            test.Write(ka2, input2);
             var y1 = test.Read(ka);
             var y2 = test.Read(ka2);
 

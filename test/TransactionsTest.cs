@@ -38,7 +38,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 10)};
+            TupleDesc[] td = {new TupleDesc(12345, 1)};
             byte[] name = Encoding.ASCII.GetBytes("a");
             test.Insert(td, name, t);
             var success = txnManager.Commit(t);
@@ -57,6 +57,23 @@ namespace DB
             TupleDesc[] td = {new TupleDesc(12345, 10)};
             byte[] name = Encoding.ASCII.GetBytes("");
             test.Insert(td, name, t);
+            var success = txnManager.Commit(t);
+            txnManager.Terminate();
+        }
+
+        [TestMethod]
+        [ExpectedException(typeof(ArgumentException))]
+        public void TestInsertExistingKey(){
+            (long,int)[] schema = {(12345,10)};
+            Table test = new Table(schema);
+            TransactionManager txnManager = new TransactionManager();
+            txnManager.Run();
+
+            TransactionContext t = txnManager.Begin();
+            TupleDesc[] td = {new TupleDesc(12345, 10)};
+            byte[] name = Encoding.ASCII.GetBytes("");
+            TupleId id = test.Insert(td, name, t);
+            test.Insert(id, td, name, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
         }
