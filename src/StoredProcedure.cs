@@ -19,8 +19,8 @@ public class StoredProcedure {
     }
 
     public void Run(){
-        TableBenchmark b = new TransactionalFixedLenTableBenchmark(seed, writeRatio);
-        b.WithLogWAL(logWal);
+        BenchmarkConfig cfg = new BenchmarkConfig(ratio: writeRatio, seed: seed, logWal: logWal);
+        TableBenchmark b = new TransactionalFixedLenTableBenchmark("SP", cfg);
         b.RunTransactions();
     }
 
