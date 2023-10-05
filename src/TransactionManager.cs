@@ -75,15 +75,11 @@ public class TransactionManager {
                     if (valid) {
                         // write phase
                         foreach (var item in ctx.GetWriteset()){
-                            Operation op = item.Value;
+                            byte[] val = item.Value;
                             KeyAttr keyAttr = item.Key;
                             // should not throw exception here, but if it does, abort. 
                             // failure here means crashed before commit. would need to rollback
-                            if (op.Type == OperationType.Insert){
-                                keyAttr.Table.Insert(keyAttr, op.Value);
-                            } else if (op.Type == OperationType.Update) {
-                                keyAttr.Table.Update(keyAttr, op.Value); // todo: a little messy with op.value 
-                            }
+                            keyAttr.Table.Write(keyAttr, val);
                         }
                         // assign num 
                         // wait on 

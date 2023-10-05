@@ -149,12 +149,12 @@ namespace DB {
     {
         public bool Equals(KeyAttr x, KeyAttr y)
         {
-            return x.Key == y.Key && x.Attr == y.Attr && x.Table == y.Table;
+            return x.Key == y.Key && x.Table == y.Table;
         }
 
         public int GetHashCode(KeyAttr obj)
         {
-            return (int)obj.Key + (int)obj.Attr + obj.Table.GetHashCode(); //Already an int
+            return (int)obj.Key + obj.Table.GetHashCode(); //Already an int
         }
     }
 
