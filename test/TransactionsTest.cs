@@ -5,12 +5,14 @@ using System.Threading;
 
 namespace DB
 {
+
     /// <summary>
     /// For Ti that comes before Tj
     /// </summary>
     [TestClass]
-    public unsafe class TrasactionTests
+    public unsafe class TransactionTests
     {
+        public static int nCommitterThreads = 5;
         // TODO: test diff attributes
 
         [TestMethod]
@@ -18,7 +20,7 @@ namespace DB
         public void TestOversizeInsert(){
             (long,int)[] schema = {(12345,10)};
             Table test = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -34,7 +36,7 @@ namespace DB
         public void TestUndersizeInsert(){
             (long,int)[] schema = {(12345,10)};
             Table test = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -50,7 +52,7 @@ namespace DB
         public void TestEmptyInsert(){
             (long,int)[] schema = {(12345,10)};
             Table test = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -66,7 +68,7 @@ namespace DB
         public void TestInsertExistingKey(){
             (long,int)[] schema = {(12345,10)};
             Table test = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -82,7 +84,7 @@ namespace DB
         public void TestSingleInsertReadTransaction(){
             (long,int)[] schema = {(12345,4)};
             Table table = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -103,7 +105,7 @@ namespace DB
         public void TestSingleInsertUpdateTransaction(){
             (long,int)[] schema = {(12345,4)};
             Table table = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -124,7 +126,7 @@ namespace DB
         public void TestSerialInsertUpdate(){
             (long,int)[] schema = {(12345,4)};
             Table table = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
@@ -146,7 +148,7 @@ namespace DB
         public void TestWRNoIntersectWWIntersectWRIntersect(){
             (long,int)[] schema = {(12345,4)};
             Table table = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4)};
 
@@ -184,7 +186,7 @@ namespace DB
         public void TestWRNoIntersectRWIntersectWWNoIntersect(){
             (long,int)[] schema = {(12345,4)};
             Table table = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4)};
 
@@ -228,7 +230,7 @@ namespace DB
         public void TestWRIntersectRWIntersectWWNoIntersect(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Table table = new Table(schema);
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4)};
             TupleDesc[] td2 = {new TupleDesc(56789, 4)};
@@ -255,34 +257,31 @@ namespace DB
 
         [TestMethod]
         /// <summary>
-        /// Should abort
+        /// Should abort. This test cases only has W(Ti) insersect W(Tj)
         /// W(Ti) intersect (W(Tj) U R(Tj)), Tj overlaps with Ti validation or write phase
         /// </summary>
         public void TestWRUnionWIntersect(){
-            // Dictionary<long,(bool,int)> schema = new Dictionary<long, (bool,int)>();
-            // schema.Add(12345, (false, 4));
-            // Table table = new Table(schema);
-            // TransactionManager txnManager = new TransactionManager();
-            // txnManager.Run();
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(schema);
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
+            txnManager.Run();
+            TupleDesc[] td = {new TupleDesc(12345, 4)};
 
-            // TransactionContext t = txnManager.Begin();
-            // table.Upsert(new TupleId(1,12345, table), BitConverter.GetBytes(21).AsSpan(), t);
-            // // Thread thread = new Thread(() => {
-            // //     var success = Commit(txnManager, t);
-            // //     Assert.IsTrue(success, "Transaction was unable to commit");
-            // // }); 
+            TransactionContext t = txnManager.Begin();
+            byte[] val1 = BitConverter.GetBytes(21);
+            TupleId id1 = table.Insert(td, val1, t);
+            var res1 = table.Read(id1, td, t);
 
-            // TransactionContext t2 = txnManager.Begin();
-            // table.Upsert(new TupleId(1,12345, table), BitConverter.GetBytes(5).AsSpan(), t2);
-            // // thread.Start();
-            // // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
-            // var success = txnManager.Commit(t);
-            // var success2 = txnManager.Commit(t2);
+            TransactionContext t2 = txnManager.Begin();
+            byte[] val2 = BitConverter.GetBytes(5);
+            table.Insert(id1, td, val2, t2);
 
-            // Assert.IsFalse(success2, "Transaction 2 should abort");
-            // // bool success = false;
+            txnManager.active.Add(t); // manually "commit" t and ensure it is still ongoing
+            var success2 = txnManager.Commit(t2);
 
-            // // Assert.IsFalse(success);
+            txnManager.Terminate();
+            CollectionAssert.AreEqual(res1.ToArray(), val1);
+            Assert.IsFalse(success2, "Transaction 2 should abort");
         }
 
     }

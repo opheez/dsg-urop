@@ -11,10 +11,8 @@ public class TransactionContext {
     internal List<(KeyAttr, byte[])> Rset;
     internal List<(KeyAttr, byte[])> Wset;
     public ManualResetEvent mre = new ManualResetEvent(false);
+    public int id;
 
-    public TransactionContext(){
-
-    }
     public void Init(int startTxn){
         this.startTxn = startTxn;
         mre.Reset();

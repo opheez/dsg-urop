@@ -10,8 +10,27 @@ public class TransactionManager {
     internal static int pastTidCircularBufferSize = 10000;
     internal TransactionContext[] tidToCtx = new TransactionContext[pastTidCircularBufferSize];
     internal int txnc = 0;
-    internal Thread committer;
+    internal Thread[] committer;
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
+    internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
+    internal Mutex mu = new Mutex();
+
+    public TransactionManager(int numThreads){
+        committer = new Thread[numThreads];
+        for (int i = 0; i < committer.Length; i++) {
+            committer[i] = new Thread(() => {
+                try {
+                    while (true) {
+                        TransactionContext ctx = txnQueue.Take();
+                        // TODO: assign ctx.id ???? 
+                        validateAndWrite(ctx);
+                    }
+                } catch (ThreadInterruptedException e){
+                    System.Console.WriteLine("Terminated");
+                }
+            });
+        }
+    }
 
     /// <summary>
     /// Create a new transaction context 
@@ -47,67 +66,91 @@ public class TransactionManager {
     /// validate and commit a transaction context
     /// </summary>
     public void Run(){
-        committer = new Thread(() => {
-            try {
-                while (true) {
-                    TransactionContext ctx = txnQueue.Take();
-                    int finishTxn = txnc;
-                    bool valid = true;
-                    // validate
-                    // Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
-                    for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
-                        // Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
-                        // foreach (var x in tidToCtx[i % pastTidCircularBufferSize].GetWriteset()){
-                        //     Console.Write($"{x.Key}, ");
-                        // }
-                        foreach (var item in ctx.GetReadset()){
-                            KeyAttr keyAttr = item.Item1;
-                            // Console.WriteLine($"scanning for {keyAttr}");
-                            if (tidToCtx[i % pastTidCircularBufferSize].GetWriteSetKeyIndex(keyAttr) != -1){
-                                valid = false;
-                                break;
-                            }
-                        }
-                        if (!valid){
-                            break;
-                        }
-                    }
-                    ctx.status = TransactionStatus.Validated;
-                    if (valid) {
-                        // write phase
-                        foreach (var item in ctx.GetWriteset()){
-                            byte[] val = item.Item2;
-                            KeyAttr keyAttr = item.Item1;
-                            // should not throw exception here, but if it does, abort. 
-                            // failure here means crashed before commit. would need to rollback
-                            keyAttr.Table.Write(keyAttr, val);
-                        }
-                        // assign num 
-                        // wait on 
-                        Interlocked.Increment(ref txnc); // TODO: deal with int overflow
-                        if (tidToCtx[txnc % pastTidCircularBufferSize] != null){
-                            ctxPool.Return(tidToCtx[txnc % pastTidCircularBufferSize]);
-                        }
-                        tidToCtx[txnc % pastTidCircularBufferSize] = ctx;
-                        ctx.status = TransactionStatus.Committed;
-                    } else {
-                        ctx.status = TransactionStatus.Aborted;
-                    }
-                    ctx.mre.Set();
-                }
-            } catch (ThreadInterruptedException e){
-                System.Console.WriteLine("Terminated");
-            }
-        });
-
-        committer.Start();
+        for (int i = 0; i < committer.Length; i++) {
+            committer[i].Start();
+        }
     }
 
     public void Terminate(){
-        if (committer != null){
-            committer.Interrupt();
+        for (int i = 0; i < committer.Length; i++) {
+            committer[i]?.Interrupt();
+        }
+    }
+
+    private void validateAndWrite(TransactionContext ctx) {
+        mu.WaitOne();
+        int finishTxn = txnc;
+        List<TransactionContext> finish_active = new List<TransactionContext>(active);
+        active.Add(ctx);
+        mu.ReleaseMutex();
+        // Console.WriteLine($"Committing {ctx.startTxn} to {finishTxn}, ctx: {ctx}");
+
+        bool valid = true;
+        // validate
+        // Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
+        for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
+            // Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
+            // foreach (var x in tidToCtx[i % pastTidCircularBufferSize].GetWriteset()){
+            //     Console.Write($"{x.Key}, ");
+            // }
+            foreach (var item in ctx.GetReadset()){
+                KeyAttr keyAttr = item.Item1;
+                // Console.WriteLine($"scanning for {keyAttr}");
+                if (tidToCtx[i % pastTidCircularBufferSize].GetWriteSetKeyIndex(keyAttr) != -1){
+                    valid = false;
+                    break;
+                }
+            }
+            if (!valid){
+                break;
+            }
         }
         
+        foreach (TransactionContext pastTxn in finish_active){
+            foreach (var item in pastTxn.GetWriteset()){
+                KeyAttr keyAttr = item.Item1;
+                if (ctx.GetReadsetKeyIndex(keyAttr) != -1 || ctx.GetWriteSetKeyIndex(keyAttr) != -1){
+                    // Console.WriteLine($"ABORT because conflict: {keyAttr}");
+                    valid = false;
+                    break;
+                }
+            }
+            
+            if (!valid){
+                break;
+            }
+        }
+
+        ctx.status = TransactionStatus.Validated;
+        if (valid) {
+            // write phase
+            foreach (var item in ctx.GetWriteset()){
+                byte[] val = item.Item2;
+                KeyAttr keyAttr = item.Item1;
+                // should not throw exception here, but if it does, abort. 
+                // failure here means crashed before commit. would need to rollback
+                keyAttr.Table.Write(keyAttr, val);
+            }
+            // assign num 
+            mu.WaitOne();
+            txnc += 1; // TODO: deal with int overflow
+            ctx.id = txnc;
+            active.Remove(ctx);
+            mu.ReleaseMutex();
+            
+            if (tidToCtx[ctx.id % pastTidCircularBufferSize] != null){ 
+                ctxPool.Return(tidToCtx[ctx.id % pastTidCircularBufferSize]);
+            }
+            tidToCtx[ctx.id % pastTidCircularBufferSize] = ctx;
+            ctx.status = TransactionStatus.Committed;
+        } else {
+            mu.WaitOne();
+            active.Remove(ctx);
+            mu.ReleaseMutex();
+
+            ctx.status = TransactionStatus.Aborted;
+        }
+        ctx.mre.Set();
     }
 }
 
