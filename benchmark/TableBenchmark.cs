@@ -13,6 +13,7 @@ public struct BenchmarkConfig {
     public int iterationCount;
     public int datasetSize;
     public int perTransactionCount; // TODO: ensure support for keys[] when this > 1
+    public int nCommitterThreads;
     public LogWAL? logWal;
 
     public BenchmarkConfig(
@@ -23,7 +24,8 @@ public struct BenchmarkConfig {
         int attrCount = 2,
         int perThreadDataCount = 100000,
         int iterationCount = 10,
-        int perTransactionCount = 1){
+        int perTransactionCount = 1,
+        int nCommitterThreads = 3){
 
         this.seed = seed;
         this.ratio = ratio;
@@ -34,10 +36,11 @@ public struct BenchmarkConfig {
         this.perTransactionCount = perTransactionCount;
         this.logWal = logWal;
         this.datasetSize = perThreadDataCount * threadCount;
+        this.nCommitterThreads = nCommitterThreads;
     }
 
     public override readonly string ToString(){
-        return $"seed: {seed}, ratio: {ratio}, threadCount: {threadCount}, attrCount: {attrCount}, perThreadDataCount: {perThreadDataCount}, iterationCount: {iterationCount}, perTransactionCount: {perTransactionCount}, datasetSize: {datasetSize}";
+        return $"seed: {seed}, ratio: {ratio}, threadCount: {threadCount}, attrCount: {attrCount}, perThreadDataCount: {perThreadDataCount}, iterationCount: {iterationCount}, perTransactionCount: {perTransactionCount}, datasetSize: {datasetSize}, nCommitterThreads: {nCommitterThreads}";
     }
 }
 
@@ -138,7 +141,7 @@ public abstract class TableBenchmark
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++){
-                int loc = i + j + cfg.perThreadDataCount;
+                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
                 long attr = attrs[loc%cfg.attrCount];
                 long key = keys[loc];
                 TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
@@ -207,7 +210,7 @@ public abstract class TableBenchmark
 
     public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            TransactionManager txnManager = new TransactionManager();
+            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads);
             txnManager.Run();
             using (Table tbl = new Table(schema, logWal)) {
                 var insertSw = Stopwatch.StartNew();
