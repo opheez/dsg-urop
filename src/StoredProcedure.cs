@@ -1,7 +1,7 @@
 using System;
 
 namespace DB {
-public class StoredProcedure {
+public struct StoredProcedure {
     internal string name;
     internal int IterationCount;
     public int PerThreadDataCount = 100000; // enough to be larger than l3 cache
