@@ -13,8 +13,7 @@ public class TransactionManager {
     internal Thread[] committer;
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
-    internal Mutex mu = new Mutex();
-    // internal SemaphoreSlim semaphore = new SemaphoreSlim(1);
+    internal SpinLock sl = new SpinLock();
 
     public TransactionManager(int numThreads){
         committer = new Thread[numThreads];
@@ -79,13 +78,18 @@ public class TransactionManager {
     }
 
     private void validateAndWrite(TransactionContext ctx) {
-        mu.WaitOne();
-        // semaphore.Wait();
-        int finishTxn = txnc;
-        List<TransactionContext> finish_active = new List<TransactionContext>(active);
-        active.Add(ctx);
-        // semaphore.Release();
-        mu.ReleaseMutex();
+        bool lockTaken = false;
+        int finishTxn;
+        List<TransactionContext> finish_active;
+        try {
+            sl.Enter(ref lockTaken);
+            finishTxn = txnc;
+            finish_active = new List<TransactionContext>(active);
+            active.Add(ctx);
+        } finally {
+            if (lockTaken) sl.Exit();
+            lockTaken = false;
+        }
         // Console.WriteLine($"Committing {ctx.startTxn} to {finishTxn}, ctx: {ctx}");
 
         bool valid = true;
@@ -135,25 +139,29 @@ public class TransactionManager {
                 keyAttr.Table.Write(keyAttr, val);
             }
             // assign num 
-            mu.WaitOne();
-            // semaphore.Wait();
-            txnc += 1; // TODO: deal with int overflow
-            ctx.id = txnc;
-            active.Remove(ctx);
-            // semaphore.Release();
-            mu.ReleaseMutex();
-            
+            try {
+                sl.Enter(ref lockTaken);
+                txnc += 1; // TODO: deal with int overflow
+                ctx.id = txnc;
+                active.Remove(ctx);
+            } finally {
+                if (lockTaken) sl.Exit();
+                lockTaken = false;
+            }
+
             if (tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] != null){ 
                 ctxPool.Return(tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)]);
             }
             tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] = ctx;
             ctx.status = TransactionStatus.Committed;
         } else {
-            mu.WaitOne();
-            // semaphore.Wait();
-            active.Remove(ctx);
-            // semaphore.Release();
-            mu.ReleaseMutex();
+            try {
+                sl.Enter(ref lockTaken);
+                active.Remove(ctx);
+            } finally {
+                if (lockTaken) sl.Exit();
+                lockTaken = false;
+            }
 
             ctx.status = TransactionStatus.Aborted;
         }
