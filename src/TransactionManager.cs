@@ -7,13 +7,14 @@ namespace DB {
 public class TransactionManager {
 
     internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
-    internal static int pastTidCircularBufferSize = 10000;
+    internal static int pastTidCircularBufferSize = 1 << 14;
     internal TransactionContext[] tidToCtx = new TransactionContext[pastTidCircularBufferSize];
     internal int txnc = 0;
     internal Thread[] committer;
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
     internal Mutex mu = new Mutex();
+    // internal SemaphoreSlim semaphore = new SemaphoreSlim(1);
 
     public TransactionManager(int numThreads){
         committer = new Thread[numThreads];
@@ -79,9 +80,11 @@ public class TransactionManager {
 
     private void validateAndWrite(TransactionContext ctx) {
         mu.WaitOne();
+        // semaphore.Wait();
         int finishTxn = txnc;
         List<TransactionContext> finish_active = new List<TransactionContext>(active);
         active.Add(ctx);
+        // semaphore.Release();
         mu.ReleaseMutex();
         // Console.WriteLine($"Committing {ctx.startTxn} to {finishTxn}, ctx: {ctx}");
 
@@ -96,7 +99,7 @@ public class TransactionManager {
             foreach (var item in ctx.GetReadset()){
                 KeyAttr keyAttr = item.Item1;
                 // Console.WriteLine($"scanning for {keyAttr}");
-                if (tidToCtx[i % pastTidCircularBufferSize].GetWriteSetKeyIndex(keyAttr) != -1){
+                if (tidToCtx[i & (pastTidCircularBufferSize - 1)].GetWriteSetKeyIndex(keyAttr) != -1){
                     valid = false;
                     break;
                 }
@@ -133,19 +136,23 @@ public class TransactionManager {
             }
             // assign num 
             mu.WaitOne();
+            // semaphore.Wait();
             txnc += 1; // TODO: deal with int overflow
             ctx.id = txnc;
             active.Remove(ctx);
+            // semaphore.Release();
             mu.ReleaseMutex();
             
-            if (tidToCtx[ctx.id % pastTidCircularBufferSize] != null){ 
-                ctxPool.Return(tidToCtx[ctx.id % pastTidCircularBufferSize]);
+            if (tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] != null){ 
+                ctxPool.Return(tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)]);
             }
-            tidToCtx[ctx.id % pastTidCircularBufferSize] = ctx;
+            tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] = ctx;
             ctx.status = TransactionStatus.Committed;
         } else {
             mu.WaitOne();
+            // semaphore.Wait();
             active.Remove(ctx);
+            // semaphore.Release();
             mu.ReleaseMutex();
 
             ctx.status = TransactionStatus.Aborted;
