@@ -14,8 +14,14 @@ unsafe class Program {
 
     public static void Main(){
         Console.WriteLine("Hello, World!");
-        BenchmarkConfig cfg = new BenchmarkConfig(ratio: 0.5, seed: 12345, iterationCount: 1);
-        TableBenchmark b = new TransactionalFixedLenTableBenchmark("ParallelValidation", cfg);
+        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+            ratio: 0.2,
+            seed: 12345,
+            attrCount: 10,
+            threadCount: 12,
+            iterationCount: 1
+        );
+        TableBenchmark b = new TransactionalFixedLenTableBenchmark("test", ycsbCfg);
         b.RunTransactions();
         // b = new VarLenTableBenchmark(12345, 0.5);
         // b.Run();

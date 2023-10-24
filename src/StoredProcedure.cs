@@ -3,10 +3,6 @@ using System;
 namespace DB {
 public struct StoredProcedure {
     internal string name;
-    internal int IterationCount;
-    public int PerThreadDataCount = 100000; // enough to be larger than l3 cache
-    internal int ThreadCount = 16;
-    internal int AttrCount = 2;
     internal LogWAL logWal;
     internal int seed;
     internal double writeRatio;
@@ -19,13 +15,23 @@ public struct StoredProcedure {
     }
 
     public void Run(){
-        BenchmarkConfig cfg = new BenchmarkConfig(ratio: writeRatio, seed: seed, logWal: logWal);
-        TableBenchmark b = new TransactionalFixedLenTableBenchmark("SP", cfg);
+        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+            ratio: writeRatio,
+            seed: seed,
+            attrCount: 10,
+            threadCount: 12,
+            iterationCount: 3,
+            logWal: logWal
+        );
+        TableBenchmark b = new TransactionalFixedLenTableBenchmark("SP", ycsbCfg);
         b.RunTransactions();
     }
 
     public static StoredProcedure GetWorkloadAUpdateHeavy(LogWAL logWal){
         return new StoredProcedure("Workload_A", 12345, 0.5, logWal);
+    }
+    public static StoredProcedure GetWorkload8020UpdateHeavy(LogWAL logWal){
+        return new StoredProcedure("Workload_8020", 12345, 0.2, logWal);
     }
 
 

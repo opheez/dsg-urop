@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using System.Diagnostics;
+using System.Collections;
 
 namespace DB {
 
@@ -50,6 +51,7 @@ public abstract class TableBenchmark
     internal long[] keys;
     internal long[] attrs;
     internal byte[][] values;
+    internal BitArray isWrite;
     internal (long, int)[] schema;
     internal Thread[] workers;
     internal BenchmarkStatistics stats;
@@ -63,6 +65,7 @@ public abstract class TableBenchmark
         keys = new long[cfg.datasetSize];
         attrs = new long[cfg.attrCount];
         values = new byte[cfg.datasetSize][];
+        isWrite = new BitArray(cfg.datasetSize);
     }
 
     // internal void InsertSingleThreaded(Table tbl, int thread_idx){
@@ -137,7 +140,6 @@ public abstract class TableBenchmark
 
     internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
         int abortCount = 0;
-        int groupSize = (int)(1/(1-ratio));
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++){
@@ -146,7 +148,7 @@ public abstract class TableBenchmark
                 long key = keys[loc];
                 TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
 
-                if (loc % groupSize == 0) {
+                if (isWrite[loc]) {
                     tbl.Update(new TupleId(key, tbl.GetHashCode()), td, values[loc], t);
                 } else {
                     tbl.Read(new TupleId(key, tbl.GetHashCode()), td, t);
