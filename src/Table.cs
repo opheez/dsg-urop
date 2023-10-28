@@ -198,7 +198,6 @@ public unsafe class Table : IDisposable{
     // }
 
     internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-
         this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
         (int size, int offset) = this.metadata[keyAttr.Attr];
         byte[] valueToWrite = value.ToArray(); //TODO: possibly optimize and not ToArray()

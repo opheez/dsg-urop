@@ -9,13 +9,14 @@ using System.Diagnostics;
 
 namespace DB {
 
-public delegate void LogWAL(Operation op);
+public delegate long LogWAL(LogEntry entry);
 // Takes in requests for stored procedures and executes them
 public class TransactionProcessor : IDarqProcessor {
     private IDarqProcessorClientCapabilities capabilities;
     private WorkerId me;
     private List<WorkerId> workers;
     private StepRequest reusableRequest = new(null);
+    private long currLsn = 0;
     
     public TransactionProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
         this.me = me;
@@ -55,14 +56,24 @@ public class TransactionProcessor : IDarqProcessor {
         return false;
     }
 
-    public void LogWAL(Operation op){
+    public long LogWAL(LogEntry entry){
+        entry.lsn = GetNewLsn();
+        if (entry.type == LogType.Begin){
+            entry.prevLsn = entry.lsn;
+        }
+        
         var requestBuilder = new StepRequestBuilder(reusableRequest, me);
-        requestBuilder.AddSelfMessage(BitConverter.GetBytes(0));
+        requestBuilder.AddSelfMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+        return entry.lsn;
     }
     public void OnRestart(IDarqProcessorClientCapabilities capabilities) {
         this.capabilities = capabilities;
+    }
+
+    private long GetNewLsn() {
+        return Interlocked.Increment(ref currLsn);
     }
 }
 }

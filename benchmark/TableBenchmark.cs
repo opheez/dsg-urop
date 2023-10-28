@@ -212,7 +212,7 @@ public abstract class TableBenchmark
 
     public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads);
+            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, logWal);
             txnManager.Run();
             using (Table tbl = new Table(schema, logWal)) {
                 var insertSw = Stopwatch.StartNew();

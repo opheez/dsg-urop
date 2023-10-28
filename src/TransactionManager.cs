@@ -5,15 +5,16 @@ using Microsoft.Extensions.ObjectPool;
 
 namespace DB {
 public class TransactionManager {
-
     internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
-    internal static int pastTidCircularBufferSize = 1 << 14;
-    internal TransactionContext[] tidToCtx = new TransactionContext[pastTidCircularBufferSize];
+    internal static int pastTnumCircularBufferSize = 1 << 14;
+    internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize];
     internal int txnc = 0;
     internal Thread[] committer;
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
     internal SpinLock sl = new SpinLock();
+    internal LogWAL logWAL;
+    internal Dictionary<Guid, long> txnTbl = new Dictionary<Guid, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads){
         committer = new Thread[numThreads];
@@ -32,16 +33,23 @@ public class TransactionManager {
         }
     }
 
+    public TransactionManager(int numThreads, LogWAL logWAL) : this(numThreads){
+        this.logWAL = logWAL;
+    }
+
     /// <summary>
     /// Create a new transaction context 
     /// </summary>
-    /// <param name="tbl">Table that the transaction context belongs to</param>
     /// <returns>Newly created transaction context</returns>
     public TransactionContext Begin(){
         var ctx = ctxPool.Get();
-        ctx.Init(txnc);
+        ctx.Init(startTxn: txnc);
+        if (logWAL != null) {
+            long writtenLsn = logWAL.Invoke(new LogEntry(-1, ctx.tid, LogType.Begin));
+            txnTbl[ctx.tid] = writtenLsn;
+        }
+
         return ctx;
-        // return new TransactionContext(txnc);
     }
 
     /// <summary>
@@ -94,16 +102,16 @@ public class TransactionManager {
 
         bool valid = true;
         // validate
-        // Console.WriteLine($"curr tids: {{{string.Join(Environment.NewLine, tidToCtx)}}}");
-        for (int i = ctx.startTxn + 1; i <= finishTxn; i++){
+        // Console.WriteLine($"curr tnums: {{{string.Join(Environment.NewLine, tnumToCtx)}}}");
+        for (int i = ctx.startTxnNum + 1; i <= finishTxn; i++){
             // Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
-            // foreach (var x in tidToCtx[i % pastTidCircularBufferSize].GetWriteset()){
+            // foreach (var x in tnumToCtx[i % pastTnumCircularBufferSize].GetWriteset()){
             //     Console.Write($"{x.Key}, ");
             // }
             foreach (var item in ctx.GetReadset()){
                 KeyAttr keyAttr = item.Item1;
                 // Console.WriteLine($"scanning for {keyAttr}");
-                if (tidToCtx[i & (pastTidCircularBufferSize - 1)].GetWriteSetKeyIndex(keyAttr) != -1){
+                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].GetWriteSetKeyIndex(keyAttr) != -1){
                     valid = false;
                     break;
                 }
@@ -134,27 +142,43 @@ public class TransactionManager {
             foreach (var item in ctx.GetWriteset()){
                 byte[] val = item.Item2;
                 KeyAttr keyAttr = item.Item1;
-                // should not throw exception here, but if it does, abort. 
+                // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
+                if (this.logWAL != null) {
+                    logWAL.Invoke(new LogEntry(txnTbl[ctx.tid], ctx.tid, new Operation(OperationType.Update, new TupleId(keyAttr.Key, this.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val)));
+                }
                 keyAttr.Table.Write(keyAttr, val);
             }
+            // TODO: verify that should be logged before removing from active
+            if (logWAL != null){
+                long prevLsn = txnTbl[ctx.tid];
+                txnTbl.Remove(ctx.tid);
+                logWAL.Invoke(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+            }
             // assign num 
+            int finalTxnNum;
             try {
                 sl.Enter(ref lockTaken);
                 txnc += 1; // TODO: deal with int overflow
-                ctx.id = txnc;
+                finalTxnNum = txnc;
                 active.Remove(ctx);
             } finally {
                 if (lockTaken) sl.Exit();
                 lockTaken = false;
             }
 
-            if (tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] != null){ 
-                ctxPool.Return(tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)]);
+            if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
+                ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
             }
-            tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] = ctx;
+            tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
             ctx.status = TransactionStatus.Committed;
         } else {
+            // TODO: verify that should be logged before removing from active
+            if (logWAL != null){
+                long prevLsn = txnTbl[ctx.tid];
+                txnTbl.Remove(ctx.tid);
+                logWAL.Invoke(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
+            }
             try {
                 sl.Enter(ref lockTaken);
                 active.Remove(ctx);

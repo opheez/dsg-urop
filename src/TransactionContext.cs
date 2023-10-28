@@ -7,14 +7,15 @@ namespace DB {
 public class TransactionContext {
 
     internal TransactionStatus status;
-    internal int startTxn;
+    internal int startTxnNum;
     internal List<(KeyAttr, byte[])> Rset;
     internal List<(KeyAttr, byte[])> Wset;
-    public ManualResetEvent mre = new ManualResetEvent(false);
-    public int id;
+    public ManualResetEvent mre = new ManualResetEvent(false); // TODO: cleanup/document how its used
+    public Guid tid;
 
     public void Init(int startTxn){
-        this.startTxn = startTxn;
+        this.startTxnNum = startTxn;
+        this.tid = Guid.NewGuid();
         mre.Reset();
         status = TransactionStatus.Idle;
         Rset = new List<(KeyAttr, byte[])>();
