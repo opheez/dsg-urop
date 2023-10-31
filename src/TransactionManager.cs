@@ -14,28 +14,24 @@ public class TransactionManager {
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
     internal SpinLock sl = new SpinLock();
-    internal LogWAL logWAL;
+    internal LogWAL? logWAL;
     internal Dictionary<long, long> txnTbl = new Dictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
-    public TransactionManager(int numThreads){
+    public TransactionManager(int numThreads, LogWAL? logWAL = null){
+        this.logWAL = logWAL;
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
             committer[i] = new Thread(() => {
                 try {
                     while (true) {
                         TransactionContext ctx = txnQueue.Take();
-                        // TODO: assign ctx.id ???? 
                         validateAndWrite(ctx);
                     }
-                } catch (ThreadInterruptedException e){
+                } catch (ThreadInterruptedException){
                     System.Console.WriteLine("Terminated");
                 }
             });
         }
-    }
-
-    public TransactionManager(int numThreads, LogWAL logWAL) : this(numThreads){
-        this.logWAL = logWAL;
     }
 
     /// <summary>

@@ -24,9 +24,6 @@ public unsafe class Table : IDisposable{
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
-    // delegate void LogWAL();
-    internal LogWAL logWAL;
-
 
     public Table((long, int)[] schema){
         this.metadata = new Dictionary<long,(int, int)>();
@@ -47,11 +44,7 @@ public unsafe class Table : IDisposable{
         this.rowSize = offset;
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
-
-    public Table((long, int)[] schema, LogWAL log) : this(schema) {
-        this.logWAL = log;
-    }
-
+    
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
 

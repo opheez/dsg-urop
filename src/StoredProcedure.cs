@@ -3,11 +3,11 @@ using System;
 namespace DB {
 public struct StoredProcedure {
     internal string name;
-    internal LogWAL logWal;
+    internal LogWAL? logWal;
     internal int seed;
     internal double writeRatio;
 
-    public StoredProcedure(string name, int seed, double writeRatio, LogWAL logWal){
+    public StoredProcedure(string name, int seed, double writeRatio, LogWAL? logWal = null){
         this.name = name;
         this.seed = seed;
         this.writeRatio = writeRatio;
@@ -16,14 +16,13 @@ public struct StoredProcedure {
 
     public void Run(){
         BenchmarkConfig ycsbCfg = new BenchmarkConfig(
-            ratio: writeRatio,
             seed: seed,
+            ratio: writeRatio,
             attrCount: 10,
             threadCount: 12,
-            iterationCount: 3,
-            logWal: logWal
+            iterationCount: 3
         );
-        TableBenchmark b = new TransactionalFixedLenTableBenchmark("SP", ycsbCfg);
+        TableBenchmark b = new FixedLenTableBenchmark(name, ycsbCfg, logWal);
         b.RunTransactions();
     }
 

@@ -15,12 +15,10 @@ public struct BenchmarkConfig {
     public int datasetSize;
     public int perTransactionCount; // TODO: ensure support for keys[] when this > 1
     public int nCommitterThreads;
-    public LogWAL? logWal;
 
     public BenchmarkConfig(
         int seed,
         double ratio,
-        LogWAL? logWal = null,
         int threadCount = 16,
         int attrCount = 2,
         int perThreadDataCount = 100000,
@@ -35,7 +33,6 @@ public struct BenchmarkConfig {
         this.perThreadDataCount = perThreadDataCount;
         this.iterationCount = iterationCount;
         this.perTransactionCount = perTransactionCount;
-        this.logWal = logWal;
         this.datasetSize = perThreadDataCount * threadCount;
         this.nCommitterThreads = nCommitterThreads;
     }
@@ -54,11 +51,12 @@ public abstract class TableBenchmark
     internal BitArray isWrite;
     internal (long, int)[] schema;
     internal Thread[] workers;
-    internal BenchmarkStatistics stats;
-    internal LogWAL logWal;
+    internal BenchmarkStatistics? stats;
+    internal LogWAL? logWal;
 
-    public TableBenchmark(BenchmarkConfig cfg){
+    public TableBenchmark(BenchmarkConfig cfg, LogWAL? logWal = null){
         this.cfg = cfg;
+        this.logWal = logWal;
         schema = new (long, int)[cfg.attrCount];
         workers = new Thread[cfg.threadCount];
 
@@ -203,18 +201,18 @@ public abstract class TableBenchmark
     //             WorkloadMultiThreaded(tbl, ratio);
     //             opSw.Stop();
     //             long opMs = opSw.ElapsedMilliseconds;
-    //             stats.AddResult((insertMs, opMs));
+    //             stats?.AddResult((insertMs, opMs));
     //         }
     //     }
-    //     stats.ShowAllStats();
-    //     stats.SaveStatsToFile();
+    //     stats?.ShowAllStats();
+    //     stats?.SaveStatsToFile();
     // }
 
     public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
             TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, logWal);
             txnManager.Run();
-            using (Table tbl = new Table(schema, logWal)) {
+            using (Table tbl = new Table(schema)) {
                 var insertSw = Stopwatch.StartNew();
                 int insertAborts = InsertMultiThreadedTransactions(tbl, txnManager); // setup
                 insertSw.Stop();
@@ -224,12 +222,12 @@ public abstract class TableBenchmark
                 int txnAborts = WorkloadMultiThreadedTransactions(tbl, txnManager, cfg.ratio);
                 opSw.Stop();
                 long opMs = opSw.ElapsedMilliseconds;
-                stats.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+                stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
             }
             txnManager.Terminate();
         }
-        stats.ShowAllStats();
-        stats.SaveStatsToFile();
+        stats?.ShowAllStats();
+        stats?.SaveStatsToFile();
     }
 }
 

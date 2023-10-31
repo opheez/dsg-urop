@@ -53,7 +53,6 @@ public class TransactionProcessor : IDarqProcessor {
             default:
                 throw new NotImplementedException();
         }
-        return false;
     }
 
     public long LogWAL(LogEntry entry){

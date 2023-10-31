@@ -21,7 +21,7 @@ unsafe class Program {
             threadCount: 12,
             iterationCount: 1
         );
-        TableBenchmark b = new TransactionalFixedLenTableBenchmark("test", ycsbCfg);
+        TableBenchmark b = new FixedLenTableBenchmark("test", ycsbCfg);
         b.RunTransactions();
         // b = new VarLenTableBenchmark(12345, 0.5);
         // b.Run();
