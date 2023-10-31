@@ -9,12 +9,13 @@ public class TransactionManager {
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize];
     internal int txnc = 0;
+    internal int tid = 0;
     internal Thread[] committer;
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
     internal SpinLock sl = new SpinLock();
     internal LogWAL logWAL;
-    internal Dictionary<Guid, long> txnTbl = new Dictionary<Guid, long>(); // ongoing transactions mapped to most recent lsn
+    internal Dictionary<long, long> txnTbl = new Dictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads){
         committer = new Thread[numThreads];
@@ -43,7 +44,7 @@ public class TransactionManager {
     /// <returns>Newly created transaction context</returns>
     public TransactionContext Begin(){
         var ctx = ctxPool.Get();
-        ctx.Init(startTxn: txnc);
+        ctx.Init(startTxn: txnc, NewTransactionId());
         if (logWAL != null) {
             long writtenLsn = logWAL.Invoke(new LogEntry(-1, ctx.tid, LogType.Begin));
             txnTbl[ctx.tid] = writtenLsn;
@@ -190,6 +191,10 @@ public class TransactionManager {
             ctx.status = TransactionStatus.Aborted;
         }
         ctx.mre.Set();
+    }
+
+    private long NewTransactionId(){
+        return Interlocked.Increment(ref tid);
     }
 }
 

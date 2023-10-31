@@ -14,17 +14,17 @@ public enum LogType {
 public struct LogEntry{
     public long lsn;
     public long prevLsn; // do we even need this if we are undoing?
-    public Guid tid;
+    public long tid;
     public LogType type;
     Operation op;
-    public LogEntry(long prevLsn, Guid tid, Operation op){
+    public LogEntry(long prevLsn, long tid, Operation op){
         this.prevLsn = prevLsn;
         this.tid = tid;
         this.op = op;
         this.type = LogType.Write;
     }
 
-    public LogEntry(long prevLsn, Guid tid, LogType type){
+    public LogEntry(long prevLsn, long tid, LogType type){
         this.prevLsn = prevLsn;
         this.tid = tid;
         this.type = type;
@@ -36,7 +36,7 @@ public struct LogEntry{
             using (BinaryWriter writer = new BinaryWriter(m)) {
                 writer.Write(lsn);
                 writer.Write(prevLsn);
-                writer.Write(tid.ToByteArray());
+                writer.Write(tid);
                 byte[] opBytes = op.ToBytes();
                 writer.Write(opBytes.Length);
                 writer.Write(opBytes);
@@ -51,7 +51,7 @@ public struct LogEntry{
             using (BinaryReader reader = new BinaryReader(m)) {
                 result.lsn = reader.ReadInt64();
                 result.prevLsn = reader.ReadInt64();
-                result.tid = new Guid(reader.ReadBytes(16));
+                result.tid = reader.ReadInt64();
                 int opBytesLength = reader.ReadInt32();
                 result.op = Operation.FromBytes(reader.ReadBytes(opBytesLength));
             }
