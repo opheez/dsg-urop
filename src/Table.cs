@@ -55,9 +55,9 @@ public unsafe class Table : IDisposable{
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
 
-        if (tupleDescs.Length == 1) {
-            return Read(new KeyAttr(tupleId.Key, tupleDescs[0].Attr, this));
-        }
+        // if (tupleDescs.Length == 1) {
+        //     return Read(new KeyAttr(tupleId.Key, tupleDescs[0].Attr, this));
+        // }
 
         List<byte> result = new();
         int writeOffset = 0; // TODO: need to return tupleDesc for varLen
