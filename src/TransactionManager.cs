@@ -61,7 +61,9 @@ public class TransactionManager {
     public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
-        ctx.mre.WaitOne();
+        while (!Util.IsTerminalStatus(ctx.status)){
+            Thread.Yield();
+        }
         if (ctx.status == TransactionStatus.Aborted){
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
@@ -190,7 +192,6 @@ public class TransactionManager {
 
             ctx.status = TransactionStatus.Aborted;
         }
-        ctx.mre.Set();
     }
 
     private long NewTransactionId(){

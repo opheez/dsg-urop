@@ -10,13 +10,11 @@ public class TransactionContext {
     internal int startTxnNum;
     internal List<(KeyAttr, byte[])> Rset;
     internal List<(KeyAttr, byte[])> Wset;
-    public ManualResetEvent mre = new ManualResetEvent(false); // TODO: cleanup/document how its used
     public long tid;
 
     public void Init(int startTxn, long tid){
         this.startTxnNum = startTxn;
         this.tid = tid;
-        mre.Reset();
         status = TransactionStatus.Idle;
         Rset = new List<(KeyAttr, byte[])>();
         Wset = new List<(KeyAttr, byte[])>();

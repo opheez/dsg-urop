@@ -172,6 +172,10 @@ namespace DB {
             }
             return true; // All elements are 0
         }
+
+        public static bool IsTerminalStatus(TransactionStatus status){
+            return status == TransactionStatus.Committed || status == TransactionStatus.Aborted;
+        }
     }
 
 }
