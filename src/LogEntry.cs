@@ -37,9 +37,13 @@ public struct LogEntry{
                 writer.Write(lsn);
                 writer.Write(prevLsn);
                 writer.Write(tid);
-                byte[] opBytes = op.ToBytes();
-                writer.Write(opBytes.Length);
-                writer.Write(opBytes);
+                writer.Write((int)type);
+                if (type == LogType.Write){
+                    writer.Write((int)LogType.Write);
+                    byte[] opBytes = op.ToBytes();
+                    writer.Write(opBytes.Length);
+                    writer.Write(opBytes);
+                }
             }
             return m.ToArray();
         }
@@ -52,8 +56,11 @@ public struct LogEntry{
                 result.lsn = reader.ReadInt64();
                 result.prevLsn = reader.ReadInt64();
                 result.tid = reader.ReadInt64();
-                int opBytesLength = reader.ReadInt32();
-                result.op = Operation.FromBytes(reader.ReadBytes(opBytesLength));
+                result.type = (LogType)reader.ReadInt32();
+                if (result.type == LogType.Write){
+                    int opBytesLength = reader.ReadInt32();
+                    result.op = Operation.FromBytes(reader.ReadBytes(opBytesLength));
+                }
             }
         }
         return result;
