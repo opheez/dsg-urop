@@ -40,7 +40,7 @@ public class TransactionProcessor : IDarqProcessor {
                 }
                 // execute stored procedure
                 // listen to transaction, if state is validated, add writeset to log? 
-                requestBuilder.AddSelfMessage(BitConverter.GetBytes(0));
+                // requestBuilder.AddSelfMessage(BitConverter.GetBytes(0));
 
                 var v = capabilities.Step(requestBuilder.FinishStep());
                 Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
@@ -48,6 +48,7 @@ public class TransactionProcessor : IDarqProcessor {
             }
             case DarqMessageType.SELF: // this is on recovery; TODO: do we need to double pass?
                 // count = BitConverter.ToInt32(m.GetMessageBody());
+                Console.WriteLine($"Worker {me.guid} received SELF message: {LogEntry.FromBytes(m.GetMessageBody().ToArray())}");
                 m.Dispose();
                 return true;
             default:

@@ -58,6 +58,10 @@ public struct LogEntry{
         }
         return result;
     }
+
+    public override readonly string ToString(){
+        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type}, op={op})";
+    }
     
 }
 }

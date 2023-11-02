@@ -12,21 +12,21 @@ unsafe class Program {
 
     public static int NumProcessors = 1;
 
-    public static void Main(){
-        Console.WriteLine("Hello, World!");
-        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
-            ratio: 0.2,
-            seed: 12345,
-            attrCount: 10,
-            threadCount: 12,
-            iterationCount: 1
-        );
-        TableBenchmark b = new FixedLenTableBenchmark("test", ycsbCfg);
-        b.RunTransactions();
-        // b = new VarLenTableBenchmark(12345, 0.5);
-        // b.Run();
+    // public static void Main(){
+    //     Console.WriteLine("Hello, World!");
+    //     BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+    //         ratio: 0.2,
+    //         seed: 12345,
+    //         attrCount: 10,
+    //         threadCount: 12,
+    //         iterationCount: 1
+    //     );
+    //     TableBenchmark b = new FixedLenTableBenchmark("test", ycsbCfg);
+    //     b.RunTransactions();
+    //     // b = new VarLenTableBenchmark(12345, 0.5);
+    //     // b.Run();
 
-    }
+    // }
 
         private static void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
     {
@@ -60,30 +60,30 @@ unsafe class Program {
         darqServer.Dispose();
     }
 
-    // public static void Main(string[] args)
-    // {
+    public static void Main(string[] args)
+    {
 
-    //     // Compose cluster architecture
-    //     var clusterInfo = new HardCodedClusterInfo();
-    //     var threads = new List<Thread>();
-    //     for (var i = 0; i < NumProcessors; i++)
-    //     {
-    //         clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
-    //         var i1 = i;
-    //         threads.Add(new Thread(() =>
-    //         {
-    //             RunDarqWithProcessor(new WorkerId(i1), clusterInfo);
-    //         }));
-    //     }
+        // Compose cluster architecture
+        var clusterInfo = new HardCodedClusterInfo();
+        var threads = new List<Thread>();
+        for (var i = 0; i < NumProcessors; i++)
+        {
+            clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
+            var i1 = i;
+            threads.Add(new Thread(() =>
+            {
+                RunDarqWithProcessor(new WorkerId(i1), clusterInfo);
+            }));
+        }
 
-    //     foreach (var t in threads)
-    //         t.Start();
+        foreach (var t in threads)
+            t.Start();
 
-    //     var darqClient = new DarqProducerClient(clusterInfo);
-    //     darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
-    //     foreach (var t in threads)
-    //         t.Join();
-    // }
+        var darqClient = new DarqProducerClient(clusterInfo);
+        darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
+        foreach (var t in threads)
+            t.Join();
+    }
 
 
 }
