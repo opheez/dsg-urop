@@ -24,11 +24,26 @@ public class TransactionProcessor : IDarqProcessor {
     }
 
     public bool ProcessMessage(DarqMessage m){
+        Console.WriteLine("Got message");
         switch (m.GetMessageType()){
             case DarqMessageType.IN:
             {
+                unsafe
+                {
+                    fixed (byte* b = m.GetMessageBody())
+                    {
+                        int signal = *(int*)b;
+                        // This is a special termination signal
+                        if (signal == -1)
+                        {
+                            m.Dispose();
+                            // Return false to signal that there are no more messages to process and the processing
+                            // loop can exit
+                            return false;
+                        }
+                    }
+                }
                 var storedProcedureName = Encoding.ASCII.GetString(m.GetMessageBody().ToArray());
-                var requestBuilder = new StepRequestBuilder(reusableRequest, me);
                 var schema = new (long, int)[]{};
                 switch (storedProcedureName){
                     case "workloadA":
@@ -42,13 +57,16 @@ public class TransactionProcessor : IDarqProcessor {
                 // listen to transaction, if state is validated, add writeset to log? 
                 // requestBuilder.AddSelfMessage(BitConverter.GetBytes(0));
 
+                var requestBuilder = new StepRequestBuilder(reusableRequest, me);
+                requestBuilder.MarkMessageConsumed(m.GetLsn());
+                requestBuilder.AddOutMessage(me, BitConverter.GetBytes(-1));
+                m.Dispose();
                 var v = capabilities.Step(requestBuilder.FinishStep());
                 Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
                 return true;
             }
             case DarqMessageType.SELF: // this is on recovery; TODO: do we need to double pass?
                 // count = BitConverter.ToInt32(m.GetMessageBody());
-                Console.WriteLine($"Worker {me.guid} received SELF message: {LogEntry.FromBytes(m.GetMessageBody().ToArray())}");
                 m.Dispose();
                 return true;
             default:
@@ -63,7 +81,7 @@ public class TransactionProcessor : IDarqProcessor {
         }
         
         var requestBuilder = new StepRequestBuilder(reusableRequest, me);
-        requestBuilder.AddSelfMessage(entry.ToBytes());
+        requestBuilder.AddOutMessage(me, entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
         return entry.lsn;

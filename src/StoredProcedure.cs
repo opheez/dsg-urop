@@ -15,14 +15,22 @@ public struct StoredProcedure {
     }
 
     public void Run(){
-        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+        BenchmarkConfig testCfg = new BenchmarkConfig(
             seed: seed,
             ratio: writeRatio,
             attrCount: 10,
-            threadCount: 12,
-            iterationCount: 3
+            threadCount: 4,
+            perThreadDataCount: 10,
+            iterationCount: 1
         );
-        TableBenchmark b = new FixedLenTableBenchmark(name, ycsbCfg, logWal);
+        // BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+        //     seed: seed,
+        //     ratio: writeRatio,
+        //     attrCount: 10,
+        //     threadCount: 12,
+        //     iterationCount: 3
+        // );
+        TableBenchmark b = new FixedLenTableBenchmark(name, testCfg, logWal);
         b.RunTransactions();
     }
 
