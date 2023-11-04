@@ -1,24 +1,25 @@
 using System.Collections;
 using System.Collections.Concurrent;
 using System.Threading;
-using Microsoft.Extensions.ObjectPool;
+using FASTER.common;
 
 namespace DB {
 public class TransactionManager {
     internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
     internal static int pastTnumCircularBufferSize = 1 << 14;
-    internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize];
+    internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // not protected because writes are only done by one thread
     internal int txnc = 0;
     internal int tid = 0;
     internal Thread[] committer;
-    internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
-    internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
+    internal SimpleObjectPool<TransactionContext> ctxPool;
+    internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
     internal IWriteAheadLog? wal;
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
         this.wal = wal;
+        ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
             committer[i] = new Thread(() => {
@@ -39,7 +40,7 @@ public class TransactionManager {
     /// </summary>
     /// <returns>Newly created transaction context</returns>
     public TransactionContext Begin(){
-        var ctx = ctxPool.Get();
+        var ctx = ctxPool.Checkout();
         ctx.Init(startTxn: txnc, NewTransactionId());
         if (wal != null) {
             long writtenLsn = wal.Log(new LogEntry(-1, ctx.tid, LogType.Begin));
