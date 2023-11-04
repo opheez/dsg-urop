@@ -15,7 +15,7 @@ public class TransactionManager {
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
     internal SpinLock sl = new SpinLock();
     internal IWriteAheadLog? wal;
-    internal Dictionary<long, long> txnTbl = new Dictionary<long, long>(); // ongoing transactions mapped to most recent lsn
+    internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
         this.wal = wal;
@@ -151,7 +151,8 @@ public class TransactionManager {
             // TODO: verify that should be logged before removing from active
             if (wal != null){
                 long prevLsn = txnTbl[ctx.tid];
-                txnTbl.Remove(ctx.tid);
+                
+                txnTbl.TryRemove(ctx.tid, out _);
                 wal.Log(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
             }
             // assign num 
@@ -175,7 +176,7 @@ public class TransactionManager {
             // TODO: verify that should be logged before removing from active
             if (wal != null){
                 long prevLsn = txnTbl[ctx.tid];
-                txnTbl.Remove(ctx.tid);
+                txnTbl.TryRemove(ctx.tid, out _);
                 wal.Log(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
             }
             try {

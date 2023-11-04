@@ -19,7 +19,7 @@ public interface IWriteAheadLog
 public class DARQWal : IWriteAheadLog {
 
     private long currLsn = 0;
-    private StepRequest reusableRequest = new(null);
+    // private 
     private IDarqProcessorClientCapabilities capabilities;
     private WorkerId me;
 
@@ -28,13 +28,14 @@ public class DARQWal : IWriteAheadLog {
     }
      
     public long Log(LogEntry entry){
+        StepRequest reusableRequest = new(null);
         entry.lsn = GetNewLsn();
         if (entry.type == LogType.Begin){
             entry.prevLsn = entry.lsn;
         }
 
         var requestBuilder = new StepRequestBuilder(reusableRequest, me);
-        requestBuilder.AddOutMessage(me, entry.ToBytes());
+        requestBuilder.AddSelfMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
         return entry.lsn;

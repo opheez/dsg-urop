@@ -24,7 +24,6 @@ public class DarqTransactionProcessor : IDarqProcessor {
     }
 
     public bool ProcessMessage(DarqMessage m){
-        Console.WriteLine("Got message");
         switch (m.GetMessageType()){
             case DarqMessageType.IN:
             {
@@ -66,7 +65,7 @@ public class DarqTransactionProcessor : IDarqProcessor {
                 return true;
             }
             case DarqMessageType.SELF: // this is on recovery; TODO: do we need to double pass?
-                // count = BitConverter.ToInt32(m.GetMessageBody());
+                Console.WriteLine($"Recovering, got log {LogEntry.FromBytes(m.GetMessageBody().ToArray())}");
                 m.Dispose();
                 return true;
             default:

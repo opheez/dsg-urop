@@ -39,7 +39,6 @@ public struct LogEntry{
                 writer.Write(tid);
                 writer.Write((int)type);
                 if (type == LogType.Write){
-                    writer.Write((int)LogType.Write);
                     byte[] opBytes = op.ToBytes();
                     writer.Write(opBytes.Length);
                     writer.Write(opBytes);
