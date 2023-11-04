@@ -14,11 +14,11 @@ public class TransactionManager {
     internal ObjectPool<TransactionContext> ctxPool = ObjectPool.Create<TransactionContext>();
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts
     internal SpinLock sl = new SpinLock();
-    internal LogWAL? logWAL;
+    internal IWriteAheadLog? wal;
     internal Dictionary<long, long> txnTbl = new Dictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
-    public TransactionManager(int numThreads, LogWAL? logWAL = null){
-        this.logWAL = logWAL;
+    public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
+        this.wal = wal;
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
             committer[i] = new Thread(() => {
@@ -41,8 +41,8 @@ public class TransactionManager {
     public TransactionContext Begin(){
         var ctx = ctxPool.Get();
         ctx.Init(startTxn: txnc, NewTransactionId());
-        if (logWAL != null) {
-            long writtenLsn = logWAL.Invoke(new LogEntry(-1, ctx.tid, LogType.Begin));
+        if (wal != null) {
+            long writtenLsn = wal.Log(new LogEntry(-1, ctx.tid, LogType.Begin));
             txnTbl[ctx.tid] = writtenLsn;
         }
 
@@ -143,16 +143,16 @@ public class TransactionManager {
                 KeyAttr keyAttr = item.Item1;
                 // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
-                if (this.logWAL != null) {
-                    logWAL.Invoke(new LogEntry(txnTbl[ctx.tid], ctx.tid, new Operation(OperationType.Update, new TupleId(keyAttr.Key, this.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val)));
+                if (this.wal != null) {
+                    wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new Operation(OperationType.Update, new TupleId(keyAttr.Key, this.GetHashCode()), new TupleDesc[]{new TupleDesc(keyAttr.Attr, val.Length)}, val)));
                 }
                 keyAttr.Table.Write(keyAttr, val);
             }
             // TODO: verify that should be logged before removing from active
-            if (logWAL != null){
+            if (wal != null){
                 long prevLsn = txnTbl[ctx.tid];
                 txnTbl.Remove(ctx.tid);
-                logWAL.Invoke(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+                wal.Log(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
             }
             // assign num 
             int finalTxnNum;
@@ -173,10 +173,10 @@ public class TransactionManager {
             ctx.status = TransactionStatus.Committed;
         } else {
             // TODO: verify that should be logged before removing from active
-            if (logWAL != null){
+            if (wal != null){
                 long prevLsn = txnTbl[ctx.tid];
                 txnTbl.Remove(ctx.tid);
-                logWAL.Invoke(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
+                wal.Log(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
             }
             try {
                 sl.Enter(ref lockTaken);

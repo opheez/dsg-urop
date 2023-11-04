@@ -4,9 +4,9 @@ namespace DB
 {
 public class FixedLenTableBenchmark : TableBenchmark
 {
-    public FixedLenTableBenchmark(string name, BenchmarkConfig cfg, LogWAL? logWal = null) : base(cfg) {
+    public FixedLenTableBenchmark(string name, BenchmarkConfig cfg, IWriteAheadLog? wal = null) : base(cfg) {
         System.Console.WriteLine("Init");
-        this.logWal = logWal;
+        this.wal = wal;
         Random r = new Random(cfg.seed);
         // Load data
         for (int i = 0; i < cfg.attrCount; i++){

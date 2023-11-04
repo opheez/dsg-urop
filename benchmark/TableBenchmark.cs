@@ -52,11 +52,11 @@ public abstract class TableBenchmark
     internal (long, int)[] schema;
     internal Thread[] workers;
     internal BenchmarkStatistics? stats;
-    internal LogWAL? logWal;
+    internal IWriteAheadLog? wal;
 
-    public TableBenchmark(BenchmarkConfig cfg, LogWAL? logWal = null){
+    public TableBenchmark(BenchmarkConfig cfg, IWriteAheadLog? wal = null){
         this.cfg = cfg;
-        this.logWal = logWal;
+        this.wal = wal;
         schema = new (long, int)[cfg.attrCount];
         workers = new Thread[cfg.threadCount];
 
@@ -210,7 +210,7 @@ public abstract class TableBenchmark
 
     public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, logWal);
+            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, wal);
             txnManager.Run();
             using (Table tbl = new Table(schema)) {
                 var insertSw = Stopwatch.StartNew();

@@ -9,18 +9,18 @@ using System.Diagnostics;
 
 namespace DB {
 
-public delegate long LogWAL(LogEntry entry);
 // Takes in requests for stored procedures and executes them
-public class TransactionProcessor : IDarqProcessor {
+public class DarqTransactionProcessor : IDarqProcessor {
     private IDarqProcessorClientCapabilities capabilities;
     private WorkerId me;
     private List<WorkerId> workers;
     private StepRequest reusableRequest = new(null);
-    private long currLsn = 0;
+    private DARQWal wal;
     
-    public TransactionProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
+    public DarqTransactionProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
         this.me = me;
         workers = clusterInfo.GetWorkers().Select(e  => e.Item1).ToList();
+        wal = new DARQWal(me);
     }
 
     public bool ProcessMessage(DarqMessage m){
@@ -47,7 +47,7 @@ public class TransactionProcessor : IDarqProcessor {
                 var schema = new (long, int)[]{};
                 switch (storedProcedureName){
                     case "workloadA":
-                        StoredProcedure p = StoredProcedure.GetWorkloadAUpdateHeavy(LogWAL);
+                        StoredProcedure p = StoredProcedure.GetWorkloadAUpdateHeavy(wal);
                         p.Run();
                         break;
                     default:
@@ -74,24 +74,9 @@ public class TransactionProcessor : IDarqProcessor {
         }
     }
 
-    public long LogWAL(LogEntry entry){
-        entry.lsn = GetNewLsn();
-        if (entry.type == LogType.Begin){
-            entry.prevLsn = entry.lsn;
-        }
-        
-        var requestBuilder = new StepRequestBuilder(reusableRequest, me);
-        requestBuilder.AddOutMessage(me, entry.ToBytes());
-        var v = capabilities.Step(requestBuilder.FinishStep());
-        Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
-        return entry.lsn;
-    }
     public void OnRestart(IDarqProcessorClientCapabilities capabilities) {
         this.capabilities = capabilities;
-    }
-
-    private long GetNewLsn() {
-        return Interlocked.Increment(ref currLsn);
+        this.wal.SetCapabilities(capabilities);
     }
 }
 }

@@ -3,15 +3,15 @@ using System;
 namespace DB {
 public struct StoredProcedure {
     internal string name;
-    internal LogWAL? logWal;
+    internal IWriteAheadLog? wal;
     internal int seed;
     internal double writeRatio;
 
-    public StoredProcedure(string name, int seed, double writeRatio, LogWAL? logWal = null){
+    public StoredProcedure(string name, int seed, double writeRatio, IWriteAheadLog? wal = null){
         this.name = name;
         this.seed = seed;
         this.writeRatio = writeRatio;
-        this.logWal = logWal;
+        this.wal = wal;
     }
 
     public void Run(){
@@ -30,15 +30,15 @@ public struct StoredProcedure {
         //     threadCount: 12,
         //     iterationCount: 3
         // );
-        TableBenchmark b = new FixedLenTableBenchmark(name, testCfg, logWal);
+        TableBenchmark b = new FixedLenTableBenchmark(name, testCfg, wal);
         b.RunTransactions();
     }
 
-    public static StoredProcedure GetWorkloadAUpdateHeavy(LogWAL logWal){
-        return new StoredProcedure("Workload_A", 12345, 0.5, logWal);
+    public static StoredProcedure GetWorkloadAUpdateHeavy(IWriteAheadLog wal){
+        return new StoredProcedure("Workload_A", 12345, 0.5, wal);
     }
-    public static StoredProcedure GetWorkload8020UpdateHeavy(LogWAL logWal){
-        return new StoredProcedure("Workload_8020", 12345, 0.2, logWal);
+    public static StoredProcedure GetWorkload8020UpdateHeavy(IWriteAheadLog wal){
+        return new StoredProcedure("Workload_8020", 12345, 0.2, wal);
     }
 
 

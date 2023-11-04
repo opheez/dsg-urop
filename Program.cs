@@ -56,7 +56,7 @@ unsafe class Program {
         });
         darqServer.Start();
         var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
-        processorClient.StartProcessingAsync(new TransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
+        processorClient.StartProcessingAsync(new DarqTransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
         darqServer.Dispose();
     }
 
