@@ -42,10 +42,6 @@ public class TransactionManager {
     public TransactionContext Begin(){
         var ctx = ctxPool.Checkout();
         ctx.Init(startTxn: txnc, NewTransactionId());
-        if (wal != null) {
-            long writtenLsn = wal.Log(new LogEntry(-1, ctx.tid, LogType.Begin));
-            txnTbl[ctx.tid] = writtenLsn;
-        }
 
         return ctx;
     }
@@ -137,6 +133,10 @@ public class TransactionManager {
         }
 
         ctx.status = TransactionStatus.Validated;
+        if (wal != null) {
+            long writtenLsn = wal.Log(new LogEntry(-1, ctx.tid, LogType.Begin));
+            txnTbl[ctx.tid] = writtenLsn;
+        }
         if (valid) {
             // write phase
             foreach (var item in ctx.GetWriteset()){
