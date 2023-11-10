@@ -1,6 +1,5 @@
 
 using System.Runtime.Serialization.Formatters.Binary;
-using FASTER.core;
 
 namespace DB {
 
@@ -16,11 +15,13 @@ public struct LogEntry{
     public long prevLsn; // do we even need this if we are undoing?
     public long tid;
     public LogType type;
-    Operation op;
-    public LogEntry(long prevLsn, long tid, Operation op){
+    public KeyAttr keyAttr;
+    public byte[] val;
+    public LogEntry(long prevLsn, long tid, KeyAttr keyAttr, byte[] val){
         this.prevLsn = prevLsn;
         this.tid = tid;
-        this.op = op;
+        this.keyAttr = keyAttr;
+        this.val = val;
         this.type = LogType.Write;
     }
 
@@ -39,16 +40,16 @@ public struct LogEntry{
                 writer.Write(tid);
                 writer.Write((int)type);
                 if (type == LogType.Write){
-                    byte[] opBytes = op.ToBytes();
-                    writer.Write(opBytes.Length);
-                    writer.Write(opBytes);
+                    writer.Write(keyAttr.ToBytes());
+                    writer.Write(val.Length);
+                    writer.Write(val);
                 }
             }
             return m.ToArray();
         }
     }
 
-    public static LogEntry FromBytes(byte[] data) {
+    public static LogEntry FromBytes(byte[] data, Dictionary<int, Table> tables) {
         LogEntry result = new LogEntry();
         using (MemoryStream m = new MemoryStream(data)) {
             using (BinaryReader reader = new BinaryReader(m)) {
@@ -57,16 +58,27 @@ public struct LogEntry{
                 result.tid = reader.ReadInt64();
                 result.type = (LogType)reader.ReadInt32();
                 if (result.type == LogType.Write){
-                    int opBytesLength = reader.ReadInt32();
-                    result.op = Operation.FromBytes(reader.ReadBytes(opBytesLength));
+                    result.keyAttr = KeyAttr.FromBytes(reader.ReadBytes(KeyAttr.Size), tables);
+                    int valLength = reader.ReadInt32();
+                    result.val = reader.ReadBytes(valLength);
                 }
             }
         }
         return result;
     }
 
-    public override readonly string ToString(){
-        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type}, op={op})";
+        public override readonly bool Equals(object? obj)
+        {
+            if (obj == null || GetType() != obj.GetType())
+            {
+                return false;
+            }
+            LogEntry o = (LogEntry)obj;
+            return o.lsn == lsn && o.prevLsn == prevLsn && o.tid == tid && o.type == type && o.keyAttr.Equals(keyAttr) && val.AsSpan().SequenceEqual(o.val);
+        }
+
+        public override readonly string ToString(){
+        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type}, keyAttr={keyAttr}, val={val})";
     }
     
 }

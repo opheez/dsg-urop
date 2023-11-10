@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 namespace DB {
 
     public enum TransactionStatus {
@@ -31,63 +32,63 @@ namespace DB {
         public void* Ptr;
     }
 
-    public struct Operation {
-        public Operation(OperationType type, TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
-            if (type != OperationType.Read && Util.IsEmpty(val)) {
-                throw new ArgumentException("Writes must provide a non-null value");
-            }
-            Type = type;
-            TupleID = tupleId;
-            TupleDescs = tupleDescs;
-            Value = val.ToArray();
-        }
-        public OperationType Type;
-        public TupleId TupleID;
-        public TupleDesc[] TupleDescs;
-        public byte[] Value;
+    // public struct Operation {
+    //     public Operation(OperationType type, TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
+    //         if (type != OperationType.Read && Util.IsEmpty(val)) {
+    //             throw new ArgumentException("Writes must provide a non-null value");
+    //         }
+    //         Type = type;
+    //         TupleID = tupleId;
+    //         TupleDescs = tupleDescs;
+    //         Value = val.ToArray();
+    //     }
+    //     public OperationType Type;
+    //     public TupleId TupleID;
+    //     public TupleDesc[] TupleDescs;
+    //     public byte[] Value;
 
 
-        public byte[] ToBytes(){
-            using (MemoryStream m = new MemoryStream()) {
-                using (BinaryWriter writer = new BinaryWriter(m)) {
-                    writer.Write(BitConverter.GetBytes((int)Type));
-                    writer.Write(TupleID.Key);
-                    writer.Write(TupleID.TableHash);
-                    writer.Write(TupleDescs.Count());
-                    foreach (TupleDesc desc in TupleDescs){
-                        writer.Write(desc.Attr);
-                        writer.Write(desc.Size);
-                    }
-                    writer.Write(Value);
-                }
-                return m.ToArray();
-            }
-        }
+    //     public byte[] ToBytes(){
+    //         using (MemoryStream m = new MemoryStream()) {
+    //             using (BinaryWriter writer = new BinaryWriter(m)) {
+    //                 writer.Write(BitConverter.GetBytes((int)Type));
+    //                 writer.Write(TupleID.Key);
+    //                 writer.Write(TupleID.TableHash);
+    //                 writer.Write(TupleDescs.Count());
+    //                 foreach (TupleDesc desc in TupleDescs){
+    //                     writer.Write(desc.Attr);
+    //                     writer.Write(desc.Size);
+    //                 }
+    //                 writer.Write(Value);
+    //             }
+    //             return m.ToArray();
+    //         }
+    //     }
 
-        public static Operation FromBytes(byte[] data) {
-            Operation op = new Operation();
-            using (MemoryStream m = new MemoryStream(data)) {
-                using (BinaryReader reader = new BinaryReader(m)) {
-                    op.Type = (OperationType)reader.ReadInt32();
+    //     public static Operation FromBytes(byte[] data) {
+    //         Operation op = new Operation();
+    //         using (MemoryStream m = new MemoryStream(data)) {
+    //             using (BinaryReader reader = new BinaryReader(m)) {
+    //                 op.Type = (OperationType)reader.ReadInt32();
 
-                    long key = reader.ReadInt64();
-                    int tableHash = reader.ReadInt32();
-                    op.TupleID = new TupleId(key, tableHash);
+    //                 long key = reader.ReadInt64();
+    //                 int tableHash = reader.ReadInt32();
+    //                 op.TupleID = new TupleId(key, tableHash);
 
-                    int tupleDescLength = reader.ReadInt32();
-                    TupleDesc[] descs = new TupleDesc[tupleDescLength];
-                    for (int i = 0; i < tupleDescLength; i++){
-                        TupleDesc desc = new TupleDesc();
-                        desc.Attr = reader.ReadInt64();
-                        desc.Size = reader.ReadInt32();
-                        descs[i] = desc;
-                    }
-                }
-            }
-            return op;
-        }
+    //                 int tupleDescLength = reader.ReadInt32();
+    //                 TupleDesc[] descs = new TupleDesc[tupleDescLength];
+    //                 for (int i = 0; i < tupleDescLength; i++){
+    //                     TupleDesc desc = new TupleDesc();
+    //                     desc.Attr = reader.ReadInt64();
+    //                     desc.Size = reader.ReadInt32();
+    //                     descs[i] = desc;
+    //                 }
+    //             }
+    //         }
+    //         return op;
+    //     }
 
-    }
+    // }
 
     public struct TupleId{ //} : IEquatable<TupleId>{
 
@@ -139,9 +140,34 @@ namespace DB {
         public long Key;
         public long Attr;
         public Table Table;
+        public static int Size = sizeof(long) * 2 + sizeof(int);
 
         public override string ToString(){
             return $"({Key}, {Attr})";
+        }
+
+        public byte[] ToBytes(){
+            using (MemoryStream m = new MemoryStream()) {
+                using (BinaryWriter writer = new BinaryWriter(m)) {
+                    writer.Write(Key);
+                    writer.Write(Attr);
+                    writer.Write(Table.GetHashCode());
+                }
+                return m.ToArray();
+            }
+        }
+
+        public static KeyAttr FromBytes(byte[] data, Dictionary<int, Table> tables) {
+            KeyAttr result = new KeyAttr();
+            using (MemoryStream m = new MemoryStream(data)) {
+                using (BinaryReader reader = new BinaryReader(m)) {
+                    result.Key = reader.ReadInt64();
+                    result.Attr = reader.ReadInt64();
+                    int tableHash = reader.ReadInt32();
+                    result.Table = tables[tableHash];
+                }
+            }
+            return result;
         }
     }
 

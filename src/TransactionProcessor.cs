@@ -16,6 +16,8 @@ public class DarqTransactionProcessor : IDarqProcessor {
     private List<WorkerId> workers;
     private StepRequest reusableRequest = new(null);
     private DARQWal wal;
+    Dictionary<int, Table> tables = new Dictionary<int, Table>();
+
     
     public DarqTransactionProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
         this.me = me;
@@ -24,6 +26,7 @@ public class DarqTransactionProcessor : IDarqProcessor {
     }
 
     public bool ProcessMessage(DarqMessage m){
+        bool recoveryMode = false;
         switch (m.GetMessageType()){
             case DarqMessageType.IN:
             {
@@ -52,9 +55,6 @@ public class DarqTransactionProcessor : IDarqProcessor {
                     default:
                         throw new NotImplementedException();
                 }
-                // execute stored procedure
-                // listen to transaction, if state is validated, add writeset to log? 
-                // requestBuilder.AddSelfMessage(BitConverter.GetBytes(0));
 
                 var requestBuilder = new StepRequestBuilder(reusableRequest, me);
                 requestBuilder.MarkMessageConsumed(m.GetLsn());
@@ -65,7 +65,12 @@ public class DarqTransactionProcessor : IDarqProcessor {
                 return true;
             }
             case DarqMessageType.SELF: // this is on recovery; TODO: do we need to double pass?
-                Console.WriteLine($"Recovering, got log {LogEntry.FromBytes(m.GetMessageBody().ToArray())}");
+                if (recoveryMode) {
+                    LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
+                    
+                    Console.WriteLine($"Recovering, got log entry: {entry}");
+
+                }
                 m.Dispose();
                 return true;
             default:
