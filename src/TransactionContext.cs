@@ -37,14 +37,31 @@ public class TransactionContext {
         }
         return -1;
     }
+    private int GetWriteSetKeyAttrIndex(KeyAttr keyAttr){
+        for (int i = Wset.Count-1; i >= 0; i--){
+            if (Wset[i].Item1.Key == keyAttr.Key && Wset[i].Item1.Attr == keyAttr.Attr && Wset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private int GetReadsetKeyAttrIndex(KeyAttr keyAttr){
+        for (int i = Rset.Count-1; i >= 0; i--){
+            if (Rset[i].Item1.Key == keyAttr.Key && Rset[i].Item1.Attr == keyAttr.Attr && Rset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
+                return i;
+            }
+        }
+        return -1;
+    }
 
     public byte[]? GetFromContext(KeyAttr keyAttr){
         byte[]? val = null;
-        int wi = GetWriteSetKeyIndex(keyAttr);
+        int wi = GetWriteSetKeyAttrIndex(keyAttr);
         if (wi != -1){
             val = Wset[wi].Item2;
         } else {
-            int ri = GetReadsetKeyIndex(keyAttr);
+            int ri = GetReadsetKeyAttrIndex(keyAttr);
             if (ri != -1){
                 val = Rset[ri].Item2;
             }

@@ -49,8 +49,17 @@ public class DarqTransactionProcessor : IDarqProcessor {
                 var schema = new (long, int)[]{};
                 switch (storedProcedureName){
                     case "workloadA":
-                        StoredProcedure p = StoredProcedure.GetWorkloadAUpdateHeavy(wal);
-                        p.Run();
+                        // StoredProcedure p = StoredProcedure.GetWorkloadAUpdateHeavy(wal);
+                        // p.Run();'
+                        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+                            ratio: 0.2,
+                            seed: 12345,
+                            attrCount: 10,
+                            threadCount: 12,
+                            iterationCount: 3
+                        );
+                        TableBenchmark b = new FixedLenTableBenchmark("OneAttr", ycsbCfg, wal);
+                        b.RunTransactions();
                         break;
                     default:
                         throw new NotImplementedException();

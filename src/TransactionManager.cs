@@ -7,7 +7,7 @@ namespace DB {
 public class TransactionManager {
     internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
     internal static int pastTnumCircularBufferSize = 1 << 14;
-    internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // not protected because writes are only done by one thread
+    internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
     internal int txnc = 0;
     internal int tid = 0;
     internal Thread[] committer;
@@ -100,9 +100,9 @@ public class TransactionManager {
         // validate
         // Console.WriteLine($"curr tnums: {{{string.Join(Environment.NewLine, tnumToCtx)}}}");
         for (int i = ctx.startTxnNum + 1; i <= finishTxn; i++){
-            // Console.WriteLine(i + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
+            // Console.WriteLine((i & (pastTnumCircularBufferSize - 1)) + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
             // foreach (var x in tnumToCtx[i % pastTnumCircularBufferSize].GetWriteset()){
-            //     Console.Write($"{x.Key}, ");
+            //     Console.Write($"{x}, ");
             // }
             foreach (var item in ctx.GetReadset()){
                 KeyAttr keyAttr = item.Item1;
@@ -163,15 +163,15 @@ public class TransactionManager {
                 txnc += 1; // TODO: deal with int overflow
                 finalTxnNum = txnc;
                 active.Remove(ctx);
+                if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
+                    ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
+                }
+                tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
             } finally {
                 if (lockTaken) sl.Exit();
                 lockTaken = false;
             }
 
-            if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
-                ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
-            }
-            tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
             ctx.status = TransactionStatus.Committed;
         } else {
             // TODO: verify that should be logged before removing from active

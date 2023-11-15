@@ -141,6 +141,33 @@ namespace DB
         }
 
         [TestMethod]
+        public void TestInsertAllAttributes(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(schema);
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
+            txnManager.Run();
+
+            TransactionContext t = txnManager.Begin();
+            TupleDesc[] td = {new TupleDesc(12345, 4), new TupleDesc(56789, 4)};
+            byte[] value = BitConverter.GetBytes(21);
+            byte[] value2 = BitConverter.GetBytes(95);
+            
+            TupleId id = table.Insert(td, value.Concat(value2).ToArray(), t);
+            TupleDesc[] td1 = {new TupleDesc(12345, 4)};
+            var v1 = table.Read(id, td1, t);
+            TupleDesc[] td2 = {new TupleDesc(56789, 4)};
+            var v2 = table.Read(id, td2, t);
+            var success = txnManager.Commit(t);
+            txnManager.Terminate();
+
+            Assert.IsTrue(success, "Transaction was unable to commit");
+            Console.WriteLine(BitConverter.ToInt32(v1.ToArray()));
+            Console.WriteLine(BitConverter.ToInt32(v2.ToArray()));
+            Console.WriteLine(BitConverter.ToInt32(value));
+            CollectionAssert.AreEqual(value, v1.ToArray());
+        }
+
+        [TestMethod]
         /// <summary>
         /// Should succeed
         /// W(Ti) does not intersect R(Tj), W(Ti) intersects W(Tj) (Key 1), R(Ti) intersects W(Tj) (Key 1)

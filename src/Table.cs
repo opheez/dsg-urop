@@ -147,8 +147,10 @@ public unsafe class Table : IDisposable{
 
         long id = NewRecordId();
         TupleId tupleId = new TupleId(id, this.GetHashCode());
+        int start = 0;
         foreach (TupleDesc desc in tupleDescs) {
-            ctx.SetInContext(OperationType.Insert, new KeyAttr(id, desc.Attr ,this), value);
+            ctx.SetInContext(OperationType.Insert, new KeyAttr(id, desc.Attr ,this), value.Slice(start, desc.Size));
+            start += desc.Size;
         }
 
         return tupleId;
@@ -159,8 +161,10 @@ public unsafe class Table : IDisposable{
         }
         Validate(tupleDescs, value, true);
 
+        int start = 0;
         foreach (TupleDesc desc in tupleDescs) {
-            ctx.SetInContext(OperationType.Insert, new KeyAttr(id.Key, desc.Attr ,this), value);
+            ctx.SetInContext(OperationType.Insert, new KeyAttr(id.Key, desc.Attr ,this), value.Slice(start, desc.Size));
+            start += desc.Size;
         }
 
         return;
@@ -175,11 +179,13 @@ public unsafe class Table : IDisposable{
 
     public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
+        int start = 0;
         foreach (TupleDesc desc in tupleDescs) {
             // if (Util.IsEmpty(Read(tupleId, new TupleDesc[]{desc}, ctx))){ 
             //     throw new ArgumentException($"Key ({tupleId.Key}, {desc.Attr}) does not exist: try inserting instead"); // TODO ensure this aborts transaction
             // }
-            ctx.SetInContext(OperationType.Update, new KeyAttr(tupleId.Key, desc.Attr, this), value);
+            ctx.SetInContext(OperationType.Update, new KeyAttr(tupleId.Key, desc.Attr, this), value.Slice(start, desc.Size));
+            start += desc.Size;
         }
     }
 
