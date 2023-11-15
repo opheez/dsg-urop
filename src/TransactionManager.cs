@@ -146,15 +146,15 @@ public class TransactionManager {
                 txnc += 1; // TODO: deal with int overflow
                 ctx.id = txnc;
                 active.Remove(ctx);
+                if (tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] != null){ 
+                    ctxPool.Return(tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)]);
+                }
+                tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] = ctx;
             } finally {
                 if (lockTaken) sl.Exit();
                 lockTaken = false;
             }
 
-            if (tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] != null){ 
-                ctxPool.Return(tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)]);
-            }
-            tidToCtx[ctx.id & (pastTidCircularBufferSize - 1)] = ctx;
             ctx.status = TransactionStatus.Committed;
         } else {
             try {
