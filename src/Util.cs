@@ -1,5 +1,7 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
+
 namespace DB {
 
     public enum TransactionStatus {
@@ -147,26 +149,48 @@ namespace DB {
         }
 
         public byte[] ToBytes(){
-            using (MemoryStream m = new MemoryStream()) {
-                using (BinaryWriter writer = new BinaryWriter(m)) {
-                    writer.Write(Key);
-                    writer.Write(Attr);
-                    writer.Write(Table.GetHashCode());
-                }
-                return m.ToArray();
-            }
+            byte[] arr = new byte[Size];
+
+            // Using MemoryMarshal to write the fixed-size fields to the byte array
+            Span<byte> span = arr.AsSpan();
+            MemoryMarshal.Write(span, ref Key);
+            MemoryMarshal.Write(span.Slice(sizeof(long)), ref Attr);
+            int tableHash = Table.GetHashCode();
+            MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref tableHash);
+
+            return arr;
+            // using (MemoryStream m = new MemoryStream()) {
+            //     using (BinaryWriter writer = new BinaryWriter(m)) {
+            //         writer.Write(Key);
+            //         writer.Write(Attr);
+            //         writer.Write(Table.GetHashCode());
+            //     }
+            //     return m.ToArray();
+            // }
         }
 
         public static KeyAttr FromBytes(byte[] data, Dictionary<int, Table> tables) {
             KeyAttr result = new KeyAttr();
-            using (MemoryStream m = new MemoryStream(data)) {
-                using (BinaryReader reader = new BinaryReader(m)) {
-                    result.Key = reader.ReadInt64();
-                    result.Attr = reader.ReadInt64();
-                    int tableHash = reader.ReadInt32();
-                    result.Table = tables[tableHash];
-                }
-            }
+
+            Span<byte> span = data.AsSpan();
+            result.Key = MemoryMarshal.Read<long>(span);
+            result.Attr = MemoryMarshal.Read<long>(span.Slice(sizeof(long)));
+            int tableHash = MemoryMarshal.Read<int>(span.Slice(sizeof(long)*2));
+            result.Table = tables[tableHash];
+
+            // result.Key = BitConverter.ToInt64(data, 0);
+            // result.Attr = BitConverter.ToInt64(data, sizeof(long));
+            // int tableHash = BitConverter.ToInt32(data, sizeof(long)*2);
+            // result.Table = tables[tableHash];
+
+            // using (MemoryStream m = new MemoryStream(data)) {
+            //     using (BinaryReader reader = new BinaryReader(m)) {
+            //         result.Key = reader.ReadInt64();
+            //         result.Attr = reader.ReadInt64();
+            //         int tableHash = reader.ReadInt32();
+            //         result.Table = tables[tableHash];
+            //     }
+            // }
             return result;
         }
     }

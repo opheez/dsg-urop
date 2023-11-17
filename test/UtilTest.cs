@@ -18,6 +18,29 @@ namespace DB
         }
 
         [TestMethod]
+        public void TestKeyAttrEquals(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(schema);
+            KeyAttr keyAttr1 = new KeyAttr(12345, 67890, table);
+            KeyAttr keyAttr2 = new KeyAttr(12345, 67890, table);
+
+            Assert.IsTrue(keyAttr1.Equals(keyAttr2));
+        }
+
+        [TestMethod]
+        public void TestKeyAttrSerialize(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Dictionary<int, Table> tables = new Dictionary<int, Table>();
+            Table table = new Table(schema);
+            tables.Add(table.GetHashCode(), table);
+            KeyAttr keyAttr = new KeyAttr(12345, 67890, table);
+            byte[] bytes = keyAttr.ToBytes();
+            KeyAttr keyAttr2 = KeyAttr.FromBytes(bytes, tables);
+
+            Assert.IsTrue(keyAttr.Equals(keyAttr2));
+        }
+
+        [TestMethod]
         public void TestLogEntryEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
@@ -31,7 +54,7 @@ namespace DB
 
             KeyAttr keyAttr2 = new KeyAttr(12345, 67890, table);
             byte[] val2 = {8, 8, 8, 8};
-            LogEntry entry2 = new LogEntry(4, 8, keyAttr, val);
+            LogEntry entry2 = new LogEntry(4, 8, keyAttr2, val2);
             entry2.lsn = 5;
 
             Assert.IsTrue(entry.Equals(entry2));

@@ -147,7 +147,7 @@ public class TransactionManager {
                     // TODO: should not throw exception here, but if it does, abort. 
                     // failure here means crashed before commit. would need to rollback
                     // if (this.wal != null) {
-                    //     wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, keyAttr, val));
+                    //     wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
                     // }
                     tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val.AsSpan(tupleId.Table.metadata[td.Attr].Item2, td.Size));
                 }
