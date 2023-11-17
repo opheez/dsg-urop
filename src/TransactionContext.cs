@@ -38,14 +38,14 @@ public class TransactionContext {
         }
         return -1;
     }
-    private byte[]? GetWriteSetKeyAttr(KeyAttr keyAttr){
+    private ReadOnlySpan<byte> GetWriteSetKeyAttr(KeyAttr keyAttr){
         for (int i = Wset.Count-1; i >= 0; i--){
             if (Wset[i].Item1.Key == keyAttr.Key && Wset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
                 int start = 0;
                 for (int j = 0; j < Wset[i].Item2.Length; j++){
                     int size = Wset[i].Item2[j].Size;
                     if (Wset[i].Item2[j].Attr == keyAttr.Attr){
-                        return Wset[i].Item3.AsSpan(start, size).ToArray();
+                        return Wset[i].Item3.AsSpan(start, size);
                     }
                     start += size;
                 }
@@ -63,8 +63,8 @@ public class TransactionContext {
         return -1;
     }
 
-    public byte[]? GetFromContext(KeyAttr keyAttr){
-        byte[]? val = GetWriteSetKeyAttr(keyAttr);
+    public ReadOnlySpan<byte> GetFromContext(KeyAttr keyAttr){
+        ReadOnlySpan<byte> val = GetWriteSetKeyAttr(keyAttr);
         // (int size, int offset) = keyAttr.Table.metadata[keyAttr.Attr];
         if (val == null){
             int ri = GetReadsetKeyAttrIndex(keyAttr);

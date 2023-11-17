@@ -55,17 +55,18 @@ public unsafe class Table : IDisposable{
         List<byte> result = new();
         int writeOffset = 0; // TODO: need to return tupleDesc for varLen
         foreach (TupleDesc desc in tupleDescs) {
-            byte[] valueToWrite;
+            ReadOnlySpan<byte> valueToWrite;
             (int size, int readOffset) = this.metadata[desc.Attr];
             KeyAttr ka = new KeyAttr(tupleId.Key, desc.Attr, this);
             var ctxRead = ctx.GetFromContext(ka);
             if (ctxRead != null) {
                 valueToWrite = ctxRead;
             } else {
-                valueToWrite = this.Read(new KeyAttr(tupleId.Key, desc.Attr, this)).ToArray();
+                valueToWrite = this.Read(new KeyAttr(tupleId.Key, desc.Attr, this));
                 ctx.AddReadSet(ka, valueToWrite);
             }
-            result.AddRange(valueToWrite);
+            
+            result.AddRange(valueToWrite.ToArray());
             writeOffset += valueToWrite.Length;
         }
 
