@@ -8,6 +8,16 @@ namespace DB
     {
 
         [TestMethod]
+        public void TestTupleIdEquals(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(schema);
+            TupleId tid1 = new TupleId(12345, table);
+            TupleId tid2 = new TupleId(12345, table);
+
+            Assert.IsTrue(tid1.Equals(tid2));
+        }
+
+        [TestMethod]
         public void TestLogEntryEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();

@@ -161,9 +161,27 @@ namespace DB
             txnManager.Terminate();
 
             Assert.IsTrue(success, "Transaction was unable to commit");
-            Console.WriteLine(BitConverter.ToInt32(v1.ToArray()));
-            Console.WriteLine(BitConverter.ToInt32(v2.ToArray()));
-            Console.WriteLine(BitConverter.ToInt32(value));
+            CollectionAssert.AreEqual(value, v1.ToArray());
+        }
+        [TestMethod]
+        public void TestReadAllAttributes(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(schema);
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
+            txnManager.Run();
+
+            TransactionContext t = txnManager.Begin();
+            TupleDesc[] td = {new TupleDesc(12345, 4), new TupleDesc(56789, 4)};
+            byte[] value1 = BitConverter.GetBytes(21);
+            byte[] value2 = BitConverter.GetBytes(95);
+            byte[] value = value1.Concat(value2).ToArray();
+            
+            TupleId id = table.Insert(td, value, t);
+            var v1 = table.Read(id, td, t);
+            var success = txnManager.Commit(t);
+            txnManager.Terminate();
+
+            Assert.IsTrue(success, "Transaction was unable to commit");
             CollectionAssert.AreEqual(value, v1.ToArray());
         }
 
@@ -185,7 +203,7 @@ namespace DB
             var res1 = table.Read(id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
-            var res2 = table.Read(new TupleId(2, table.GetHashCode()), td, t2);
+            var res2 = table.Read(new TupleId(2, table), td, t2);
 
             byte[] val2 = BitConverter.GetBytes(5);
             table.Update(id1, td, val2, t2);
@@ -220,7 +238,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
             TupleId id1 = table.Insert(td, val1, t);
-            TupleId id2 = new TupleId(2, table.GetHashCode());
+            TupleId id2 = new TupleId(2, table);
             var res1 = table.Read(id2, td, t);
             // Thread thread = new Thread(() => Commit(txnManager, t)); 
 

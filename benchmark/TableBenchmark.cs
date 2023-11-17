@@ -148,9 +148,9 @@ public abstract class TableBenchmark
                     int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
                     // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
                     byte[] val = values[newValueIndex];
-                    tbl.Update(new TupleId(key, tbl.GetHashCode()), td, val, t);
+                    tbl.Update(new TupleId(key, tbl), td, val, t);
                 } else {
-                    tbl.Read(new TupleId(key, tbl.GetHashCode()), td, t);
+                    tbl.Read(new TupleId(key, tbl), td, t);
                 }
             }
             var success = txnManager.Commit(t);

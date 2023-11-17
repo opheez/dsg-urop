@@ -107,7 +107,8 @@ public class TransactionManager {
             foreach (var item in ctx.GetReadset()){
                 KeyAttr keyAttr = item.Item1;
                 // Console.WriteLine($"scanning for {keyAttr}");
-                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].GetWriteSetKeyIndex(keyAttr) != -1){
+                // TODO: rename keyattr since tupleid is redundant
+                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].GetWriteSetKeyIndex(new TupleId(keyAttr.Key, keyAttr.Table)) != -1){
                     valid = false;
                     break;
                 }
@@ -119,8 +120,8 @@ public class TransactionManager {
         
         foreach (TransactionContext pastTxn in finish_active){
             foreach (var item in pastTxn.GetWriteset()){
-                KeyAttr keyAttr = item.Item1;
-                if (ctx.GetReadsetKeyIndex(keyAttr) != -1 || ctx.GetWriteSetKeyIndex(keyAttr) != -1){
+                TupleId tupleId = item.Item1;
+                if (ctx.GetReadsetKeyIndex(tupleId) != -1 || ctx.GetWriteSetKeyIndex(tupleId) != -1){
                     // Console.WriteLine($"ABORT because conflict: {keyAttr}");
                     valid = false;
                     break;
@@ -140,14 +141,16 @@ public class TransactionManager {
         if (valid) {
             // write phase
             foreach (var item in ctx.GetWriteset()){
-                byte[] val = item.Item2;
-                KeyAttr keyAttr = item.Item1;
-                // TODO: should not throw exception here, but if it does, abort. 
-                // failure here means crashed before commit. would need to rollback
-                if (this.wal != null) {
-                    wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, keyAttr, val));
+                byte[] val = item.Item3;
+                TupleId tupleId = item.Item1;
+                foreach (var td in item.Item2){
+                    // TODO: should not throw exception here, but if it does, abort. 
+                    // failure here means crashed before commit. would need to rollback
+                    // if (this.wal != null) {
+                    //     wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, keyAttr, val));
+                    // }
+                    tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val.AsSpan(tupleId.Table.metadata[td.Attr].Item2, td.Size));
                 }
-                keyAttr.Table.Write(keyAttr, val);
             }
             // TODO: verify that should be logged before removing from active
             if (wal != null){

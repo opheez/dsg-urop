@@ -63,7 +63,7 @@ public unsafe class Table : IDisposable{
                 valueToWrite = ctxRead;
             } else {
                 valueToWrite = this.Read(new KeyAttr(tupleId.Key, desc.Attr, this)).ToArray();
-                ctx.SetInContext(OperationType.Read, ka, valueToWrite);
+                ctx.AddReadSet(ka, valueToWrite);
             }
             result.AddRange(valueToWrite);
             writeOffset += valueToWrite.Length;
@@ -146,12 +146,8 @@ public unsafe class Table : IDisposable{
         Validate(tupleDescs, value, true);
 
         long id = NewRecordId();
-        TupleId tupleId = new TupleId(id, this.GetHashCode());
-        int start = 0;
-        foreach (TupleDesc desc in tupleDescs) {
-            ctx.SetInContext(OperationType.Insert, new KeyAttr(id, desc.Attr ,this), value.Slice(start, desc.Size));
-            start += desc.Size;
-        }
+        TupleId tupleId = new TupleId(id, this);
+        ctx.AddWriteSet(tupleId, tupleDescs, value);
 
         return tupleId;
     }
@@ -161,11 +157,7 @@ public unsafe class Table : IDisposable{
         }
         Validate(tupleDescs, value, true);
 
-        int start = 0;
-        foreach (TupleDesc desc in tupleDescs) {
-            ctx.SetInContext(OperationType.Insert, new KeyAttr(id.Key, desc.Attr ,this), value.Slice(start, desc.Size));
-            start += desc.Size;
-        }
+        ctx.AddWriteSet(id, tupleDescs, value);
 
         return;
     }
@@ -179,14 +171,9 @@ public unsafe class Table : IDisposable{
 
     public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
-        int start = 0;
-        foreach (TupleDesc desc in tupleDescs) {
-            // if (Util.IsEmpty(Read(tupleId, new TupleDesc[]{desc}, ctx))){ 
-            //     throw new ArgumentException($"Key ({tupleId.Key}, {desc.Attr}) does not exist: try inserting instead"); // TODO ensure this aborts transaction
-            // }
-            ctx.SetInContext(OperationType.Update, new KeyAttr(tupleId.Key, desc.Attr, this), value.Slice(start, desc.Size));
-            start += desc.Size;
-        }
+
+        ctx.AddWriteSet(tupleId, tupleDescs, value);
+
     }
 
     // internal void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value){

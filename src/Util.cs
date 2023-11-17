@@ -92,12 +92,12 @@ namespace DB {
 
     public struct TupleId{ //} : IEquatable<TupleId>{
 
-        public TupleId(long key, int tHash){
-            Key = key;
-            TableHash = tHash;
-        }
         public long Key;
-        public int TableHash;
+        public Table Table;
+        public TupleId(long key, Table t){
+            Key = key;
+            Table = t;
+        }
 
         public override string ToString(){
             return $"({Key})";

@@ -19,7 +19,7 @@ public class FixedLenTableBenchmark : TableBenchmark
         // randomly assign reads and writes
         int numWrites = (int)(cfg.datasetSize * cfg.ratio);
         for (int i = 0; i < numWrites; i++){
-            long index = r.NextInt64(cfg.datasetSize);
+            long index = r.NextInt64(cfg.datasetSize-1);
             // if this index is already a write, find the next available index
             if (isWrite[(int)index]) {
                 while (isWrite[(int)index]){

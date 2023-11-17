@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace DB {
 /// <summary>
@@ -9,7 +10,7 @@ public class TransactionContext {
     internal TransactionStatus status;
     internal int startTxnNum;
     internal List<(KeyAttr, byte[])> Rset;
-    internal List<(KeyAttr, byte[])> Wset;
+    internal List<(TupleId, TupleDesc[], byte[])> Wset;
     public long tid;
 
     public void Init(int startTxn, long tid){
@@ -17,33 +18,40 @@ public class TransactionContext {
         this.tid = tid;
         status = TransactionStatus.Idle;
         Rset = new List<(KeyAttr, byte[])>();
-        Wset = new List<(KeyAttr, byte[])>();
+        Wset = new List<(TupleId, TupleDesc[], byte[])>();
     }
 
-    public int GetWriteSetKeyIndex(KeyAttr keyAttr){
+    public int GetWriteSetKeyIndex(TupleId tupleId){
+        for (int i = Wset.Count-1; i >= 0; i--){
+            if (Wset[i].Item1.Equals(tupleId)){
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    public int GetReadsetKeyIndex(TupleId tupleId){
+        for (int i = Rset.Count-1; i >= 0; i--){
+            if (Rset[i].Item1.Equals(tupleId)){
+                return i;
+            }
+        }
+        return -1;
+    }
+    private byte[]? GetWriteSetKeyAttr(KeyAttr keyAttr){
         for (int i = Wset.Count-1; i >= 0; i--){
             if (Wset[i].Item1.Key == keyAttr.Key && Wset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
-                return i;
+                int start = 0;
+                for (int j = 0; j < Wset[i].Item2.Length; j++){
+                    int size = Wset[i].Item2[j].Size;
+                    if (Wset[i].Item2[j].Attr == keyAttr.Attr){
+                        return Wset[i].Item3.AsSpan(start, size).ToArray();
+                    }
+                    start += size;
+                }
             }
         }
-        return -1;
-    }
-
-    public int GetReadsetKeyIndex(KeyAttr keyAttr){
-        for (int i = Rset.Count-1; i >= 0; i--){
-            if (Rset[i].Item1.Key == keyAttr.Key && Rset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
-                return i;
-            }
-        }
-        return -1;
-    }
-    private int GetWriteSetKeyAttrIndex(KeyAttr keyAttr){
-        for (int i = Wset.Count-1; i >= 0; i--){
-            if (Wset[i].Item1.Key == keyAttr.Key && Wset[i].Item1.Attr == keyAttr.Attr && Wset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
-                return i;
-            }
-        }
-        return -1;
+        return null;
     }
 
     private int GetReadsetKeyAttrIndex(KeyAttr keyAttr){
@@ -56,34 +64,32 @@ public class TransactionContext {
     }
 
     public byte[]? GetFromContext(KeyAttr keyAttr){
-        byte[]? val = null;
-        int wi = GetWriteSetKeyAttrIndex(keyAttr);
-        if (wi != -1){
-            val = Wset[wi].Item2;
-        } else {
+        byte[]? val = GetWriteSetKeyAttr(keyAttr);
+        // (int size, int offset) = keyAttr.Table.metadata[keyAttr.Attr];
+        if (val == null){
             int ri = GetReadsetKeyAttrIndex(keyAttr);
             if (ri != -1){
                 val = Rset[ri].Item2;
             }
         }
         if (val != null) {
-            SetInContext(OperationType.Read, keyAttr, val);
+            AddReadSet(keyAttr, val);
         }
         return val;
     }
 
-    public void SetInContext(OperationType op, KeyAttr keyAttr, ReadOnlySpan<byte> val){
-        if (op == OperationType.Read) {
-            Rset.Add((keyAttr, val.ToArray()));
-        } else {
-            Wset.Add((keyAttr, val.ToArray()));
-        }
+    public void AddReadSet(KeyAttr keyAttr, ReadOnlySpan<byte> val){
+        Rset.Add((keyAttr, val.ToArray()));
+    }
+
+    public void AddWriteSet(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
+        Wset.Add((tupleId, tupleDescs, val.ToArray()));
     }
 
     public List<(KeyAttr, byte[])> GetReadset(){
         return Rset;
     }
-    public List<(KeyAttr, byte[])> GetWriteset(){
+    public List<(TupleId, TupleDesc[], byte[])> GetWriteset(){
         return Wset;
     }
 
