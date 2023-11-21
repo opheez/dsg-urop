@@ -49,6 +49,7 @@ namespace DB
             TupleDesc[] td2 = new TupleDesc[]{new TupleDesc(2, 3)};
             byte[] val2 = new byte[]{9,8,7};
             ctx.AddWriteSet(tupleId, td2, val2);
+            // should not be affected by this
             ctx.AddReadSet(new KeyAttr(2, 1, tbl), new byte[]{5,5,5});
             ReadOnlySpan<byte> res3 = ctx.GetFromContext(ka1);
             ReadOnlySpan<byte> res4 = ctx.GetFromContext(ka2);

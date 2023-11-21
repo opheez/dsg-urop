@@ -162,7 +162,32 @@ namespace DB
 
             Assert.IsTrue(success, "Transaction was unable to commit");
             CollectionAssert.AreEqual(value, v1.ToArray());
+            CollectionAssert.AreEqual(value2, v2.ToArray());
         }
+
+        [TestMethod]
+        public void TestInsertSomeAttributes(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(schema);
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads);
+            txnManager.Run();
+
+            TransactionContext t = txnManager.Begin();
+            TupleDesc[] td1 = {new TupleDesc(12345, 4)};
+            TupleDesc[] td2 = {new TupleDesc(56789, 4)};
+            byte[] value = BitConverter.GetBytes(21);
+            
+            TupleId id = table.Insert(td2, value, t);
+            var v1 = table.Read(id, td1, t);
+            var v2 = table.Read(id, td2, t);
+            var success = txnManager.Commit(t);
+            txnManager.Terminate();
+
+            Assert.IsTrue(success, "Transaction was unable to commit");
+            Assert.IsTrue(v1.IsEmpty);
+            CollectionAssert.AreEqual(value, v2.ToArray());
+        }
+
         [TestMethod]
         public void TestReadAllAttributes(){
             (long,int)[] schema = {(12345,4), (56789, 4)};

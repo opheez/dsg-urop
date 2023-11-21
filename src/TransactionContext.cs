@@ -9,68 +9,41 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxnNum;
-    internal List<(KeyAttr, byte[])> Rset;
-    internal List<(TupleId, TupleDesc[], byte[])> Wset;
+    internal Dictionary<KeyAttr, byte[]> Rset;
+    internal Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> Wset;
     public long tid;
 
     public void Init(int startTxn, long tid){
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;
-        Rset = new List<(KeyAttr, byte[])>();
-        Wset = new List<(TupleId, TupleDesc[], byte[])>();
+        Rset = new Dictionary<KeyAttr, byte[]>();
+        Wset = new Dictionary<TupleId, Dictionary<TupleDesc, byte[]>>();
     }
 
-    public int GetWriteSetKeyIndex(TupleId tupleId){
-        for (int i = Wset.Count-1; i >= 0; i--){
-            if (Wset[i].Item1.Equals(tupleId)){
-                return i;
+    public bool InReadSet(TupleId tupleId){
+        foreach (KeyAttr ka in Rset.Keys){
+            if (ka.Key == tupleId.Key && ka.Table == tupleId.Table){
+                return true;
             }
         }
-        return -1;
+        return false;
     }
 
-    public int GetReadsetKeyIndex(TupleId tupleId){
-        for (int i = Rset.Count-1; i >= 0; i--){
-            if (Rset[i].Item1.Equals(tupleId)){
-                return i;
-            }
-        }
-        return -1;
-    }
-    private ReadOnlySpan<byte> GetWriteSetKeyAttr(KeyAttr keyAttr){
-        for (int i = Wset.Count-1; i >= 0; i--){
-            if (Wset[i].Item1.Key == keyAttr.Key && Wset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
-                int start = 0;
-                for (int j = 0; j < Wset[i].Item2.Length; j++){
-                    int size = Wset[i].Item2[j].Size;
-                    if (Wset[i].Item2[j].Attr == keyAttr.Attr){
-                        return Wset[i].Item3.AsSpan(start, size);
-                    }
-                    start += size;
-                }
-            }
-        }
-        return null;
-    }
-
-    private int GetReadsetKeyAttrIndex(KeyAttr keyAttr){
-        for (int i = Rset.Count-1; i >= 0; i--){
-            if (Rset[i].Item1.Key == keyAttr.Key && Rset[i].Item1.Attr == keyAttr.Attr && Rset[i].Item1.Table.GetHashCode() == keyAttr.Table.GetHashCode()){
-                return i;
-            }
-        }
-        return -1;
+    public bool InWriteSet(TupleId tupleId){
+        return Wset.ContainsKey(tupleId);
     }
 
     public ReadOnlySpan<byte> GetFromContext(KeyAttr keyAttr){
-        ReadOnlySpan<byte> val = GetWriteSetKeyAttr(keyAttr);
+        ReadOnlySpan<byte> val = null;
+        Dictionary<TupleDesc, byte[]> wsetVal = Wset.GetValueOrDefault(new TupleId(keyAttr.Key, keyAttr.Table), null);
+        if (wsetVal != null) {
+            TupleDesc td = new TupleDesc(keyAttr.Attr, keyAttr.Table.metadata[keyAttr.Attr].Item1);
+            val = wsetVal.GetValueOrDefault(td, null);
+        }
         // (int size, int offset) = keyAttr.Table.metadata[keyAttr.Attr];
         if (val == null){
-            int ri = GetReadsetKeyAttrIndex(keyAttr);
-            if (ri != -1){
-                val = Rset[ri].Item2;
-            }
+            val = Rset.GetValueOrDefault(keyAttr, null);
         }
         if (val != null) {
             AddReadSet(keyAttr, val);
@@ -79,22 +52,38 @@ public class TransactionContext {
     }
 
     public void AddReadSet(KeyAttr keyAttr, ReadOnlySpan<byte> val){
-        Rset.Add((keyAttr, val.ToArray()));
+        Rset[keyAttr] = val.ToArray();
     }
 
     public void AddWriteSet(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
-        Wset.Add((tupleId, tupleDescs, val.ToArray()));
+        Dictionary<TupleDesc, byte[]> wsetVal = Wset.GetValueOrDefault(tupleId, new Dictionary<TupleDesc, byte[]>());
+
+        int start = 0;
+        foreach (TupleDesc td in tupleDescs){
+            wsetVal[td] = val.Slice(start, td.Size).ToArray(); // TODO: dont use ToArray();
+            start += td.Size;
+        }
+
+        Wset[tupleId] = wsetVal;
     }
 
-    public List<(KeyAttr, byte[])> GetReadset(){
+    public Dictionary<KeyAttr, byte[]> GetReadset(){
         return Rset;
     }
-    public List<(TupleId, TupleDesc[], byte[])> GetWriteset(){
+    public Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> GetWriteset(){
         return Wset;
     }
 
     public override string ToString(){
         return $"Readset: {string.Join(Environment.NewLine, GetReadset())}\nWriteset: {string.Join(Environment.NewLine, GetWriteset())}";
+    }
+
+    private string PrintDictionary(Dictionary<TupleDesc, byte[]> dict){
+        StringBuilder sb = new StringBuilder();
+        foreach (var item in dict){
+            sb.Append($"({item.Key}, {item.Value})");
+        }
+        return sb.ToString();
     }
 }
 
