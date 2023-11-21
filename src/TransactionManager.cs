@@ -105,10 +105,10 @@ public class TransactionManager {
             //     Console.Write($"{x}, ");
             // }
             foreach (var item in ctx.GetReadset()){
-                KeyAttr keyAttr = item.Key;
+                TupleId tupleId = item.Key;
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
-                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(new TupleId(keyAttr.Key, keyAttr.Table))){
+                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(tupleId)){
                     valid = false;
                     break;
                 }

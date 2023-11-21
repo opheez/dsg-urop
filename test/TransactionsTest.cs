@@ -184,7 +184,7 @@ namespace DB
             txnManager.Terminate();
 
             Assert.IsTrue(success, "Transaction was unable to commit");
-            Assert.IsTrue(v1.IsEmpty);
+            Assert.IsTrue(Util.IsEmpty(v1));
             CollectionAssert.AreEqual(value, v2.ToArray());
         }
 
@@ -244,7 +244,7 @@ namespace DB
             Assert.IsTrue(success2, "Transaction 2 was unable to commit");
             Assert.IsTrue(success3, "Transaction 3 was unable to commit");
             CollectionAssert.AreEqual(res1.ToArray(), val1);
-            CollectionAssert.AreEqual(res2.ToArray(), Array.Empty<byte>());
+            Assert.IsTrue(Util.IsEmpty(res2));
             CollectionAssert.AreEqual(res3.ToArray(), val2);
         }
 
@@ -285,8 +285,8 @@ namespace DB
 
             Assert.IsTrue(success2, "Transaction 2 was unable to commit");
             Assert.IsTrue(success3, "Transaction 3 was unable to commit");
-            CollectionAssert.AreEqual(res1.ToArray(), Array.Empty<byte>());
-            CollectionAssert.AreEqual(res2.ToArray(), Array.Empty<byte>());
+            Assert.IsTrue(Util.IsEmpty(res1));
+            Assert.IsTrue(Util.IsEmpty(res2));
             // System.Console.WriteLine($"val: {v6.ToArray().Length}");
             CollectionAssert.AreEqual(res3.ToArray(), BitConverter.GetBytes(21));
             CollectionAssert.AreEqual(res4.ToArray(), BitConverter.GetBytes(5));
@@ -319,7 +319,7 @@ namespace DB
             var success2 = txnManager.Commit(t2);
             txnManager.Terminate();
 
-            Assert.IsTrue(res2.IsEmpty, "New context should not read uncommitted value");
+            Assert.IsTrue(Util.IsEmpty(res2), "New context should not read uncommitted value");
             Assert.IsTrue(success, "Transaction was unable to commit");
             Assert.IsFalse(success2, "Transaction 2 should abort");
             CollectionAssert.AreEqual(res1.ToArray(), val1);

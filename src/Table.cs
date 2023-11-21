@@ -45,45 +45,58 @@ public unsafe class Table : IDisposable{
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
     
+    // will never return null, empty 
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
 
-        // if (tupleDescs.Length == 1) {
-        //     return Read(new KeyAttr(tupleId.Key, tupleDescs[0].Attr, this));
-        // }
-
-        List<byte> result = new();
-        int writeOffset = 0; // TODO: need to return tupleDesc for varLen
-        foreach (TupleDesc desc in tupleDescs) {
-            ReadOnlySpan<byte> valueToWrite;
-            (int size, int readOffset) = this.metadata[desc.Attr];
-            KeyAttr ka = new KeyAttr(tupleId.Key, desc.Attr, this);
-            var ctxRead = ctx.GetFromContext(ka);
-            if (ctxRead != null) {
-                valueToWrite = ctxRead;
-            } else {
-                valueToWrite = this.Read(new KeyAttr(tupleId.Key, desc.Attr, this));
-                ctx.AddReadSet(ka, valueToWrite);
-            }
-            
-            result.AddRange(valueToWrite.ToArray());
-            writeOffset += valueToWrite.Length;
+        ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
+        if (value == null) {
+            value = Read(tupleId);
         }
 
-        return result.ToArray();
+        ReadOnlySpan<byte> result;
+        // apply writeset
+        Dictionary<TupleDesc, byte[]> changes = ctx.GetFromWriteset(tupleId);
+        if (changes != null) {
+            Span<byte> updatedValue = value.ToArray();
+            foreach (TupleDesc td in changes.Keys) {
+                int offset = this.metadata[td.Attr].Item2;
+                changes[td].CopyTo(updatedValue.Slice(offset));
+            }
+            result = updatedValue;
+        } else {
+            result = value;
+        }
+        // TODO: deal with varLen
+        // project out the attributes
+        ctx.AddReadSet(tupleId, result);
+        return project(result, tupleDescs);
+    }
+
+    private ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
+        // TODO: do this without allocating 
+        int totalSize = 0;
+        foreach (TupleDesc td in tupleDescs){
+            totalSize += td.Size;
+        }
+
+        Span<byte> result = new byte[totalSize];
+        int writeStart = 0;
+        foreach (TupleDesc td in tupleDescs){
+            int offset = this.metadata[td.Attr].Item2;
+            value.Slice(offset, td.Size).CopyTo(result.Slice(writeStart, td.Size));
+            writeStart += td.Size;
+        }
+        return result;
     }
 
     // Assumes attribute is valid 
-    internal ReadOnlySpan<byte> Read(KeyAttr keyAttr){
-        if (!this.data.ContainsKey(keyAttr.Key)){ // TODO: validate table
-            return ReadOnlySpan<byte>.Empty;
+    internal ReadOnlySpan<byte> Read(TupleId tupleId){
+        if (!this.data.ContainsKey(tupleId.Key)){ // TODO: validate table
+            return new byte[this.rowSize];
         }
-        (int size, int readOffset) = this.metadata[keyAttr.Attr];
-        if (size == -1) {
-            Pointer ptr = GetVarLenPtr(keyAttr.Key, readOffset);
-            return new ReadOnlySpan<byte>(ptr.Ptr, ptr.Size).ToArray();
-        } 
-        return this.data[keyAttr.Key].AsSpan().Slice(readOffset, size);
+        // TODO: deal with varLen 
+        return this.data[tupleId.Key];
     }
 
     protected Pointer GetVarLenPtr(long key, int offset){

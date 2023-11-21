@@ -9,50 +9,64 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxnNum;
-    internal Dictionary<KeyAttr, byte[]> Rset;
-    internal Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> Wset;
+    internal Dictionary<TupleId, byte[]> Rset = new(); // byte[] is the entire record
+    internal Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> Wset = new(); // byte[] corresponds to the TupleDesc
     public long tid;
 
     public void Init(int startTxn, long tid){
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;
-        Rset = new Dictionary<KeyAttr, byte[]>();
+        Rset = new Dictionary<TupleId, byte[]>();
         Wset = new Dictionary<TupleId, Dictionary<TupleDesc, byte[]>>();
     }
 
     public bool InReadSet(TupleId tupleId){
-        foreach (KeyAttr ka in Rset.Keys){
-            if (ka.Key == tupleId.Key && ka.Table == tupleId.Table){
-                return true;
-            }
-        }
-        return false;
+        return Rset.ContainsKey(tupleId);
     }
-
     public bool InWriteSet(TupleId tupleId){
         return Wset.ContainsKey(tupleId);
     }
 
-    public ReadOnlySpan<byte> GetFromContext(KeyAttr keyAttr){
-        ReadOnlySpan<byte> val = null;
-        Dictionary<TupleDesc, byte[]> wsetVal = Wset.GetValueOrDefault(new TupleId(keyAttr.Key, keyAttr.Table), null);
-        if (wsetVal != null) {
-            TupleDesc td = new TupleDesc(keyAttr.Attr, keyAttr.Table.metadata[keyAttr.Attr].Item1);
-            val = wsetVal.GetValueOrDefault(td, null);
-        }
-        // (int size, int offset) = keyAttr.Table.metadata[keyAttr.Attr];
-        if (val == null){
-            val = Rset.GetValueOrDefault(keyAttr, null);
-        }
-        if (val != null) {
-            AddReadSet(keyAttr, val);
-        }
-        return val;
+    // public ReadOnlySpan<byte> GetFromContext(TupleId tupleId){
+    //     ReadOnlySpan<byte> val = null;
+    //     Dictionary<TupleDesc, byte[]> wsetVal = Wset.GetValueOrDefault(tupleId, null);
+    //     if (wsetVal != null) {
+    //         TupleDesc td = new TupleDesc(keyAttr.Attr, keyAttr.Table.metadata[keyAttr.Attr].Item1);
+    //         val = wsetVal.GetValueOrDefault(td, null);
+    //     }
+
+    //     if (val == null){
+    //         val = Rset.GetValueOrDefault(tupleId, null);
+    //     }
+    //     if (val != null) {
+    //         AddReadSet(tupleId, val);
+    //     }
+    //     return val;
+    // }
+
+    // public int GetReadsetKeyIndex(TupleId tupleId){
+    //     for (int i = Rset.Count-1; i >= 0; i--){
+    //         if (Rset[i].Item1.Equals(tupleId)){
+    //             return i;
+    //         }
+    //     }
+    //     return -1;
+    // }
+    public Dictionary<TupleDesc, byte[]> GetFromWriteset(TupleId tupleId){
+       return Wset.GetValueOrDefault(tupleId, null);
     }
 
-    public void AddReadSet(KeyAttr keyAttr, ReadOnlySpan<byte> val){
-        Rset[keyAttr] = val.ToArray();
+    public ReadOnlySpan<byte> GetFromReadset(TupleId tupleId){
+        return Rset.GetValueOrDefault(tupleId, null);
+    }
+
+    public void AddReadSet(TupleId tupleId, ReadOnlySpan<byte> val){
+        // TODO: varlen
+        if (val.Length != tupleId.Table.rowSize){
+            throw new ArgumentException($"Readset value length {val.Length} does not match table row size {tupleId.Table.rowSize}");
+        }
+        Rset[tupleId] = val.ToArray();
     }
 
     public void AddWriteSet(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
@@ -67,7 +81,7 @@ public class TransactionContext {
         Wset[tupleId] = wsetVal;
     }
 
-    public Dictionary<KeyAttr, byte[]> GetReadset(){
+    public Dictionary<TupleId, byte[]> GetReadset(){
         return Rset;
     }
     public Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> GetWriteset(){

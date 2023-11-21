@@ -131,6 +131,10 @@ namespace DB {
         }
         public long Attr;
         public int Size;
+
+        public override string ToString(){
+            return $"({Attr}, {Size})";
+        }
     }
 
     public struct KeyAttr {
