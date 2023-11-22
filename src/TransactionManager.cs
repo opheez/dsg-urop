@@ -105,7 +105,7 @@ public class TransactionManager {
             //     Console.Write($"{x}, ");
             // }
             foreach (var item in ctx.GetReadset()){
-                TupleId tupleId = item.Key;
+                TupleId tupleId = item.Item1;
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
                 if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(tupleId)){
@@ -120,7 +120,7 @@ public class TransactionManager {
         
         foreach (TransactionContext pastTxn in finish_active){
             foreach (var item in pastTxn.GetWriteset()){
-                TupleId tupleId = item.Key;
+                TupleId tupleId = item.Item1;
                 if (ctx.InReadSet(tupleId) || ctx.InWriteSet(tupleId)){
                     // Console.WriteLine($"ABORT because conflict: {keyAttr}");
                     valid = false;
@@ -141,16 +141,16 @@ public class TransactionManager {
         if (valid) {
             // write phase
             foreach (var item in ctx.GetWriteset()){
-                Dictionary<TupleDesc, byte[]> val = item.Value;
-                TupleId tupleId = item.Key;
-                foreach (var vals in item.Value){
+                TupleId tupleId = item.Item1;
+                int start = 0;
+                foreach (TupleDesc td in item.Item2){
                     // TODO: should not throw exception here, but if it does, abort. 
                     // failure here means crashed before commit. would need to rollback
                     // if (this.wal != null) {
                     //     wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
                     // }
-                    TupleDesc td = vals.Key;
-                    tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), vals.Value);
+                    tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
+                    start += td.Size;
                 }
             }
             // TODO: verify that should be logged before removing from active

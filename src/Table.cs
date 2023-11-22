@@ -56,12 +56,14 @@ public unsafe class Table : IDisposable{
 
         ReadOnlySpan<byte> result;
         // apply writeset
-        Dictionary<TupleDesc, byte[]> changes = ctx.GetFromWriteset(tupleId);
-        if (changes != null) {
+        (TupleDesc[], byte[]) changes = ctx.GetFromWriteset(tupleId);
+        if (changes.Item2 != null) {
             Span<byte> updatedValue = value.ToArray();
-            foreach (TupleDesc td in changes.Keys) {
+            int start = 0;
+            foreach (TupleDesc td in changes.Item1) {
                 int offset = this.metadata[td.Attr].Item2;
-                changes[td].CopyTo(updatedValue.Slice(offset));
+                changes.Item2.AsSpan(start, td.Size).CopyTo(updatedValue.Slice(offset));
+                start += td.Size;
             }
             result = updatedValue;
         } else {

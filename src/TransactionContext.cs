@@ -9,56 +9,39 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxnNum;
-    internal Dictionary<TupleId, byte[]> Rset = new(); // byte[] is the entire record
-    internal Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> Wset = new(); // byte[] corresponds to the TupleDesc
+    internal List<(TupleId, byte[])> Rset = new(); // byte[] is the entire record
+    internal List<(TupleId, TupleDesc[], byte[])> Wset = new(); // byte[] corresponds to the TupleDesc
     public long tid;
 
     public void Init(int startTxn, long tid){
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;
-        Rset = new Dictionary<TupleId, byte[]>();
-        Wset = new Dictionary<TupleId, Dictionary<TupleDesc, byte[]>>();
+        Rset = new List<(TupleId, byte[])>();
+        Wset = new List<(TupleId, TupleDesc[], byte[])>();
     }
 
     public bool InReadSet(TupleId tupleId){
-        return Rset.ContainsKey(tupleId);
+        return GetReadsetKeyIndex(tupleId) != -1;
     }
     public bool InWriteSet(TupleId tupleId){
-        return Wset.ContainsKey(tupleId);
+        return GetWriteSetKeyIndex(tupleId) != -1;
     }
 
-    // public ReadOnlySpan<byte> GetFromContext(TupleId tupleId){
-    //     ReadOnlySpan<byte> val = null;
-    //     Dictionary<TupleDesc, byte[]> wsetVal = Wset.GetValueOrDefault(tupleId, null);
-    //     if (wsetVal != null) {
-    //         TupleDesc td = new TupleDesc(keyAttr.Attr, keyAttr.Table.metadata[keyAttr.Attr].Item1);
-    //         val = wsetVal.GetValueOrDefault(td, null);
-    //     }
-
-    //     if (val == null){
-    //         val = Rset.GetValueOrDefault(tupleId, null);
-    //     }
-    //     if (val != null) {
-    //         AddReadSet(tupleId, val);
-    //     }
-    //     return val;
-    // }
-
-    // public int GetReadsetKeyIndex(TupleId tupleId){
-    //     for (int i = Rset.Count-1; i >= 0; i--){
-    //         if (Rset[i].Item1.Equals(tupleId)){
-    //             return i;
-    //         }
-    //     }
-    //     return -1;
-    // }
-    public Dictionary<TupleDesc, byte[]> GetFromWriteset(TupleId tupleId){
-       return Wset.GetValueOrDefault(tupleId, null);
+    public (TupleDesc[], byte[]) GetFromWriteset(TupleId tupleId){
+        int index = GetWriteSetKeyIndex(tupleId);
+        if (index == -1){
+            return (null, null);
+        }
+        return (Wset[index].Item2, Wset[index].Item3);
     }
 
     public ReadOnlySpan<byte> GetFromReadset(TupleId tupleId){
-        return Rset.GetValueOrDefault(tupleId, null);
+        int index = GetReadsetKeyIndex(tupleId);
+        if (index == -1){
+            return null;
+        }
+        return Rset[index].Item2;
     }
 
     public void AddReadSet(TupleId tupleId, ReadOnlySpan<byte> val){
@@ -66,38 +49,119 @@ public class TransactionContext {
         if (val.Length != tupleId.Table.rowSize){
             throw new ArgumentException($"Readset value length {val.Length} does not match table row size {tupleId.Table.rowSize}");
         }
-        Rset[tupleId] = val.ToArray();
+        Rset.Add((tupleId,val.ToArray()));
     }
 
     public void AddWriteSet(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
-        Dictionary<TupleDesc, byte[]> wsetVal = Wset.GetValueOrDefault(tupleId, new Dictionary<TupleDesc, byte[]>());
+        int index = GetWriteSetKeyIndex(tupleId);
+        if (index != -1){
+            (TupleId, TupleDesc[], byte[]) existing = Wset[index];
+            // List<byte> result = new List<byte>();
+            // int start = 0;
+            // foreach (TupleDesc td in existing.Item2){
+            //     bool included = false;
+            //     int newStart = 0;
+            //     foreach (TupleDesc newTd in tupleDescs){
+            //         if (td.Attr == newTd.Attr){
+            //             included = true;
 
-        int start = 0;
-        foreach (TupleDesc td in tupleDescs){
-            wsetVal[td] = val.Slice(start, td.Size).ToArray(); // TODO: dont use ToArray();
-            start += td.Size;
+            //             result.AddRange(val.Slice(newStart, td.Size));
+            //         }
+            //         newStart += newTd.Size;
+            //     }
+            //     if (!included) finalSize += td.Size;
+
+
+            //     if (td.Attr == tupleDescs[0].Attr){
+            //         result.AddRange(val.ToArray());
+            //     } else {
+            //         result.AddRange(existing.Item3.AsSpan(start, td.Size).ToArray());
+            //     }
+            //     start += td.Size;
+            // }
+
+            // calculate final size
+            int finalSize = existing.Item3.Length;
+            foreach (TupleDesc td in tupleDescs){
+                bool included = false;
+                foreach (TupleDesc existingTd in existing.Item2){
+                    if (td.Attr == existingTd.Attr){
+                        included = true;
+                    }
+                }
+                if (!included) finalSize += td.Size;
+            }
+
+            // copy values, replacing existing values with new ones
+            Span<byte> newVal = new byte[finalSize];
+            bool[] includedTd = new bool[tupleDescs.Length];
+            int start = 0;
+            foreach (TupleDesc existingTd in existing.Item2){
+                bool included = false;
+                int newStart = 0;
+                for (int i = 0; i < tupleDescs.Length; i++){
+                    TupleDesc newTd = tupleDescs[i];
+                    if (existingTd.Equals(newTd)){
+                        included = true;
+                        includedTd[i] = true;
+                        val.Slice(newStart, newTd.Size).CopyTo(newVal.Slice(start, newTd.Size));
+                        break;
+                    }
+                    newStart += newTd.Size;
+                }
+                if (!included) {
+                    existing.Item3.AsSpan(start, existingTd.Size).CopyTo(newVal.Slice(start, existingTd.Size));
+                } 
+                start += existingTd.Size;
+            }
+
+            // add remaining values, also to tupleDescs
+            TupleDesc[] newTupleDescs = new TupleDesc[existing.Item2.Length + includedTd.Count(x => !x)];
+            existing.Item2.CopyTo(newTupleDescs, 0);
+            int readStart = 0;
+            int j = existing.Item2.Length;
+            for (int i = 0; i < tupleDescs.Length; i++){
+                if (!includedTd[i]){
+                    val.Slice(readStart, tupleDescs[i].Size).CopyTo(newVal.Slice(start, tupleDescs[i].Size));
+                    newTupleDescs[j++] = tupleDescs[i];
+                    start += tupleDescs[i].Size;
+                }
+                readStart += tupleDescs[i].Size;
+            }
+
+            Wset.Add((tupleId, newTupleDescs, newVal.ToArray()));
+        } else {
+            Wset.Add((tupleId, tupleDescs, val.ToArray()));
         }
-
-        Wset[tupleId] = wsetVal;
     }
 
-    public Dictionary<TupleId, byte[]> GetReadset(){
+    public List<(TupleId, byte[])> GetReadset(){
         return Rset;
     }
-    public Dictionary<TupleId, Dictionary<TupleDesc, byte[]>> GetWriteset(){
+    public List<(TupleId, TupleDesc[], byte[])>GetWriteset(){
         return Wset;
+    }
+
+    private int GetWriteSetKeyIndex(TupleId tupleId){
+        for (int i = Wset.Count-1; i >= 0; i--){
+            if (Wset[i].Item1.Equals(tupleId)){
+                return i;
+            }
+        }
+        return -1;
+    }
+    
+    private int GetReadsetKeyIndex(TupleId tupleId){
+        for (int i = Rset.Count-1; i >= 0; i--){
+            if (Rset[i].Item1.Equals(tupleId)){
+                return i;
+            }
+        }
+        return -1;
     }
 
     public override string ToString(){
         return $"Readset: {string.Join(Environment.NewLine, GetReadset())}\nWriteset: {string.Join(Environment.NewLine, GetWriteset())}";
-    }
-
-    private string PrintDictionary(Dictionary<TupleDesc, byte[]> dict){
-        StringBuilder sb = new StringBuilder();
-        foreach (var item in dict){
-            sb.Append($"({item.Key}, {item.Value})");
-        }
-        return sb.ToString();
     }
 }
 

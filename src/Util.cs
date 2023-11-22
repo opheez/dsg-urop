@@ -133,7 +133,7 @@ namespace DB {
         public int Size;
 
         public override string ToString(){
-            return $"({Attr}, {Size})";
+            return $"TD ({Attr}, {Size})";
         }
     }
 

@@ -50,18 +50,19 @@ namespace DB
             TupleDesc[] td = new TupleDesc[]{new TupleDesc(1, 3), new TupleDesc(2, 3)};
             byte[] val1 = new byte[]{1,2,3,4,5,6};
             ctx.AddWriteSet(tupleId, td, val1);
-            Dictionary<TupleDesc, byte[]> res1 = ctx.GetFromWriteset(tupleId);
+            (TupleDesc[], byte[]) res1 = ctx.GetFromWriteset(tupleId);
             
-            Dictionary<TupleDesc, byte[]> expected1 = new Dictionary<TupleDesc, byte[]>(){{td[0], new byte[]{1,2,3}}, {td[1], new byte[]{4,5,6}}};
-            Assert.IsTrue(isDictEqual(expected1, res1));
 
             TupleDesc[] td2 = new TupleDesc[]{new TupleDesc(2, 3)};
             byte[] val2 = new byte[]{9,8,7};
             ctx.AddWriteSet(tupleId, td2, val2);
-            Dictionary<TupleDesc, byte[]> res2 = ctx.GetFromWriteset(tupleId);
+            (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(tupleId);
 
-            Dictionary<TupleDesc, byte[]> expected2 = new Dictionary<TupleDesc, byte[]>(){{td[0], new byte[]{1,2,3}}, {td[1], new byte[]{9,8,7}}};
-            Assert.IsTrue(isDictEqual(expected2, res2));
+            CollectionAssert.AreEqual(val1, res1.Item2);
+            CollectionAssert.AreEqual(td, res1.Item1);
+            CollectionAssert.AreEqual(new byte[]{1,2,3,9,8,7}, res2.Item2);
+            Console.WriteLine(string.Join(",",res2.Item1));
+            CollectionAssert.AreEqual(td, res2.Item1);
         }
 
         [TestMethod]
@@ -75,23 +76,12 @@ namespace DB
             byte[] val1 = new byte[]{4,5,6};
             ctx.AddWriteSet(tupleId, td, val1);
             ReadOnlySpan<byte> res1 = ctx.GetFromReadset(new TupleId(1, tbl));
-            Dictionary<TupleDesc, byte[]> res2 = ctx.GetFromWriteset(new TupleId(2, tbl));
+            (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(new TupleId(2, tbl));
 
             Assert.IsTrue(res1 == null);
-            Assert.IsTrue(res2 == null);
+            Assert.IsTrue(res2.Item1 == null);
+            Assert.IsTrue(res2.Item2 == null);
         }
 
-        private bool isDictEqual(Dictionary<TupleDesc, byte[]> dict1, Dictionary<TupleDesc, byte[]> dict2){
-            if (dict1.Count != dict2.Count){
-                return false;
-            }
-            foreach (var item in dict1){
-                byte[] val1 = item.Value;
-                if (!dict2.ContainsKey(item.Key) || !MemoryExtensions.SequenceEqual(val1.AsSpan(), dict2[item.Key].AsSpan())){
-                    return false;
-                }
-            }
-            return true;
-        }
     } 
 }
