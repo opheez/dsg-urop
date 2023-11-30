@@ -125,15 +125,17 @@ namespace DB {
     }
 
     public struct TupleDesc {
-        public TupleDesc(long attr, int size){
+        public TupleDesc(long attr, int size, int offset){
             Attr = attr;
             Size = size;
+            Offset = offset;
         }
         public long Attr;
         public int Size;
+        public int Offset;
 
         public override string ToString(){
-            return $"TD ({Attr}, {Size})";
+            return $"(Attr:{Attr}, Size:{Size}, Offset:{Offset})";
         }
     }
 

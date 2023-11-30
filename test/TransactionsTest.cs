@@ -24,7 +24,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 10)};
+            TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
             test.Insert(td, name, t);
             var success = txnManager.Commit(t);
@@ -40,7 +40,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 1)};
+            TupleDesc[] td = {new TupleDesc(12345, 1, 0)};
             byte[] name = Encoding.ASCII.GetBytes("a");
             test.Insert(td, name, t);
             var success = txnManager.Commit(t);
@@ -56,7 +56,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 10)};
+            TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("");
             test.Insert(td, name, t);
             var success = txnManager.Commit(t);
@@ -72,7 +72,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 10)};
+            TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("");
             TupleId id = test.Insert(td, name, t);
             test.Insert(id, td, name, t);
@@ -88,7 +88,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
             byte[] value = BitConverter.GetBytes(21);
             TupleId id = table.Insert(td, value, t);
             var v1 = table.Read(id, td, t);
@@ -96,8 +96,6 @@ namespace DB
             txnManager.Terminate();
 
             Assert.IsTrue(success, "Transaction was unable to commit");
-            Console.WriteLine(v1.ToArray());
-            Console.WriteLine(v1.ToArray().Length);
             CollectionAssert.AreEqual(value, v1.ToArray());
         }
 
@@ -109,7 +107,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
             byte[] value = BitConverter.GetBytes(21);
             TupleId id = table.Insert(td, value, t);
             value = BitConverter.GetBytes(40);
@@ -130,7 +128,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
             TupleId tid = table.Insert(td, BitConverter.GetBytes(21).AsSpan(), t);
             var v1 = table.Read(tid, td, t);
             var success = txnManager.Commit(t);
@@ -148,14 +146,14 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 4), new TupleDesc(56789, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0), new TupleDesc(56789, 4, 4)};
             byte[] value = BitConverter.GetBytes(21);
             byte[] value2 = BitConverter.GetBytes(95);
             
             TupleId id = table.Insert(td, value.Concat(value2).ToArray(), t);
-            TupleDesc[] td1 = {new TupleDesc(12345, 4)};
+            TupleDesc[] td1 = {new TupleDesc(12345, 4, 0)};
             var v1 = table.Read(id, td1, t);
-            TupleDesc[] td2 = {new TupleDesc(56789, 4)};
+            TupleDesc[] td2 = {new TupleDesc(56789, 4, 0)};
             var v2 = table.Read(id, td2, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -173,11 +171,11 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td1 = {new TupleDesc(12345, 4)};
-            TupleDesc[] td2 = {new TupleDesc(56789, 4)};
+            TupleDesc[] td1 = {new TupleDesc(12345, 4, 0)};
+            TupleDesc[] td2 = {new TupleDesc(56789, 4, 0)};
             byte[] value = BitConverter.GetBytes(21);
             
-            TupleId id = table.Insert(td2, value, t);
+            TupleId id = table.Insert(new TupleDesc[]{new TupleDesc(56789, 4, 0)}, value, t);
             var v1 = table.Read(id, td1, t);
             var v2 = table.Read(id, td2, t);
             var success = txnManager.Commit(t);
@@ -196,7 +194,7 @@ namespace DB
             txnManager.Run();
 
             TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 4), new TupleDesc(56789, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0), new TupleDesc(56789, 4, 4)};
             byte[] value1 = BitConverter.GetBytes(21);
             byte[] value2 = BitConverter.GetBytes(95);
             byte[] value = value1.Concat(value2).ToArray();
@@ -220,7 +218,7 @@ namespace DB
             Table table = new Table(schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
 
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
@@ -258,7 +256,7 @@ namespace DB
             Table table = new Table(schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
 
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
@@ -287,7 +285,6 @@ namespace DB
             Assert.IsTrue(success3, "Transaction 3 was unable to commit");
             Assert.IsTrue(Util.IsEmpty(res1));
             Assert.IsTrue(Util.IsEmpty(res2));
-            // System.Console.WriteLine($"val: {v6.ToArray().Length}");
             CollectionAssert.AreEqual(res3.ToArray(), BitConverter.GetBytes(21));
             CollectionAssert.AreEqual(res4.ToArray(), BitConverter.GetBytes(5));
         }
@@ -302,8 +299,8 @@ namespace DB
             Table table = new Table(schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
-            TupleDesc[] td2 = {new TupleDesc(56789, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
+            TupleDesc[] td2 = {new TupleDesc(56789, 4, 4)};
 
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
@@ -335,7 +332,7 @@ namespace DB
             Table table = new Table(schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
-            TupleDesc[] td = {new TupleDesc(12345, 4)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
 
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);

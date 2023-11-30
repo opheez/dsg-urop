@@ -42,26 +42,31 @@ namespace DB
 
         [TestMethod]
         public void TestGetFromWset(){
-            Table tbl = new Table(new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(new (long,int)[]{(1,3), (2,3), (3,3)});
 
             TransactionContext ctx = new TransactionContext();
             ctx.Init(0, 0);
             TupleId tupleId = new TupleId(1, tbl);
-            TupleDesc[] td = new TupleDesc[]{new TupleDesc(1, 3), new TupleDesc(2, 3)};
+            TupleDesc[] td = new TupleDesc[]{new TupleDesc(1, 3, 0), new TupleDesc(2, 3, 3)};
             byte[] val1 = new byte[]{1,2,3,4,5,6};
             ctx.AddWriteSet(tupleId, td, val1);
             (TupleDesc[], byte[]) res1 = ctx.GetFromWriteset(tupleId);
             
 
-            TupleDesc[] td2 = new TupleDesc[]{new TupleDesc(2, 3)};
+            TupleDesc[] td2 = new TupleDesc[]{new TupleDesc(2, 3, 0)};
             byte[] val2 = new byte[]{9,8,7};
             ctx.AddWriteSet(tupleId, td2, val2);
             (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(tupleId);
 
+            TupleDesc[] td3 = new TupleDesc[]{new TupleDesc(3, 3, 0)};
+            byte[] val3 = new byte[]{5,5,5};
+            ctx.AddWriteSet(tupleId, td3, val3);
+            (TupleDesc[], byte[]) res3 = ctx.GetFromWriteset(tupleId);
+
             CollectionAssert.AreEqual(val1, res1.Item2);
             CollectionAssert.AreEqual(td, res1.Item1);
             CollectionAssert.AreEqual(new byte[]{1,2,3,9,8,7}, res2.Item2);
-            Console.WriteLine(string.Join(",",res2.Item1));
+            CollectionAssert.AreEqual(new byte[]{1,2,3,9,8,7,5,5,5}, res3.Item2);
             CollectionAssert.AreEqual(td, res2.Item1);
         }
 
@@ -72,7 +77,7 @@ namespace DB
             TransactionContext ctx = new TransactionContext();
             ctx.Init(0, 0);
             TupleId tupleId = new TupleId(1, tbl);
-            TupleDesc[] td = new TupleDesc[]{new TupleDesc(2, 3)};
+            TupleDesc[] td = new TupleDesc[]{new TupleDesc(2, 3, 3)};
             byte[] val1 = new byte[]{4,5,6};
             ctx.AddWriteSet(tupleId, td, val1);
             ReadOnlySpan<byte> res1 = ctx.GetFromReadset(new TupleId(1, tbl));

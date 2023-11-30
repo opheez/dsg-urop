@@ -95,38 +95,33 @@ public class TransactionContext {
             // copy values, replacing existing values with new ones
             Span<byte> newVal = new byte[finalSize];
             bool[] includedTd = new bool[tupleDescs.Length];
-            int start = 0;
             foreach (TupleDesc existingTd in existing.Item2){
                 bool included = false;
-                int newStart = 0;
                 for (int i = 0; i < tupleDescs.Length; i++){
                     TupleDesc newTd = tupleDescs[i];
-                    if (existingTd.Equals(newTd)){
+                    if (existingTd.Attr == newTd.Attr){
                         included = true;
                         includedTd[i] = true;
-                        val.Slice(newStart, newTd.Size).CopyTo(newVal.Slice(start, newTd.Size));
+                        val.Slice(newTd.Offset, newTd.Size).CopyTo(newVal.Slice(existingTd.Offset, newTd.Size));
                         break;
                     }
-                    newStart += newTd.Size;
                 }
                 if (!included) {
-                    existing.Item3.AsSpan(start, existingTd.Size).CopyTo(newVal.Slice(start, existingTd.Size));
+                    existing.Item3.AsSpan(existingTd.Offset, existingTd.Size).CopyTo(newVal.Slice(existingTd.Offset, existingTd.Size));
                 } 
-                start += existingTd.Size;
             }
 
             // add remaining values, also to tupleDescs
             TupleDesc[] newTupleDescs = new TupleDesc[existing.Item2.Length + includedTd.Count(x => !x)];
             existing.Item2.CopyTo(newTupleDescs, 0);
-            int readStart = 0;
+            int start = existing.Item3.Length;
             int j = existing.Item2.Length;
             for (int i = 0; i < tupleDescs.Length; i++){
                 if (!includedTd[i]){
-                    val.Slice(readStart, tupleDescs[i].Size).CopyTo(newVal.Slice(start, tupleDescs[i].Size));
+                    val.Slice(tupleDescs[i].Offset, tupleDescs[i].Size).CopyTo(newVal.Slice(start, tupleDescs[i].Size));
                     newTupleDescs[j++] = tupleDescs[i];
                     start += tupleDescs[i].Size;
                 }
-                readStart += tupleDescs[i].Size;
             }
 
             Wset.Add((tupleId, newTupleDescs, newVal.ToArray()));

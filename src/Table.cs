@@ -47,7 +47,7 @@ public unsafe class Table : IDisposable{
     
     // will never return null, empty 
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
-        Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
+        Validate(tupleDescs, null, false);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
@@ -59,11 +59,9 @@ public unsafe class Table : IDisposable{
         (TupleDesc[], byte[]) changes = ctx.GetFromWriteset(tupleId);
         if (changes.Item2 != null) {
             Span<byte> updatedValue = value.ToArray();
-            int start = 0;
             foreach (TupleDesc td in changes.Item1) {
                 int offset = this.metadata[td.Attr].Item2;
-                changes.Item2.AsSpan(start, td.Size).CopyTo(updatedValue.Slice(offset));
-                start += td.Size;
+                changes.Item2.AsSpan(td.Offset, td.Size).CopyTo(updatedValue.Slice(offset));
             }
             result = updatedValue;
         } else {
@@ -77,17 +75,12 @@ public unsafe class Table : IDisposable{
 
     private ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
         // TODO: do this without allocating 
-        int totalSize = 0;
-        foreach (TupleDesc td in tupleDescs){
-            totalSize += td.Size;
-        }
+        int totalSize = tupleDescs[tupleDescs.Length - 1].Offset + tupleDescs[tupleDescs.Length - 1].Size;
 
         Span<byte> result = new byte[totalSize];
-        int writeStart = 0;
         foreach (TupleDesc td in tupleDescs){
             int offset = this.metadata[td.Attr].Item2;
-            value.Slice(offset, td.Size).CopyTo(result.Slice(writeStart, td.Size));
-            writeStart += td.Size;
+            value.Slice(offset, td.Size).CopyTo(result.Slice(td.Offset, td.Size));
         }
         return result;
     }

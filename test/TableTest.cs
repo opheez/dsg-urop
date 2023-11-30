@@ -99,11 +99,5 @@ namespace DB
         //     CollectionAssert.AreEqual(input, y1.ToArray());
         //     CollectionAssert.AreEqual(input2, y2.ToArray());
         // }
-
-        private void PrintSpan(ReadOnlySpan<byte> val) {
-            foreach(byte b in val){
-                Console.Write(b);
-            }
-        }
     }
 }
