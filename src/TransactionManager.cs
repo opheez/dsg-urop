@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Threading;
 using FASTER.common;
+using FASTER.libdpr;
 
 namespace DB {
 public class TransactionManager {
@@ -14,11 +15,11 @@ public class TransactionManager {
     internal SimpleObjectPool<TransactionContext> ctxPool;
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
-    internal IWriteAheadLog? wal;
+    internal DARQWal? wal;
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
-        this.wal = wal;
+        this.wal = (DARQWal)wal;
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
@@ -134,8 +135,11 @@ public class TransactionManager {
         }
 
         ctx.status = TransactionStatus.Validated;
+        StepRequestBuilder requestBuilder;
         if (wal != null) {
-            long writtenLsn = wal.Log(new LogEntry(-1, ctx.tid, LogType.Begin));
+            var res = wal.Begin(ctx.tid);
+            long writtenLsn = res.Item1;
+            requestBuilder = res.Item2;
             txnTbl[ctx.tid] = writtenLsn;
         }
         if (valid) {
@@ -158,7 +162,7 @@ public class TransactionManager {
                 long prevLsn = txnTbl[ctx.tid];
                 
                 txnTbl.TryRemove(ctx.tid, out _);
-                wal.Log(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+                wal.Write(new LogEntry(prevLsn, ctx.tid, LogType.Commit), requestBuilder);
             }
             // assign num 
             int finalTxnNum;
@@ -182,7 +186,7 @@ public class TransactionManager {
             if (wal != null){
                 long prevLsn = txnTbl[ctx.tid];
                 txnTbl.TryRemove(ctx.tid, out _);
-                wal.Log(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
+                wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Abort), requestBuilder);
             }
             try {
                 sl.Enter(ref lockTaken);

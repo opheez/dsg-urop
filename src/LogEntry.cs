@@ -34,7 +34,7 @@ public struct LogEntry{
     }
 
     public byte[] ToBytes(){
-        int totalSize = Size + val.Length;
+        int totalSize = Size + (val != null ? val.Length : 0);
 
         byte[] arr = new byte[totalSize];
 
@@ -47,9 +47,11 @@ public struct LogEntry{
         MemoryMarshal.Write(span.Slice(sizeof(long)*3), ref typeAsInt);
         
         // Write the variable-sized byte array to the byte array
-        byte[] keyAttrBytes = keyAttr.ToBytes();
-        keyAttrBytes.CopyTo(span.Slice(sizeof(long)*3+sizeof(int)));
-        val.CopyTo(span.Slice(Size));
+        if (type == LogType.Write){
+            byte[] keyAttrBytes = keyAttr.ToBytes();
+            keyAttrBytes.CopyTo(span.Slice(sizeof(long)*3+sizeof(int)));
+            val.CopyTo(span.Slice(Size));
+        }
 
         return arr;
         // using (MemoryStream m = new MemoryStream()) {

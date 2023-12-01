@@ -28,14 +28,34 @@ public class DARQWal : IWriteAheadLog {
         this.me = me;
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest(null));
     }
+
+    public (long, StepRequestBuilder) Begin(long tid){
+        long lsn = GetNewLsn();
+        LogEntry entry = new LogEntry(lsn, tid, LogType.Begin);
+        entry.lsn = lsn;
+        var requestBuilder = new StepRequestBuilder(requestPool.Checkout(), me);
+        requestBuilder.AddSelfMessage(entry.ToBytes());
+        return (lsn, requestBuilder);
+    }
      
+    public long Write(LogEntry entry, StepRequestBuilder requestBuilder){
+        entry.lsn = GetNewLsn();
+
+        requestBuilder.AddSelfMessage(entry.ToBytes());
+        return entry.lsn;
+    }
+
     public long Log(LogEntry entry){
         entry.lsn = GetNewLsn();
-        if (entry.type == LogType.Begin){
-            entry.prevLsn = entry.lsn;
-        }
-
         var requestBuilder = new StepRequestBuilder(requestPool.Checkout(), me);
+        requestBuilder.AddSelfMessage(entry.ToBytes());
+        var v = capabilities.Step(requestBuilder.FinishStep());
+        Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+        return entry.lsn;
+    }
+
+    public long Commit(LogEntry entry, StepRequestBuilder requestBuilder){
+        entry.lsn = GetNewLsn();
         requestBuilder.AddSelfMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
