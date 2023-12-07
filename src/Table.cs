@@ -24,9 +24,6 @@ public unsafe class Table : IDisposable{
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
-    // delegate void LogWAL();
-    internal LogWAL logWAL;
-
 
     public Table((long, int)[] schema){
         this.metadata = new Dictionary<long,(int, int)>();
@@ -47,49 +44,54 @@ public unsafe class Table : IDisposable{
         this.rowSize = offset;
         this.data = new ConcurrentDictionary<long, byte[]>();
     }
-
-    public Table((long, int)[] schema, LogWAL log) : this(schema) {
-        this.logWAL = log;
-    }
-
+    
+    // will never return null, empty 
     public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
-        Validate(tupleDescs, null, false); //TODO: behavior if it doesnt contain key?
+        Validate(tupleDescs, null, false);
 
-        // if (tupleDescs.Length == 1) {
-        //     return Read(new KeyAttr(tupleId.Key, tupleDescs[0].Attr, this));
-        // }
-
-        List<byte> result = new();
-        int writeOffset = 0; // TODO: need to return tupleDesc for varLen
-        foreach (TupleDesc desc in tupleDescs) {
-            byte[] valueToWrite;
-            (int size, int readOffset) = this.metadata[desc.Attr];
-            KeyAttr ka = new KeyAttr(tupleId.Key, desc.Attr, this);
-            var ctxRead = ctx.GetFromContext(ka);
-            if (ctxRead != null) {
-                valueToWrite = ctxRead;
-            } else {
-                valueToWrite = this.Read(new KeyAttr(tupleId.Key, desc.Attr, this)).ToArray();
-                ctx.SetInContext(OperationType.Read, ka, valueToWrite);
-            }
-            result.AddRange(valueToWrite);
-            writeOffset += valueToWrite.Length;
+        ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
+        if (value == null) {
+            value = Read(tupleId);
         }
 
-        return result.ToArray();
+        ReadOnlySpan<byte> result;
+        // apply writeset
+        (TupleDesc[], byte[]) changes = ctx.GetFromWriteset(tupleId);
+        if (changes.Item2 != null) {
+            Span<byte> updatedValue = value.ToArray();
+            foreach (TupleDesc td in changes.Item1) {
+                int offset = this.metadata[td.Attr].Item2;
+                changes.Item2.AsSpan(td.Offset, td.Size).CopyTo(updatedValue.Slice(offset));
+            }
+            result = updatedValue;
+        } else {
+            result = value;
+        }
+        // TODO: deal with varLen
+        // project out the attributes
+        ctx.AddReadSet(tupleId, result);
+        return project(result, tupleDescs);
+    }
+
+    private ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
+        // TODO: do this without allocating 
+        int totalSize = tupleDescs[tupleDescs.Length - 1].Offset + tupleDescs[tupleDescs.Length - 1].Size;
+
+        Span<byte> result = new byte[totalSize];
+        foreach (TupleDesc td in tupleDescs){
+            int offset = this.metadata[td.Attr].Item2;
+            value.Slice(offset, td.Size).CopyTo(result.Slice(td.Offset, td.Size));
+        }
+        return result;
     }
 
     // Assumes attribute is valid 
-    internal ReadOnlySpan<byte> Read(KeyAttr keyAttr){
-        if (!this.data.ContainsKey(keyAttr.Key)){ // TODO: validate table
-            return ReadOnlySpan<byte>.Empty;
+    internal ReadOnlySpan<byte> Read(TupleId tupleId){
+        if (!this.data.ContainsKey(tupleId.Key)){ // TODO: validate table
+            return new byte[this.rowSize];
         }
-        (int size, int readOffset) = this.metadata[keyAttr.Attr];
-        if (size == -1) {
-            Pointer ptr = GetVarLenPtr(keyAttr.Key, readOffset);
-            return new ReadOnlySpan<byte>(ptr.Ptr, ptr.Size).ToArray();
-        } 
-        return this.data[keyAttr.Key].AsSpan().Slice(readOffset, size);
+        // TODO: deal with varLen 
+        return this.data[tupleId.Key];
     }
 
     protected Pointer GetVarLenPtr(long key, int offset){
@@ -153,10 +155,8 @@ public unsafe class Table : IDisposable{
         Validate(tupleDescs, value, true);
 
         long id = NewRecordId();
-        TupleId tupleId = new TupleId(id, this.GetHashCode());
-        foreach (TupleDesc desc in tupleDescs) {
-            ctx.SetInContext(OperationType.Insert, new KeyAttr(id, desc.Attr ,this), value);
-        }
+        TupleId tupleId = new TupleId(id, this);
+        ctx.AddWriteSet(tupleId, tupleDescs, value);
 
         return tupleId;
     }
@@ -166,9 +166,7 @@ public unsafe class Table : IDisposable{
         }
         Validate(tupleDescs, value, true);
 
-        foreach (TupleDesc desc in tupleDescs) {
-            ctx.SetInContext(OperationType.Insert, new KeyAttr(id.Key, desc.Attr ,this), value);
-        }
+        ctx.AddWriteSet(id, tupleDescs, value);
 
         return;
     }
@@ -182,12 +180,9 @@ public unsafe class Table : IDisposable{
 
     public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
-        foreach (TupleDesc desc in tupleDescs) {
-            // if (Util.IsEmpty(Read(tupleId, new TupleDesc[]{desc}, ctx))){ 
-            //     throw new ArgumentException($"Key ({tupleId.Key}, {desc.Attr}) does not exist: try inserting instead"); // TODO ensure this aborts transaction
-            // }
-            ctx.SetInContext(OperationType.Update, new KeyAttr(tupleId.Key, desc.Attr, this), value);
-        }
+
+        ctx.AddWriteSet(tupleId, tupleDescs, value);
+
     }
 
     // internal void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value){
@@ -198,7 +193,6 @@ public unsafe class Table : IDisposable{
     // }
 
     internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-
         this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
         (int size, int offset) = this.metadata[keyAttr.Attr];
         byte[] valueToWrite = value.ToArray(); //TODO: possibly optimize and not ToArray()

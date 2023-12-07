@@ -19,9 +19,9 @@ unsafe class Program {
             seed: 12345,
             attrCount: 10,
             threadCount: 12,
-            iterationCount: 1
+            iterationCount: 3
         );
-        TableBenchmark b = new TransactionalFixedLenTableBenchmark("test", ycsbCfg);
+        TableBenchmark b = new FixedLenTableBenchmark("DictContext", ycsbCfg);
         b.RunTransactions();
         // b = new VarLenTableBenchmark(12345, 0.5);
         // b.Run();
@@ -56,7 +56,7 @@ unsafe class Program {
         });
         darqServer.Start();
         var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
-        processorClient.StartProcessingAsync(new TransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
+        processorClient.StartProcessingAsync(new DarqTransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
         darqServer.Dispose();
     }
 

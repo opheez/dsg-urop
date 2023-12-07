@@ -15,18 +15,16 @@ public struct BenchmarkConfig {
     public int datasetSize;
     public int perTransactionCount; // TODO: ensure support for keys[] when this > 1
     public int nCommitterThreads;
-    public LogWAL? logWal;
 
     public BenchmarkConfig(
         int seed,
         double ratio,
-        LogWAL? logWal = null,
         int threadCount = 16,
         int attrCount = 2,
         int perThreadDataCount = 100000,
         int iterationCount = 10,
         int perTransactionCount = 1,
-        int nCommitterThreads = 3){
+        int nCommitterThreads = 7){
 
         this.seed = seed;
         this.ratio = ratio;
@@ -35,7 +33,6 @@ public struct BenchmarkConfig {
         this.perThreadDataCount = perThreadDataCount;
         this.iterationCount = iterationCount;
         this.perTransactionCount = perTransactionCount;
-        this.logWal = logWal;
         this.datasetSize = perThreadDataCount * threadCount;
         this.nCommitterThreads = nCommitterThreads;
     }
@@ -49,21 +46,22 @@ public abstract class TableBenchmark
 {
     internal BenchmarkConfig cfg;   
     internal long[] keys;
-    internal long[] attrs;
     internal byte[][] values;
     internal BitArray isWrite;
-    internal (long, int)[] schema;
+    internal (long, int)[] schema; // TODO: in the future support multiple tables, make this list
+    internal TupleDesc[] td; // TODO: this is the same as schema
     internal Thread[] workers;
-    internal BenchmarkStatistics stats;
-    internal LogWAL logWal;
+    internal BenchmarkStatistics? stats;
+    internal IWriteAheadLog? wal;
 
-    public TableBenchmark(BenchmarkConfig cfg){
+    public TableBenchmark(BenchmarkConfig cfg, IWriteAheadLog? wal = null){
         this.cfg = cfg;
+        this.wal = wal;
         schema = new (long, int)[cfg.attrCount];
+        td = new TupleDesc[cfg.attrCount];
         workers = new Thread[cfg.threadCount];
 
         keys = new long[cfg.datasetSize];
-        attrs = new long[cfg.attrCount];
         values = new byte[cfg.datasetSize][];
         isWrite = new BitArray(cfg.datasetSize);
     }
@@ -82,9 +80,6 @@ public abstract class TableBenchmark
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                long attr = attrs[loc%cfg.attrCount];
-                // TODO: different for varlen
-                TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
                 TupleId tupleId = tbl.Insert(td, values[loc], t);
                 keys[loc] = tupleId.Key;
             }
@@ -144,14 +139,18 @@ public abstract class TableBenchmark
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++){
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                long attr = attrs[loc%cfg.attrCount];
                 long key = keys[loc];
-                TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
+                // uncomment to make workload only insert one attribute instead of all
+                // long attr = schema[loc%cfg.attrCount].Item1;
+                // TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
 
                 if (isWrite[loc]) {
-                    tbl.Update(new TupleId(key, tbl.GetHashCode()), td, values[loc], t);
+                    int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
+                    // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
+                    byte[] val = values[newValueIndex];
+                    tbl.Update(new TupleId(key, tbl), td, val, t);
                 } else {
-                    tbl.Read(new TupleId(key, tbl.GetHashCode()), td, t);
+                    tbl.Read(new TupleId(key, tbl), td, t);
                 }
             }
             var success = txnManager.Commit(t);
@@ -203,18 +202,20 @@ public abstract class TableBenchmark
     //             WorkloadMultiThreaded(tbl, ratio);
     //             opSw.Stop();
     //             long opMs = opSw.ElapsedMilliseconds;
-    //             stats.AddResult((insertMs, opMs));
+    //             stats?.AddResult((insertMs, opMs));
     //         }
     //     }
-    //     stats.ShowAllStats();
-    //     stats.SaveStatsToFile();
+    //     stats?.ShowAllStats();
+    //     stats?.SaveStatsToFile();
     // }
 
+    // public void RunTransactions(ref Dictionary<int, Table> tables){
     public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads);
+            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, wal);
             txnManager.Run();
-            using (Table tbl = new Table(schema, logWal)) {
+            using (Table tbl = new Table(schema)) {
+                // tables.Add(tbl.GetHashCode(), tbl);
                 var insertSw = Stopwatch.StartNew();
                 int insertAborts = InsertMultiThreadedTransactions(tbl, txnManager); // setup
                 insertSw.Stop();
@@ -224,12 +225,12 @@ public abstract class TableBenchmark
                 int txnAborts = WorkloadMultiThreadedTransactions(tbl, txnManager, cfg.ratio);
                 opSw.Stop();
                 long opMs = opSw.ElapsedMilliseconds;
-                stats.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+                stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
             }
             txnManager.Terminate();
         }
-        stats.ShowAllStats();
-        stats.SaveStatsToFile();
+        stats?.ShowAllStats();
+        stats?.SaveStatsToFile();
     }
 }
 
