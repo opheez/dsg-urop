@@ -150,9 +150,10 @@ public class TransactionManager {
                 foreach (TupleDesc td in item.Item2){
                     // TODO: should not throw exception here, but if it does, abort. 
                     // failure here means crashed before commit. would need to rollback
-                    // if (this.wal != null) {
-                    //     wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
-                    // }
+                    if (this.wal != null) {
+                        wal.Write(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray()), requestBuilder);
+                        // wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
+                    }
                     tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
                     start += td.Size;
                 }
@@ -162,7 +163,7 @@ public class TransactionManager {
                 long prevLsn = txnTbl[ctx.tid];
                 
                 txnTbl.TryRemove(ctx.tid, out _);
-                wal.Write(new LogEntry(prevLsn, ctx.tid, LogType.Commit), requestBuilder);
+                wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Commit), requestBuilder);
             }
             // assign num 
             int finalTxnNum;
