@@ -12,6 +12,7 @@ public enum LogType {
 }
 
 public struct LogEntry{
+    public bool persited = false;
     public long lsn;
     public long prevLsn; // do we even need this if we are undoing?
     public long tid;
@@ -31,6 +32,10 @@ public struct LogEntry{
         this.prevLsn = prevLsn;
         this.tid = tid;
         this.type = type;
+    }
+
+    public void SetPersisted(){
+        persited = true;
     }
 
     public byte[] ToBytes(){

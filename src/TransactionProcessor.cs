@@ -15,14 +15,14 @@ public class DarqTransactionProcessor : IDarqProcessor {
     private WorkerId me;
     private List<WorkerId> workers;
     private StepRequest reusableRequest = new(null);
-    private DARQWal wal;
+    private BatchDARQWal wal;
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
     public DarqTransactionProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
         this.me = me;
         workers = clusterInfo.GetWorkers().Select(e  => e.Item1).ToList();
-        wal = new DARQWal(me);
+        wal = new BatchDARQWal(me);
     }
 
     public bool ProcessMessage(DarqMessage m){

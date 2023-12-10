@@ -15,11 +15,11 @@ public class TransactionManager {
     internal SimpleObjectPool<TransactionContext> ctxPool;
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
-    internal DARQWal? wal;
+    internal BatchDARQWal? wal;
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
-        this.wal = (DARQWal)wal;
+        this.wal = (BatchDARQWal)wal;
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
@@ -80,6 +80,7 @@ public class TransactionManager {
         for (int i = 0; i < committer.Length; i++) {
             committer[i]?.Interrupt();
         }
+        if (wal != null) wal.Terminate();
     }
 
     private void validateAndWrite(TransactionContext ctx) {
