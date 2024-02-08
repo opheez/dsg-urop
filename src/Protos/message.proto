@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+option csharp_namespace = "DB";
+
+service Node {
+    rpc Read (ReadRequest) returns (ReadReply);
+    // rpc Validate (ValidateRequest) returns (ValidateReply);
+}
+
+message ReadRequest {
+    string key = 1;
+}
+
+message ReadReply {
+    string value = 1;
+}
+
+// message ValidateRequest {
+//     string key = 1;
+// }
+
+// message ValidateReply {
+//     bool valid = 1;
+// }
