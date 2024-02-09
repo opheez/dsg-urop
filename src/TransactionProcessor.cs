@@ -11,7 +11,7 @@ using Grpc.Core;
 namespace DB {
 
 // Takes in requests for stored procedures and executes them
-public class DarqTransactionProcessor : Node.NodeBase, IDarqProcessor {
+public class DarqTransactionProcessor : IDarqProcessor {
     private IDarqProcessorClientCapabilities capabilities;
     private WorkerId me;
     private List<WorkerId> workers;
@@ -86,11 +86,6 @@ public class DarqTransactionProcessor : Node.NodeBase, IDarqProcessor {
             default:
                 throw new NotImplementedException();
         }
-    }
-
-    public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
-    {
-        return Task.FromResult(new ReadReply{Value = "read val goes here"});
     }
 
     public void OnRestart(IDarqProcessorClientCapabilities capabilities) {

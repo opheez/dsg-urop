@@ -8,6 +8,7 @@ using FASTER.core;
 using FASTER.darq;
 using FASTER.libdpr;
 using FASTER.server;
+using Grpc.Core;
 using Microsoft.AspNetCore.Builder;
 unsafe class Program {
 
@@ -56,6 +57,8 @@ unsafe class Program {
             refreshIntervalMilli = 5
         });
         darqServer.Start();
+        // create grpc channels using clusterInfo ??
+
         var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
         processorClient.StartProcessingAsync(new DarqTransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
         darqServer.Dispose();
@@ -74,7 +77,7 @@ unsafe class Program {
         var app = builder.Build();
 
         // Configure the HTTP request pipeline.
-        app.MapGrpcService<DarqTransactionProcessor>();
+        app.MapGrpcService<NodeProcessor>();
         app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
 
         // Compose cluster architecture
@@ -95,7 +98,7 @@ unsafe class Program {
             t.Start();
 
         var darqClient = new DarqProducerClient(clusterInfo);
-        darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
+        // darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
         app.Run();
 
         // foreach (var t in threads)
