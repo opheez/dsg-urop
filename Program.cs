@@ -68,11 +68,11 @@ unsafe class Program {
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
-        builder.WebHost.ConfigureKestrel(options =>
-        {
-            options.ListenLocalhost(50051, o => o.Protocols = HttpProtocols.Http2);
-            options.ListenLocalhost(50052, o => o.Protocols = HttpProtocols.Http2);
-        });
+        // builder.WebHost.ConfigureKestrel(options =>
+        // {
+        //     options.ListenLocalhost(50051, o => o.Protocols = HttpProtocols.Http2);
+        //     options.ListenLocalhost(50052, o => o.Protocols = HttpProtocols.Http2);
+        // });
 
         builder.Services.AddScoped<NodeService>();
 
