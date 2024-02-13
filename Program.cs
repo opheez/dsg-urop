@@ -10,6 +10,7 @@ using FASTER.libdpr;
 using FASTER.server;
 using Grpc.Core;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 unsafe class Program {
 
     public static int NumProcessors = 1;
@@ -67,9 +68,14 @@ unsafe class Program {
     public static void Main(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        builder.WebHost.ConfigureKestrel(options =>
+        {
+            options.ListenLocalhost(50051, o => o.Protocols = HttpProtocols.Http2);
+            options.ListenLocalhost(50052, o => o.Protocols = HttpProtocols.Http2);
+        });
 
-        // Additional configuration is required to successfully run gRPC on macOS.
-        // For instructions on how to configure Kestrel and gRPC clients on macOS, visit https://go.microsoft.com/fwlink/?linkid=2099682
+        builder.Services.AddScoped<NodeService>();
+
 
         // Add services to the container.
         builder.Services.AddGrpc();
@@ -77,8 +83,20 @@ unsafe class Program {
         var app = builder.Build();
 
         // Configure the HTTP request pipeline.
-        app.MapGrpcService<NodeProcessor>();
+        app.MapGrpcService<NodeService>();
         app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
+        // Manually map services to ports and configure service provider
+        foreach (var port in new[] { 50051, 50052 })
+        {
+            var server = new Server
+            {
+                Services = { Node.BindService(app.Services.GetRequiredService<NodeService>()) },
+                Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
+            };
+            server.Start();
+
+            Console.WriteLine($"Server started on port {port}");
+        }
 
         // Compose cluster architecture
         var clusterInfo = new HardCodedClusterInfo();
