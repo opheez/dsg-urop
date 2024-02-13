@@ -99,24 +99,24 @@ unsafe class Program {
             Console.WriteLine($"Server started on port {port}");
         }
 
-        // Compose cluster architecture
-        var clusterInfo = new HardCodedClusterInfo();
-        var threads = new List<Thread>();
-        for (var i = 0; i < NumProcessors; i++)
-        {
-            clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
-            var i1 = i;
-            threads.Add(new Thread(() =>
-            {
-                RunDarqWithProcessor(new WorkerId(i1), clusterInfo);
-            }));
+        // // Compose cluster architecture
+        // var clusterInfo = new HardCodedClusterInfo();
+        // var threads = new List<Thread>();
+        // for (var i = 0; i < NumProcessors; i++)
+        // {
+        //     clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
+        //     var i1 = i;
+        //     threads.Add(new Thread(() =>
+        //     {
+        //         RunDarqWithProcessor(new WorkerId(i1), clusterInfo);
+        //     }));
 
-        }
+        // }
 
-        foreach (var t in threads)
-            t.Start();
+        // foreach (var t in threads)
+        //     t.Start();
 
-        var darqClient = new DarqProducerClient(clusterInfo);
+        // var darqClient = new DarqProducerClient(clusterInfo);
         // darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
         app.Run();
 
