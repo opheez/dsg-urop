@@ -88,9 +88,10 @@ unsafe class Program {
         // Manually map services to ports and configure service provider
         foreach (var port in new[] { 50051, 50052 })
         {
+            var node = new NodeService(port);
             var server = new Server
             {
-                Services = { Node.BindService(app.Services.GetRequiredService<NodeService>()) },
+                Services = { Node.BindService(node) },
                 Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
             };
             server.Start();
