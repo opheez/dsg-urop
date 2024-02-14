@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Builder;
 
 namespace DB {
 
-public class NodeService : Node.NodeBase {
+public class TransactionProcessorService : TransactionProcessor.TransactionProcessorBase {
     long MinKey;
-    public NodeService(long minKey) {
+    public TransactionProcessorService(long minKey) {
         MinKey = minKey;
     }
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)

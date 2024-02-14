@@ -11,7 +11,7 @@ using Grpc.Core;
 namespace DB {
 
 // Takes in requests for stored procedures and executes them
-public class DarqTransactionProcessor : IDarqProcessor {
+public class DarqProcessor : IDarqProcessor {
     private IDarqProcessorClientCapabilities capabilities;
     private WorkerId me;
     private List<WorkerId> workers;
@@ -20,7 +20,7 @@ public class DarqTransactionProcessor : IDarqProcessor {
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
-    public DarqTransactionProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
+    public DarqProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
         this.me = me;
         workers = clusterInfo.GetWorkers().Select(e  => e.Item1).ToList();
         wal = new BatchDARQWal(me);

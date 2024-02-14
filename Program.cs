@@ -61,22 +61,12 @@ unsafe class Program {
         // create grpc channels using clusterInfo ??
 
         var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
-        processorClient.StartProcessingAsync(new DarqTransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
+        processorClient.StartProcessingAsync(new DarqProcessor(me, clusterInfo)).GetAwaiter().GetResult();
         darqServer.Dispose();
     }
 
     public static void Main(string[] args)
     {
-        // var builder = WebApplication.CreateBuilder(args);
-        // builder.Services.AddScoped<NodeService>();
-        // builder.Services.AddGrpc();
-        // var app = builder.Build();
-
-        // // Configure the HTTP request pipeline.
-        // app.MapGrpcService<NodeService>();
-        // app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
-        // app.Run();
-
         // Compose cluster architecture first because clusterInfo is mutable type in ServerOptions struct
         var clusterInfo = new HardCodedClusterInfo();
         for (var i = 0; i < NumProcessors; i++)
@@ -88,7 +78,7 @@ unsafe class Program {
         for (var i = 0; i < NumProcessors; i++) 
         {
             // Manually map services to ports and configure service provider
-            ServerUsingDarq server = new ServerUsingDarq(new ServerOptions
+            Node node = new Node(new ServerOptions
             {
                 Port = 50050 + i,
                 MinKey = i * 1000,
@@ -96,7 +86,7 @@ unsafe class Program {
                 Me = new WorkerId(i)
             });
         
-            threads.Add(new Thread(() => server.Start()));
+            threads.Add(new Thread(() => node.Start()));
         }
 
         foreach (var t in threads)

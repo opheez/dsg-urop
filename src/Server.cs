@@ -10,7 +10,7 @@ using Grpc.Core;
 /// Server takes workload requests and orchestrates benchmark
 /// 
 /// </summary> 
-public interface IServer {
+public interface INode {
     public void EnqueueWorkload();
     public void GetBenchmarkResults();
     public void Start();
@@ -22,31 +22,31 @@ public struct ServerOptions {
     public long MinKey;
     public int Port;
 }
-public class ServerUsingDarq {
+public class Node {
     private ServerOptions options;
 
-    public ServerUsingDarq(ServerOptions options){
+    public Node(ServerOptions options){
         this.options = options;
     }
 
     public void Start(){
-        RunNodeService(options.Port, options.MinKey);
+        RunTransactionProcessorService();
         if (options.ClusterInfo != null){
             new Thread(() => RunDarqWithProcessor(options.Me, options.ClusterInfo)).Start();
         }
     }
 
-    private void RunNodeService(int port, long minKey){
-        var node = new NodeService(minKey);
+    private void RunTransactionProcessorService(){
+        var txnProcessor = new TransactionProcessorService(options.MinKey);
 
         var server = new Server
         {
-            Services = { Node.BindService(node) },
-            Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
+            Services = { TransactionProcessor.BindService(txnProcessor) },
+            Ports = { new ServerPort("localhost", options.Port, ServerCredentials.Insecure) }
         };
         server.Start();
 
-        Console.WriteLine($"Server started on port {port}");
+        Console.WriteLine($"Server started on port {options.Port}");
     }
 
     private static void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
@@ -79,7 +79,7 @@ public class ServerUsingDarq {
         darqServer.Start();
 
         var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
-        processorClient.StartProcessingAsync(new DarqTransactionProcessor(me, clusterInfo)).GetAwaiter().GetResult();
+        processorClient.StartProcessingAsync(new DarqProcessor(me, clusterInfo)).GetAwaiter().GetResult();
         darqServer.Dispose();
         Console.WriteLine("DARQ server disposed?");
     }

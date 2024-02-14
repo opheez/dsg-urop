@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option csharp_namespace = "DB";
 
-service Node {
+service TransactionProcessor {
     rpc Read (ReadRequest) returns (ReadReply);
     // rpc Update (UpdateRequest) returns (UpdateReply);
     // rpc Insert (InsertRequest) returns (InsertReply);
