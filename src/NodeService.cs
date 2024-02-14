@@ -4,13 +4,13 @@ using Microsoft.AspNetCore.Builder;
 namespace DB {
 
 public class NodeService : Node.NodeBase {
-    int port;
-    public NodeService(int port) {
-        this.port = port;
+    long MinKey;
+    public NodeService(long minKey) {
+        MinKey = minKey;
     }
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
-        return Task.FromResult(new ReadReply{Value = $"read val goes here, contacted port {port}"});
+        return Task.FromResult(new ReadReply{Value = $"read val goes here, contacted w minKey {MinKey}"});
     }
 }
 

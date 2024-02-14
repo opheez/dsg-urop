@@ -27,6 +27,7 @@ public class DarqTransactionProcessor : IDarqProcessor {
     }
 
     public bool ProcessMessage(DarqMessage m){
+        Console.WriteLine($"Processing message");
         bool recoveryMode = false;
         switch (m.GetMessageType()){
             case DarqMessageType.IN:

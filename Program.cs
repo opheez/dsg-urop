@@ -67,58 +67,43 @@ unsafe class Program {
 
     public static void Main(string[] args)
     {
-        var builder = WebApplication.CreateBuilder(args);
-        // builder.WebHost.ConfigureKestrel(options =>
-        // {
-        //     options.ListenLocalhost(50051, o => o.Protocols = HttpProtocols.Http2);
-        //     options.ListenLocalhost(50052, o => o.Protocols = HttpProtocols.Http2);
-        // });
+        // var builder = WebApplication.CreateBuilder(args);
+        // builder.Services.AddScoped<NodeService>();
+        // builder.Services.AddGrpc();
+        // var app = builder.Build();
 
-        builder.Services.AddScoped<NodeService>();
+        // // Configure the HTTP request pipeline.
+        // app.MapGrpcService<NodeService>();
+        // app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
+        // app.Run();
 
-
-        // Add services to the container.
-        builder.Services.AddGrpc();
-
-        var app = builder.Build();
-
-        // Configure the HTTP request pipeline.
-        app.MapGrpcService<NodeService>();
-        app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
-        // Manually map services to ports and configure service provider
-        foreach (var port in new[] { 50051, 50052 })
+        // Compose cluster architecture first because clusterInfo is mutable type in ServerOptions struct
+        var clusterInfo = new HardCodedClusterInfo();
+        for (var i = 0; i < NumProcessors; i++)
         {
-            var node = new NodeService(port);
-            var server = new Server
-            {
-                Services = { Node.BindService(node) },
-                Ports = { new ServerPort("localhost", port, ServerCredentials.Insecure) }
-            };
-            server.Start();
-
-            Console.WriteLine($"Server started on port {port}");
+            clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
         }
 
-        // // Compose cluster architecture
-        // var clusterInfo = new HardCodedClusterInfo();
-        // var threads = new List<Thread>();
-        // for (var i = 0; i < NumProcessors; i++)
-        // {
-        //     clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
-        //     var i1 = i;
-        //     threads.Add(new Thread(() =>
-        //     {
-        //         RunDarqWithProcessor(new WorkerId(i1), clusterInfo);
-        //     }));
+        var threads = new List<Thread>();
+        for (var i = 0; i < NumProcessors; i++) 
+        {
+            // Manually map services to ports and configure service provider
+            ServerUsingDarq server = new ServerUsingDarq(new ServerOptions
+            {
+                Port = 50050 + i,
+                MinKey = i * 1000,
+                ClusterInfo = clusterInfo,
+                Me = new WorkerId(i)
+            });
+        
+            threads.Add(new Thread(() => server.Start()));
+        }
 
-        // }
-
-        // foreach (var t in threads)
-        //     t.Start();
+        foreach (var t in threads)
+            t.Start();
 
         // var darqClient = new DarqProducerClient(clusterInfo);
         // darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
-        app.Run();
 
         // foreach (var t in threads)
         //     t.Join();

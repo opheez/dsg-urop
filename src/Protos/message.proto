@@ -4,11 +4,16 @@ option csharp_namespace = "DB";
 
 service Node {
     rpc Read (ReadRequest) returns (ReadReply);
+    // rpc Update (UpdateRequest) returns (UpdateReply);
+    // rpc Insert (InsertRequest) returns (InsertReply);
+    // rpc Begin (BeginRequest) returns (BeginReply);
+    // rpc Commit (CommitRequest) returns (CommitReply);
     // rpc Validate (ValidateRequest) returns (ValidateReply);
 }
 
 message ReadRequest {
     string key = 1;
+    // TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx
 }
 
 message ReadReply {
