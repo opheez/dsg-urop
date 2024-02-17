@@ -4,22 +4,33 @@ option csharp_namespace = "DB";
 
 service TransactionProcessor {
     rpc Read (ReadRequest) returns (ReadReply);
-    // rpc Update (UpdateRequest) returns (UpdateReply);
-    // rpc Insert (InsertRequest) returns (InsertReply);
+    rpc Update (WriteRequest) returns (WriteReply);
+    rpc Insert (WriteRequest) returns (WriteReply);
     // rpc Begin (BeginRequest) returns (BeginReply);
     // rpc Commit (CommitRequest) returns (CommitReply);
     // rpc Validate (ValidateRequest) returns (ValidateReply);
 }
 
 message ReadRequest {
-    string key = 1;
-    // TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx
+    int64 key = 1; // TupleId
+    int64 tid = 2; // tid of transaction context 
 }
 
 message ReadReply {
-    string value = 1;
+    bytes value = 1;
 }
 
+message WriteRequest {
+    optional int64 key = 1; // TupleId
+    repeated uint64 Attr = 2; // TupleDesc
+    repeated int32 Size = 3;
+    repeated int32 Offset = 4;
+    bytes value = 5;
+}
+
+message WriteReply {
+    bool success = 1;
+}
 // message ValidateRequest {
 //     string key = 1;
 // }

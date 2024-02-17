@@ -15,6 +15,7 @@ namespace DB
 public interface IWriteAheadLog
 {
     public long Log(LogEntry entry);
+    public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
     // public void Recover();
 
 }

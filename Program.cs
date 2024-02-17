@@ -13,7 +13,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 unsafe class Program {
 
-    public static int NumProcessors = 1;
+    public static int NumProcessors = 2;
 
     // public static void Main(){
     //     Console.WriteLine("Hello, World!");
@@ -31,39 +31,39 @@ unsafe class Program {
 
     // }
 
-        private static void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
-    {
-        var logDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data.log", deleteOnClose: true);
-        var darqServer = new DarqServer(new DarqServerOptions
-        {
-            Port = 15721 + (int)me.guid,
-            Address = "127.0.0.1",
-            ClusterInfo = clusterInfo,
-            me = me,
-            DarqSettings = new DarqSettings
-            {
-                DprFinder = default,
-                LogDevice = logDevice,
-                PageSize = 1L << 22,
-                MemorySize = 1L << 23,
-                SegmentSize = 1L << 30,
-                LogCommitManager = default,
-                LogCommitDir = default,
-                LogChecksum = LogChecksumType.None,
-                MutableFraction = default,
-                FastCommitMode = true,
-                DeleteOnClose = true
-            },
-            commitIntervalMilli = 5,
-            refreshIntervalMilli = 5
-        });
-        darqServer.Start();
-        // create grpc channels using clusterInfo ??
+    //     private static void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
+    // {
+    //     var logDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data.log", deleteOnClose: true);
+    //     var darqServer = new DarqServer(new DarqServerOptions
+    //     {
+    //         Port = 15721 + (int)me.guid,
+    //         Address = "127.0.0.1",
+    //         ClusterInfo = clusterInfo,
+    //         me = me,
+    //         DarqSettings = new DarqSettings
+    //         {
+    //             DprFinder = default,
+    //             LogDevice = logDevice,
+    //             PageSize = 1L << 22,
+    //             MemorySize = 1L << 23,
+    //             SegmentSize = 1L << 30,
+    //             LogCommitManager = default,
+    //             LogCommitDir = default,
+    //             LogChecksum = LogChecksumType.None,
+    //             MutableFraction = default,
+    //             FastCommitMode = true,
+    //             DeleteOnClose = true
+    //         },
+    //         commitIntervalMilli = 5,
+    //         refreshIntervalMilli = 5
+    //     });
+    //     darqServer.Start();
+    //     // create grpc channels using clusterInfo ??
 
-        var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
-        processorClient.StartProcessingAsync(new DarqProcessor(me, clusterInfo)).GetAwaiter().GetResult();
-        darqServer.Dispose();
-    }
+    //     var processorClient = new ColocatedDarqProcessorClient(darqServer.GetDarq());
+    //     processorClient.StartProcessingAsync(new DarqProcessor(me, clusterInfo)).GetAwaiter().GetResult();
+    //     darqServer.Dispose();
+    // }
 
     public static void Main(string[] args)
     {
@@ -75,6 +75,7 @@ unsafe class Program {
         }
 
         var threads = new List<Thread>();
+        var nodes = new List<Node>();
         for (var i = 0; i < NumProcessors; i++) 
         {
             // Manually map services to ports and configure service provider
@@ -85,12 +86,15 @@ unsafe class Program {
                 ClusterInfo = clusterInfo,
                 Me = new WorkerId(i)
             });
+            nodes.Add(node);
         
             threads.Add(new Thread(() => node.Start()));
         }
 
         foreach (var t in threads)
             t.Start();
+
+        nodes[0].EnqueueWorkload("a");
 
         // var darqClient = new DarqProducerClient(clusterInfo);
         // darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));

@@ -23,11 +23,13 @@ public unsafe class Table : IDisposable{
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
+    private RpcClient? rpcClient;
     // public Dictionary index; 
 
-    public Table((long, int)[] schema){
+    public Table((long, int)[] schema, RpcClient? rpcClient = null){
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
+        this.rpcClient = rpcClient;
         
         int offset = 0;
         int size = 0;
@@ -87,6 +89,12 @@ public unsafe class Table : IDisposable{
 
     // Assumes attribute is valid 
     internal ReadOnlySpan<byte> Read(TupleId tupleId){
+        // TODO: sharding check here, make rpc call 
+        if (this.rpcClient != null && tupleId.Key != rpcClient.me.guid){
+            Console.WriteLine($"Making rpc call confirmed!");
+            return this.rpcClient.Read(tupleId.Key).Result.Value.ToByteArray();
+        }
+
         if (!this.data.ContainsKey(tupleId.Key)){ // TODO: validate table
             return new byte[this.rowSize];
         }
@@ -151,6 +159,13 @@ public unsafe class Table : IDisposable{
     //     return;
     // }
 
+    /// <summary>
+    /// Insert specified attributes into table. Non-specified attributes will be 0 
+    /// </summary>
+    /// <param name="tupleDescs"></param>
+    /// <param name="value"></param>
+    /// <param name="ctx"></param>
+    /// <returns></returns>
     public TupleId Insert(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
 
@@ -160,6 +175,15 @@ public unsafe class Table : IDisposable{
 
         return tupleId;
     }
+
+    /// <summary>
+    /// Insert specified attributes into table. Non-specified attributes will be 0 
+    /// </summary>
+    /// <param name="tupleDescs"></param>
+    /// <param name="value"></param>
+    /// <param name="ctx"></param>
+    /// <exception cref="ArgumentException">Key already exists</exception>
+    /// <returns></returns>
     public void Insert(TupleId id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         if (this.data.ContainsKey(id.Key)){
             throw new ArgumentException($"Key {id.Key} already exists in this table"); // TODO ensure this aborts transaction
@@ -192,7 +216,14 @@ public unsafe class Table : IDisposable{
     //     Write(keyAttr, value);
     // }
 
+    /// <summary>
+    /// Write value to specific attribute of key. If key does not exist yet, create empty row
+    /// </summary>
+    /// <param name="keyAttr"></param>
+    /// <param name="value"></param>
     internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
+        // TODO: check belongs in this shard, otherwise make rpc 
+
         this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
         (int size, int offset) = this.metadata[keyAttr.Attr];
         byte[] valueToWrite = value.ToArray(); //TODO: possibly optimize and not ToArray()

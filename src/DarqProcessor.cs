@@ -16,14 +16,14 @@ public class DarqProcessor : IDarqProcessor {
     private WorkerId me;
     private List<WorkerId> workers;
     private StepRequest reusableRequest = new(null);
-    private BatchDARQWal wal;
+    private IWriteAheadLog wal;
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
-    public DarqProcessor(WorkerId me, IDarqClusterInfo clusterInfo){
+    public DarqProcessor(WorkerId me, IDarqClusterInfo clusterInfo, IWriteAheadLog wal){
         this.me = me;
         workers = clusterInfo.GetWorkers().Select(e  => e.Item1).ToList();
-        wal = new BatchDARQWal(me);
+        this.wal = wal;
     }
 
     public bool ProcessMessage(DarqMessage m){
@@ -76,6 +76,7 @@ public class DarqProcessor : IDarqProcessor {
                 return true;
             }
             case DarqMessageType.SELF: // this is on recovery; TODO: do we need to double pass?
+                Console.WriteLine($"Recovering?, got log");
                 if (recoveryMode) {
                     LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
                     
