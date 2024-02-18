@@ -92,7 +92,7 @@ public unsafe class Table : IDisposable{
         // TODO: sharding check here, make rpc call 
         if (this.rpcClient != null && tupleId.Key != rpcClient.me.guid){
             Console.WriteLine($"Making rpc call confirmed!");
-            return this.rpcClient.Read(tupleId.Key).Result.Value.ToByteArray();
+            return this.rpcClient.Read(tupleId.Key);
         }
 
         if (!this.data.ContainsKey(tupleId.Key)){ // TODO: validate table

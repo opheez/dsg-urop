@@ -24,11 +24,11 @@ public class RpcClient {
         }
 
     }
-    public async Task<ReadReply> Read(long key){
+    public ReadOnlySpan<byte> Read(long key){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        var reply = await client.ReadAsync(new ReadRequest { Key = key });
-        return reply;
+        var reply = client.Read(new ReadRequest { Key = key });
+        return reply.Value.ToByteArray();
     }
 
     /// <summary>
