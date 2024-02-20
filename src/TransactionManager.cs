@@ -27,7 +27,7 @@ public class TransactionManager {
                 try {
                     while (true) {
                         TransactionContext ctx = txnQueue.Take();
-                        validateAndWrite(ctx);
+                        ValidateAndWrite(ctx);
                     }
                 } catch (ThreadInterruptedException){
                     System.Console.WriteLine("Terminated");
@@ -83,7 +83,7 @@ public class TransactionManager {
         if (wal != null) wal.Terminate();
     }
 
-    private void validateAndWrite(TransactionContext ctx) {
+    private void ValidateAndWrite(TransactionContext ctx) {
         bool lockTaken = false;
         int finishTxn;
         List<TransactionContext> finish_active;

@@ -42,7 +42,7 @@ public class Node : INode {
 
         txnManager = new TransactionManager(options.nCommitterThreads, wal);
         RpcClient client = new RpcClient(options.Me, options.ClusterInfo);
-        table = new Table(schema, client);
+        table = new ShardedTable(schema, client);
         darqProcessor = new DarqProcessor(options.Me, options.ClusterInfo, wal);
 
         txnManager.Run();

@@ -1,4 +1,5 @@
 using Grpc.Net.Client;
+using Google.Protobuf;
 using FASTER.client;
 using FASTER.libdpr;
 
@@ -7,7 +8,7 @@ namespace DB {
 public class RpcClient {
     public const string DomainAddress = "http://127.0.0.1";
     public const int BasePort = 50050;
-    public WorkerId me;
+    private WorkerId me;
     private IDarqClusterInfo clusterInfo;
     private Dictionary<WorkerId, GrpcChannel> channelMap;
 
@@ -24,10 +25,14 @@ public class RpcClient {
         }
 
     }
-    public ReadOnlySpan<byte> Read(long key){
+
+    public WorkerId GetWorkerId(){
+        return me;
+    }
+    public ReadOnlySpan<byte> Read(long key, TransactionContext ctx){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        var reply = client.Read(new ReadRequest { Key = key });
+        var reply = client.Read(new ReadRequest { Key = key, Tid = ctx.tid, Me = me.guid});
         return reply.Value.ToByteArray();
     }
 
@@ -44,7 +49,7 @@ public class RpcClient {
     }
 
     // TODO: arbitrary for now, define some rules for how to map keys to servers
-    private WorkerId HashKeyToWorkerId(long key){
+    public WorkerId HashKeyToWorkerId(long key){
         return new WorkerId((int)(key % clusterInfo.GetNumWorkers()));
     }
 }

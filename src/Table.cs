@@ -23,13 +23,11 @@ public unsafe class Table : IDisposable{
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
-    private RpcClient? rpcClient;
     // public Dictionary index; 
 
-    public Table((long, int)[] schema, RpcClient? rpcClient = null){
+    public Table((long, int)[] schema){
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
-        this.rpcClient = rpcClient;
         
         int offset = 0;
         int size = 0;
@@ -48,7 +46,7 @@ public unsafe class Table : IDisposable{
     }
     
     // will never return null, empty 
-    public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
+    public virtual ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
@@ -75,7 +73,7 @@ public unsafe class Table : IDisposable{
         return project(result, tupleDescs);
     }
 
-    private ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
+    protected ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
         // TODO: do this without allocating 
         int totalSize = tupleDescs[tupleDescs.Length - 1].Offset + tupleDescs[tupleDescs.Length - 1].Size;
 
@@ -88,13 +86,7 @@ public unsafe class Table : IDisposable{
     }
 
     // Assumes attribute is valid 
-    internal ReadOnlySpan<byte> Read(TupleId tupleId){
-        // TODO: sharding check here, make rpc call 
-        if (this.rpcClient != null && tupleId.Key != rpcClient.me.guid){
-            Console.WriteLine($"Making rpc call confirmed!");
-            return this.rpcClient.Read(tupleId.Key);
-        }
-
+    protected internal ReadOnlySpan<byte> Read(TupleId tupleId){
         if (!this.data.ContainsKey(tupleId.Key)){ // TODO: validate table
             return new byte[this.rowSize];
         }
@@ -108,56 +100,6 @@ public unsafe class Table : IDisposable{
         IntPtr res = new IntPtr(BitConverter.ToInt64(addr)); //TODO convert based on nint size
         return new Pointer(res, BitConverter.ToInt32(size));
     }
-    
-    // internal void Upsert(long key, ReadOnlySpan<byte> value){
-    //     foreach (KeyValuePair<long, (int, int)> entry in this.metadata) {
-    //         (int size, int offset) = entry.Value;
-    //         Upsert(key, entry.Key, value.Slice(offset, size));
-    //     }
-    // }
-
-    // internal void Upsert(long key, long attribute, ReadOnlySpan<byte> value){
-    //     (int size, int offset) = this.metadata[attribute];
-    //     byte[] row = this.data.GetOrAdd(key, new byte[this.rowSize]); //TODO: check if written before to free pointer
-    //     byte[] valueToWrite = value.ToArray();
-    //     if (size == -1) {
-    //         IntPtr addr = Marshal.AllocHGlobal(value.Length);
-    //         Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-    //         valueToWrite = new byte[IntPtr.Size * 2];
-    //         BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-    //         BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-    //     }
-
-    //     if (valueToWrite.Length <= 0 || (size != -1 && valueToWrite.Length != size)) {
-    //         throw new ArgumentException($"Value must be nonempty and equal to schema-specified size ({size})");
-    //     }
-    //     for (int i = 0; i < valueToWrite.Length; i++) {
-    //         row[offset+i] = valueToWrite[i];
-    //     }
-    // }
-
-    // /// <summary>
-    // /// Transactionally updates
-    // /// </summary>
-    // /// <param name="tupleId"></param>
-    // /// <param name="value"></param>
-    // /// <param name="ctx"></param>
-    // /// <exception cref="KeyNotFoundException"></exception>
-    // /// <exception cref="ArgumentException"></exception>
-    // public void Upsert(TupleId tupleId, ReadOnlySpan<byte> value, TransactionContext ctx){
-    //     if (tupleId.Attr.HasValue) {
-    //         if (!this.metadata.ContainsKey(tupleId.Attr.Value)){
-    //             throw new KeyNotFoundException();
-    //         }
-
-    //         (int size, int offset) = this.metadata[tupleId.Attr.Value];
-    //         if (size != -1 && value.Length != size) {
-    //             throw new ArgumentException($"Value to insert must be of size {size}");
-    //         }
-    //     } // TODO: add assertion checks if possible?
-    //     ctx.SetInContext(tupleId, value);
-    //     return;
-    // }
 
     /// <summary>
     /// Insert specified attributes into table. Non-specified attributes will be 0 
@@ -195,13 +137,6 @@ public unsafe class Table : IDisposable{
         return;
     }
 
-    // internal void Insert(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-    //     if (!Util.IsEmpty(Read(keyAttr))) { // should not happen if called by transaction context
-    //         throw new ArgumentException($"!!! This should not be thrown. Key and attribute ({keyAttr}) already exists");
-    //     }
-    //     Write(keyAttr, value);
-    // }
-
     public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
 
@@ -209,21 +144,12 @@ public unsafe class Table : IDisposable{
 
     }
 
-    // internal void Update(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-    //     // if (Util.IsEmpty(Read(keyAttr))) { // should not happen if called by transaction context
-    //     //     throw new ArgumentException($"!!! This should not be called. Key {keyAttr} does not exist: try inserting instead");
-    //     // }
-    //     Write(keyAttr, value);
-    // }
-
     /// <summary>
     /// Write value to specific attribute of key. If key does not exist yet, create empty row
     /// </summary>
     /// <param name="keyAttr"></param>
     /// <param name="value"></param>
-    internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-        // TODO: check belongs in this shard, otherwise make rpc 
-
+    protected internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
         this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
         (int size, int offset) = this.metadata[keyAttr.Attr];
         byte[] valueToWrite = value.ToArray(); //TODO: possibly optimize and not ToArray()
@@ -254,6 +180,15 @@ public unsafe class Table : IDisposable{
         }
     }
 
+    public TupleDesc[] GetSchema(){
+        TupleDesc[] schema = new TupleDesc[this.metadata.Count];
+        for (int i = 0; i < this.metadata.Count; i++){
+            long attr = this.metadataOrder[i];
+            schema[i] = new TupleDesc(attr, this.metadata[attr].Item1, this.metadata[attr].Item2);
+        }
+        return schema;
+    }
+
     public void Debug(){
         Console.WriteLine("Metadata: ");
         foreach (var field in metadata){
@@ -272,11 +207,11 @@ public unsafe class Table : IDisposable{
         }
     }
 
-    private long NewRecordId() {
+    protected long NewRecordId() {
         return Interlocked.Increment(ref lastId);
     }
 
-    private void Validate(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, bool write) {
+    protected void Validate(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, bool write) {
         int totalSize = 0;
         foreach (TupleDesc desc in tupleDescs) {
             if (!this.metadata.ContainsKey(desc.Attr)) {
@@ -294,5 +229,41 @@ public unsafe class Table : IDisposable{
 
 }
 
-}
+public class ShardedTable : Table {
+    private RpcClient rpcClient;
+    public ShardedTable((long, int)[] schema, RpcClient rpcClient) : base(schema) {
+        this.rpcClient = rpcClient;
+    }
 
+    public override ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
+        Validate(tupleDescs, null, false);
+
+        ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
+        if (value == null) {
+            if (rpcClient.GetWorkerId().Equals(rpcClient.HashKeyToWorkerId(tupleId.Key))) {
+                value = Read(tupleId);
+            } else {
+                value = rpcClient.Read(tupleId.Key, ctx);
+            }
+        }
+
+        ReadOnlySpan<byte> result;
+        // apply writeset
+        (TupleDesc[], byte[]) changes = ctx.GetFromWriteset(tupleId);
+        if (changes.Item2 != null) {
+            Span<byte> updatedValue = value.ToArray();
+            foreach (TupleDesc td in changes.Item1) {
+                int offset = this.metadata[td.Attr].Item2;
+                changes.Item2.AsSpan(td.Offset, td.Size).CopyTo(updatedValue.Slice(offset));
+            }
+            result = updatedValue;
+        } else {
+            result = value;
+        }
+        // TODO: deal with varLen
+        // project out the attributes
+        ctx.AddReadSet(tupleId, result);
+        return project(result, tupleDescs);
+    }
+}
+}
