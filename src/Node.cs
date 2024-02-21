@@ -16,7 +16,7 @@ public interface INode {
     public void Start();
 }
 
-public struct ServerOptions {
+public struct NodeOptions {
     public IDarqClusterInfo ClusterInfo;
     public WorkerId Me;
     public long MinKey;
@@ -24,14 +24,14 @@ public struct ServerOptions {
     public int nCommitterThreads;
 }
 public class Node : INode {
-    private ServerOptions options;
+    private NodeOptions options;
     private DarqProcessor darqProcessor;
     private RpcService txnProcessor;
     private Table table;
     private TransactionManager txnManager;
     // TODO: benchmark data also 
 
-    public Node(ServerOptions options){
+    public Node(NodeOptions options){
         this.options = options;
     }
 

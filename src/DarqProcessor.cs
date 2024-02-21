@@ -47,25 +47,8 @@ public class DarqProcessor : IDarqProcessor {
                         }
                     }
                 }
-                var storedProcedureName = Encoding.ASCII.GetString(m.GetMessageBody().ToArray());
-                var schema = new (long, int)[]{};
-                switch (storedProcedureName){
-                    case "workloadA":
-                        // StoredProcedure p = StoredProcedure.GetWorkloadAUpdateHeavy(wal);
-                        // p.Run();'
-                        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
-                            ratio: 0.2,
-                            seed: 12345,
-                            attrCount: 10,
-                            threadCount: 12,
-                            iterationCount: 3
-                        );
-                        TableBenchmark b = new FixedLenTableBenchmark("OneAttr", ycsbCfg, wal);
-                        b.RunTransactions();
-                        break;
-                    default:
-                        throw new NotImplementedException();
-                }
+                var value = Encoding.ASCII.GetString(m.GetMessageBody().ToArray());
+                
 
                 var requestBuilder = new StepRequestBuilder(reusableRequest, me);
                 requestBuilder.MarkMessageConsumed(m.GetLsn());

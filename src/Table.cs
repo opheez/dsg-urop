@@ -46,7 +46,7 @@ public unsafe class Table : IDisposable{
     }
     
     // will never return null, empty 
-    public virtual ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
+    virtual public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);

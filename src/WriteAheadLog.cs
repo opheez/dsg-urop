@@ -15,6 +15,10 @@ namespace DB
 public interface IWriteAheadLog
 {
     public long Log(LogEntry entry);
+    public (long, StepRequestBuilder) Begin(long tid);
+    public long Write(LogEntry entry, StepRequestBuilder requestBuilder);
+    
+    public long Commit(LogEntry entry, StepRequestBuilder requestBuilder);
     public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
     // public void Recover();
 

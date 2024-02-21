@@ -67,7 +67,7 @@ unsafe class Program {
 
     public static void Main(string[] args)
     {
-        // Compose cluster architecture first because clusterInfo is mutable type in ServerOptions struct
+        // Compose cluster architecture first because clusterInfo is mutable type in NodeOptions struct
         var clusterInfo = new HardCodedClusterInfo();
         for (var i = 0; i < NumProcessors; i++)
         {
@@ -79,7 +79,7 @@ unsafe class Program {
         for (var i = 0; i < NumProcessors; i++) 
         {
             // Manually map services to ports and configure service provider
-            Node node = new Node(new ServerOptions
+            Node node = new Node(new NodeOptions
             {
                 Port = 50050 + i,
                 MinKey = i * 1000,

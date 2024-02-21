@@ -52,7 +52,7 @@ public class TransactionManager {
     /// </summary>
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
-    public bool Commit(TransactionContext ctx){
+    virtual public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
         while (!Util.IsTerminalStatus(ctx.status)){
@@ -207,4 +207,24 @@ public class TransactionManager {
     }
 }
 
+public class ShardedTransactionManager : TransactionManager {
+    public ShardedTransactionManager(int numThreads, IWriteAheadLog? wal) : base(numThreads, wal){
+    }
+
+    public override bool Commit(TransactionContext ctx){
+        ctx.status = TransactionStatus.Pending;
+        // TODO: add prepare message to WAL 
+        txnQueue.Add(ctx);        
+        while (!Util.IsTerminalStatus(ctx.status)){
+            Thread.Yield();
+        }
+        if (ctx.status == TransactionStatus.Aborted){
+            return false;
+        } else if (ctx.status == TransactionStatus.Committed) {
+            return true;
+        }
+        return false;
+    }
+    
+}
 }
