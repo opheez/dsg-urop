@@ -31,7 +31,7 @@ unsafe class Program {
 
     // }
 
-    //     private static void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
+    //     private static void RunDarqWithProcessor(DarqId me, IDarqClusterInfo clusterInfo)
     // {
     //     var logDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data.log", deleteOnClose: true);
     //     var darqServer = new DarqServer(new DarqServerOptions
@@ -71,7 +71,7 @@ unsafe class Program {
         var clusterInfo = new HardCodedClusterInfo();
         for (var i = 0; i < NumProcessors; i++)
         {
-            clusterInfo.AddWorker(new WorkerId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
+            clusterInfo.AddWorker(new DarqId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
         }
 
         var threads = new List<Thread>();
@@ -84,7 +84,7 @@ unsafe class Program {
                 Port = 50050 + i,
                 MinKey = i * 1000,
                 ClusterInfo = clusterInfo,
-                Me = new WorkerId(i)
+                Me = new DarqId(i)
             });
             nodes.Add(node);
         
@@ -97,7 +97,7 @@ unsafe class Program {
         nodes[0].EnqueueWorkload("a");
 
         // var darqClient = new DarqProducerClient(clusterInfo);
-        // darqClient.EnqueueMessageAsync(new WorkerId(0), Encoding.ASCII.GetBytes("workloadA"));
+        // darqClient.EnqueueMessageAsync(new DarqId(0), Encoding.ASCII.GetBytes("workloadA"));
 
         // foreach (var t in threads)
         //     t.Join();

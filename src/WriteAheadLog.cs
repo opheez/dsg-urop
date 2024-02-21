@@ -28,34 +28,34 @@ public class DARQWal : IWriteAheadLog {
 
     private long currLsn = 0;
     private IDarqProcessorClientCapabilities capabilities;
-    private WorkerId me;
+    private DarqId me;
     private SimpleObjectPool<StepRequest> requestPool;
 
-    public DARQWal(WorkerId me){
+    public DARQWal(DarqId me){
         this.me = me;
-        requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest(null));
+        requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 
     public (long, StepRequestBuilder) Begin(long tid){
         long lsn = GetNewLsn();
         LogEntry entry = new LogEntry(lsn, tid, LogType.Begin);
         entry.lsn = lsn;
-        var requestBuilder = new StepRequestBuilder(requestPool.Checkout(), me);
-        requestBuilder.AddSelfMessage(entry.ToBytes());
+        var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        requestBuilder.AddRecoveryMessage(entry.ToBytes());
         return (lsn, requestBuilder);
     }
      
     public long Write(LogEntry entry, StepRequestBuilder requestBuilder){
         entry.lsn = GetNewLsn();
 
-        requestBuilder.AddSelfMessage(entry.ToBytes());
+        requestBuilder.AddRecoveryMessage(entry.ToBytes());
         return entry.lsn;
     }
 
     public long Log(LogEntry entry){
         entry.lsn = GetNewLsn();
-        var requestBuilder = new StepRequestBuilder(requestPool.Checkout(), me);
-        requestBuilder.AddSelfMessage(entry.ToBytes());
+        var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        requestBuilder.AddRecoveryMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
         return entry.lsn;
@@ -63,7 +63,7 @@ public class DARQWal : IWriteAheadLog {
 
     public long Commit(LogEntry entry, StepRequestBuilder requestBuilder){
         entry.lsn = GetNewLsn();
-        requestBuilder.AddSelfMessage(entry.ToBytes());
+        requestBuilder.AddRecoveryMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
         return entry.lsn;
@@ -81,23 +81,23 @@ public class BatchDARQWal : IWriteAheadLog {
 
     private long currLsn = 0;
     private IDarqProcessorClientCapabilities capabilities;
-    private WorkerId me;
+    private DarqId me;
     private SimpleObjectPool<StepRequest> requestPool;
     private BlockingCollection<LogEntry> buffer = new BlockingCollection<LogEntry>();
     private Thread logger;
     private int flushSize = 1000;
 
-    public BatchDARQWal(WorkerId me){
+    public BatchDARQWal(DarqId me){
         this.me = me;
-        requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest(null));
+        requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
         // start thread that flushes buffer every 1000 entries
         logger = new Thread(() => {
             while (true){
-                var requestBuilder = new StepRequestBuilder(requestPool.Checkout(), me);
+                var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
                 var count = 0;
                 foreach (LogEntry e in buffer.GetConsumingEnumerable()){
                     e.SetPersisted();
-                    requestBuilder.AddSelfMessage(e.ToBytes());
+                    requestBuilder.AddRecoveryMessage(e.ToBytes());
                     count++;
                     if (count >= flushSize) break;
                 }
@@ -123,7 +123,7 @@ public class BatchDARQWal : IWriteAheadLog {
         entry.lsn = lsn;
         AddToBuffer(entry);
         
-        return (lsn, new StepRequestBuilder(requestPool.Checkout(), me));
+        return (lsn, new StepRequestBuilder(requestPool.Checkout()));
     }
      
     public long Write(LogEntry entry, StepRequestBuilder requestBuilder){
@@ -135,8 +135,8 @@ public class BatchDARQWal : IWriteAheadLog {
 
     public long Log(LogEntry entry){
         entry.lsn = GetNewLsn();
-        var requestBuilder = new StepRequestBuilder(requestPool.Checkout(), me);
-        requestBuilder.AddSelfMessage(entry.ToBytes());
+        var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        requestBuilder.AddRecoveryMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
         return entry.lsn;

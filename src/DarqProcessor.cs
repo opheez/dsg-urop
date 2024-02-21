@@ -13,16 +13,16 @@ namespace DB {
 // Takes in requests for stored procedures and executes them
 public class DarqProcessor : IDarqProcessor {
     private IDarqProcessorClientCapabilities capabilities;
-    private WorkerId me;
-    private List<WorkerId> workers;
-    private StepRequest reusableRequest = new(null);
+    private DarqId me;
+    private List<DarqId> workers;
+    private StepRequest reusableRequest = new();
     private IWriteAheadLog wal;
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
-    public DarqProcessor(WorkerId me, IDarqClusterInfo clusterInfo, IWriteAheadLog wal){
+    public DarqProcessor(DarqId me, IDarqClusterInfo clusterInfo, IWriteAheadLog wal){
         this.me = me;
-        workers = clusterInfo.GetWorkers().Select(e  => e.Item1).ToList();
+        workers = clusterInfo.GetMembers().Select(e  => e.Item1).ToList();
         this.wal = wal;
     }
 
@@ -50,7 +50,7 @@ public class DarqProcessor : IDarqProcessor {
                 var value = Encoding.ASCII.GetString(m.GetMessageBody().ToArray());
                 
 
-                var requestBuilder = new StepRequestBuilder(reusableRequest, me);
+                var requestBuilder = new StepRequestBuilder(reusableRequest);
                 requestBuilder.MarkMessageConsumed(m.GetLsn());
                 requestBuilder.AddOutMessage(me, BitConverter.GetBytes(-1));
                 m.Dispose();
@@ -58,7 +58,7 @@ public class DarqProcessor : IDarqProcessor {
                 Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
                 return true;
             }
-            case DarqMessageType.SELF: // this is on recovery; TODO: do we need to double pass?
+            case DarqMessageType.RECOVERY: // this is on recovery; TODO: do we need to double pass?
                 Console.WriteLine($"Recovering?, got log");
                 if (recoveryMode) {
                     LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);

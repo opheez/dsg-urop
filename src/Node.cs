@@ -18,7 +18,7 @@ public interface INode {
 
 public struct NodeOptions {
     public IDarqClusterInfo ClusterInfo;
-    public WorkerId Me;
+    public DarqId Me;
     public long MinKey;
     public int Port;
     public int nCommitterThreads;
@@ -103,7 +103,7 @@ public class Node : INode {
         Console.WriteLine($"Server started on port {options.Port}");
     }
 
-    private void RunDarqWithProcessor(WorkerId me, IDarqClusterInfo clusterInfo)
+    private void RunDarqWithProcessor(DarqId me, IDarqClusterInfo clusterInfo)
     {
         Console.WriteLine("Running DARQ with processor");
         var logDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data.log", deleteOnClose: true);
