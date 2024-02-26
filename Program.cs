@@ -107,11 +107,11 @@ unsafe class Program {
 
     public static void Main(string[] args)
     {
-        LaunchService(Int32.Parse(args[0]));
+        LaunchService(Int32.Parse(args[0]), args.Skip(1).ToArray());
 
     }
 
-    public static void LaunchService(int me) {
+    public static void LaunchService(int me, string[] args) {
         var builder = WebApplication.CreateBuilder();
 
         builder.Services.AddGrpc();
@@ -166,7 +166,7 @@ unsafe class Program {
             )
         );
 
-
+        builder.Configuration.AddCommandLine(args).Build();
         var app = builder.Build();
         // Configure the HTTP request pipeline.
         app.MapGrpcService<TransactionProcessorService>();
