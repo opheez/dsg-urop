@@ -107,12 +107,11 @@ unsafe class Program {
 
     public static void Main(string[] args)
     {
-        LaunchService();
+        LaunchService(Int32.Parse(args[0]));
 
     }
 
-    public static void LaunchService() {
-        int me = 0;
+    public static void LaunchService(int me) {
         var builder = WebApplication.CreateBuilder();
 
         builder.Services.AddGrpc();
