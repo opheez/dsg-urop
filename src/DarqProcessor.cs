@@ -23,7 +23,6 @@ public class DarqProcessor : IDarqProcessor {
     private IDarqProcessorClientCapabilities capabilities;
 
     private SimpleObjectPool<StepRequest> stepRequestPool = new(() => new StepRequest());
-    private List<GrpcChannel> workers;
     private int nextWorker = 0;
 
     /// previously
@@ -34,13 +33,12 @@ public class DarqProcessor : IDarqProcessor {
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
-    public DarqProcessor(IWriteAheadLog wal, Darq darq, List<GrpcChannel> executors, DarqBackgroundWorkerPool workerPool){
+    public DarqProcessor(IWriteAheadLog wal, Darq darq, IDarqClusterInfo clusterInfo, DarqBackgroundWorkerPool workerPool){
         this.wal = wal;
 
         backend = darq;
-        workers = executors;
         // TODO: inter-DARQ messaging ?? session => clusterInfo
-        _backgroundTask = new DarqBackgroundTask(backend, workerPool, null);
+        _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new DarqProducerClient(clusterInfo, session));
         terminationStart = new ManualResetEventSlim();
         terminationComplete = new ManualResetEventSlim();
         this.workerPool = workerPool;

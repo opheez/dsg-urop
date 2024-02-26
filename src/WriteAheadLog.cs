@@ -34,9 +34,9 @@ public class DARQWal : IWriteAheadLog {
     private SimpleObjectPool<StepRequest> requestPool;
     private DarqProcessor darqProcessor;
 
-    public DARQWal(DarqId me, Darq darq, List<GrpcChannel> executors, DarqBackgroundWorkerPool workerPool){
+    public DARQWal(DarqId me, Darq darq, IDarqClusterInfo clusterInfo, DarqBackgroundWorkerPool workerPool){
         this.me = me;
-        darqProcessor = new DarqProcessor(this, darq, executors, workerPool);
+        darqProcessor = new DarqProcessor(this, darq, clusterInfo, workerPool);
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 

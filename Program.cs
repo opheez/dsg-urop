@@ -117,9 +117,13 @@ unsafe class Program {
 
         builder.Services.AddGrpc();
         // Other nodes to communicate with
-        using var workerChannel = GrpcChannel.ForAddress("http://localhost:15722");
-        var executors = new List<GrpcChannel> { workerChannel };
-        builder.Services.AddSingleton(executors);
+        var clusterInfo = new HardCodedClusterInfo();
+        for (var i = 0; i < 2; i++)
+        {
+            clusterInfo.AddWorker(new DarqId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
+        }
+
+        builder.Services.AddSingleton<IDarqClusterInfo>(clusterInfo);
         // DARQ injection
         builder.Services.AddSingleton(new DarqBackgroundWorkerPoolSettings
         {
@@ -141,15 +145,15 @@ unsafe class Program {
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
         builder.Services.AddSingleton<IWriteAheadLog, DARQWal>(
-            services => new DARQWal(new DarqId(me), services.GetRequiredService<Darq>(), services.GetRequiredService<List<GrpcChannel>>(), services.GetRequiredService<DarqBackgroundWorkerPool>())
+            services => new DARQWal(new DarqId(me), services.GetRequiredService<Darq>(), services.GetRequiredService<IDarqClusterInfo>(), services.GetRequiredService<DarqBackgroundWorkerPool>())
         );
         builder.Services.AddSingleton<DarqProcessor>();
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(1, new Dictionary<long, string>{
-            {1, "http://localhost:5000"},
-            {2, "http://localhost:5001"}
+            {0, "http://localhost:5000"},
+            {1, "http://localhost:5001"}
         }));
         builder.Services.AddSingleton<Table, ShardedTable>();
         builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>(services => new ShardedTransactionManager(1, services.GetRequiredService<IWriteAheadLog>()));
