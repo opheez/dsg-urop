@@ -11,11 +11,14 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     private Table table;
     private Dictionary<(long, long), TransactionContext> externalTxnIdToTxnCtx = new Dictionary<(long, long), TransactionContext>();
     private IWriteAheadLog wal;
-    public TransactionProcessorService(Table table, TransactionManager txnManager, IWriteAheadLog wal) {
+    private long me;
+    public TransactionProcessorService(long me, Table table, TransactionManager txnManager, IWriteAheadLog wal) {
         this.table = table;
         this.txnManager = txnManager;
         // MinKey = minKey;
+        this.me = me;
         this.wal = wal;
+        table.Write(new KeyAttr(me, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
     }
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
@@ -34,9 +37,6 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
 
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
-        // TODO: key should be ID of server 
-        table.Write(new KeyAttr(0, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
-
         var ctx = txnManager.Begin();
         Console.WriteLine("Should go to own");
         var own = table.Read(new TupleId(0, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);

@@ -157,7 +157,14 @@ unsafe class Program {
         builder.Services.AddSingleton<Table, ShardedTable>();
         builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>(services => new ShardedTransactionManager(1, services.GetRequiredService<IWriteAheadLog>()));
 
-        builder.Services.AddSingleton<TransactionProcessorService>();
+        builder.Services.AddSingleton<TransactionProcessorService>(
+            service => new TransactionProcessorService(
+                me,
+                service.GetRequiredService<Table>(),
+                service.GetRequiredService<TransactionManager>(),
+                service.GetRequiredService<IWriteAheadLog>()
+            )
+        );
 
 
         var app = builder.Build();
