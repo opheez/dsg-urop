@@ -7,21 +7,12 @@ using FASTER.darq;
 
 namespace DB {
 public class RpcClient {
-    public const string DomainAddress = "http://127.0.0.1";
-    public const int BasePort = 50050;
     private long me;
-    private Dictionary<long, GrpcChannel> channelMap;
+    private Dictionary<long, GrpcChannel> clusterMap;
 
-    public RpcClient(long me, Dictionary<long, string> clusterInfo){
+    public RpcClient(long me, Dictionary<long, GrpcChannel> clusterMap){
         this.me = me;
-        // create channel to each server
-        channelMap = new Dictionary<long, GrpcChannel>();
-        foreach (var other in clusterInfo){
-            if (other.Key == me) continue;
-            channelMap[other.Key] = GrpcChannel.ForAddress(other.Value);
-            Console.WriteLine($"Created channel to {other.Value}");
-        }
-
+        this.clusterMap = clusterMap;
     }
 
     public long GetId(){
@@ -43,12 +34,12 @@ public class RpcClient {
         var id = HashKeyToDarqId(key);
         Console.WriteLine($"Hashing key {key} to worker id {id}");
         if (id == me) return null;
-        return channelMap[id];
+        return clusterMap[id];
     }
 
     // TODO: arbitrary for now, define some rules for how to map keys to servers
     public long HashKeyToDarqId(long key){
-        return key % (channelMap.Count() + 1);
+        return key % clusterMap.Count();
     }
 }
 }

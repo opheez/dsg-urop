@@ -8,6 +8,7 @@ using FASTER.common;
 using Grpc.Net.Client;
 using darq;
 using darq.client;
+using System.Collections.Concurrent;
 
 namespace DB {
 
@@ -33,12 +34,12 @@ public class DarqProcessor : IDarqProcessor {
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
-    public DarqProcessor(IWriteAheadLog wal, Darq darq, IDarqClusterInfo clusterInfo, DarqBackgroundWorkerPool workerPool){
+    public DarqProcessor(IWriteAheadLog wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap){
         this.wal = wal;
 
         backend = darq;
         // TODO: inter-DARQ messaging ?? session => clusterInfo
-        _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new DarqProducerClient(clusterInfo, session));
+        _backgroundTask = new DarqBackgroundTask(backend, workerPool,  session => new TransactionProcessorProducerWrapper(clusterMap, session));
         terminationStart = new ManualResetEventSlim();
         terminationComplete = new ManualResetEventSlim();
         this.workerPool = workerPool;
@@ -132,50 +133,50 @@ public class DarqProcessor : IDarqProcessor {
     }
 }
 
-// public class TransactionProcessorProducerWrapper : IDarqProducer
-// {
-//     private Dictionary<DarqId, GrpcChannel> clusterMap;
-//     private ConcurrentDictionary<DarqId, DarqGrpcService.DarqGrpcServiceClient> clients = new();
-//     private DprSession session;
+public class TransactionProcessorProducerWrapper : IDarqProducer
+{
+    private Dictionary<DarqId, GrpcChannel> clusterMap;
+    private ConcurrentDictionary<DarqId, TransactionProcessor.TransactionProcessorClient> clients = new();
+    private DprSession session;
 
-//     public TransactionProcessorProducerWrapper(Dictionary<DarqId, GrpcChannel> clusterMap, DprSession session)
-//     {
-//         this.clusterMap = clusterMap;
-//         this.session = session;
-//     }
+    public TransactionProcessorProducerWrapper(Dictionary<DarqId, GrpcChannel> clusterMap, DprSession session)
+    {
+        this.clusterMap = clusterMap;
+        this.session = session;
+    }
     
-//     public void Dispose() {}
+    public void Dispose() {}
 
-//     public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
-//     {
-//         // do typical darq message sending but also 
-//         var client = clients.GetOrAdd(darqId,
-//             _ => new DarqGrpcService.DarqGrpcServiceClient(clusterMap[darqId]
-//                 .Intercept(new DprClientInterceptor(session))));
-//         var enqueueRequest = new DarqEnqueueRequest
-//         {
-//             Message = ByteString.CopyFrom(message),
-//             ProducerId = producerId,
-//             Lsn = lsn
-//         };
-//         Task.Run(async () =>
-//         {
-//             try
-//             {
-//                 await client.EnqueueAsync(enqueueRequest);
-//                 callback(true);
-//             }
-//             catch
-//             {
-//                 callback(false);
-//                 throw;
-//             }
-//         });
-//     }
+    public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
+    {
+        // // do typical darq message sending but also 
+        // var client = clients.GetOrAdd(darqId,
+        //     _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]
+        //         .Intercept(new DprClientInterceptor(session))));
+        // var enqueueRequest = new DarqEnqueueRequest
+        // {
+        //     Message = ByteString.CopyFrom(message),
+        //     ProducerId = producerId,
+        //     Lsn = lsn
+        // };
+        // Task.Run(async () =>
+        // {
+        //     try
+        //     {
+        //         await client.EnqueueAsync(enqueueRequest);
+        //         callback(true);
+        //     }
+        //     catch
+        //     {
+        //         callback(false);
+        //         throw;
+        //     }
+        // });
+    }
 
-//     public void ForceFlush()
-//     {
-//         // TODO(Tianyu): Not implemented for now
-//     }
-// }
+    public void ForceFlush()
+    {
+        // TODO(Tianyu): Not implemented for now
+    }
+}
 }

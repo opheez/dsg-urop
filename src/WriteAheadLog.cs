@@ -8,6 +8,7 @@ using FASTER.server;
 using System.Diagnostics;
 using FASTER.common;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using Grpc.Net.Client;
 using darq;
 
@@ -35,9 +36,9 @@ public class DARQWal : IWriteAheadLog {
     private SimpleObjectPool<StepRequest> requestPool;
     private DarqProcessor darqProcessor;
 
-    public DARQWal(DarqId me, Darq darq, IDarqClusterInfo clusterInfo, DarqBackgroundWorkerPool workerPool){
+    public DARQWal(DarqId me, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<long, GrpcChannel> clusterMap){
         this.me = me;
-        darqProcessor = new DarqProcessor(this, darq, clusterInfo, workerPool);
+        darqProcessor = new DarqProcessor(this, darq, workerPool, clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 

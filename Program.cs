@@ -114,6 +114,13 @@ unsafe class Program {
 
     public static void LaunchService(int me) {
         var builder = WebApplication.CreateBuilder();
+        // create channel to each server
+        Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();
+        for (int i = 0; i < NumProcessors; i++){
+            string address = "http://" + IPAddress.Loopback.ToString() + ":" + (5000 + i);
+            clusterMap[i] = GrpcChannel.ForAddress(address);
+            Console.WriteLine($"Created channel to {address}");
+        }
 
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions =>
@@ -121,15 +128,8 @@ unsafe class Program {
             serverOptions.Listen(IPAddress.Loopback, 5000 + me,
                 listenOptions => { listenOptions.Protocols = HttpProtocols.Http2; });
         });
-        // Other nodes to communicate with
-        var clusterInfo = new HardCodedClusterInfo();
-        for (var i = 0; i < 2; i++)
-        {
-            clusterInfo.AddWorker(new DarqId(i), $"Test Worker {i}", "127.0.0.1", 15721 + i);
-        }
-
-        builder.Services.AddSingleton<IDarqClusterInfo>(clusterInfo);
         // DARQ injection
+        builder.Services.AddSingleton<Dictionary<long, GrpcChannel>>(clusterMap);
         builder.Services.AddSingleton(new DarqBackgroundWorkerPoolSettings
         {
             numWorkers = 2
@@ -150,16 +150,16 @@ unsafe class Program {
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
         builder.Services.AddSingleton<IWriteAheadLog, DARQWal>(
-            services => new DARQWal(new DarqId(me), services.GetRequiredService<Darq>(), services.GetRequiredService<IDarqClusterInfo>(), services.GetRequiredService<DarqBackgroundWorkerPool>())
+            services => new DARQWal(new DarqId(me),
+                                    services.GetRequiredService<Darq>(),
+                                    services.GetRequiredService<DarqBackgroundWorkerPool>(), 
+                                    services.GetRequiredService<Dictionary<long, GrpcChannel>>())
         );
         builder.Services.AddSingleton<DarqProcessor>();
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
-        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, new Dictionary<long, string>{
-            {0, "http://localhost:5000"},
-            {1, "http://localhost:5001"}
-        }));
+        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
         builder.Services.AddSingleton<Table, ShardedTable>();
         builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>(services => new ShardedTransactionManager(1, services.GetRequiredService<IWriteAheadLog>()));
 
