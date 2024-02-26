@@ -24,7 +24,7 @@ public class RpcClient {
 
     }
 
-    public long GetDarqId(){
+    public long GetId(){
         return me;
     }
     public ReadOnlySpan<byte> Read(long key, TransactionContext ctx){
@@ -48,7 +48,7 @@ public class RpcClient {
 
     // TODO: arbitrary for now, define some rules for how to map keys to servers
     public long HashKeyToDarqId(long key){
-        return key % channelMap.Count();
+        return key % (channelMap.Count() + 1);
     }
 }
 }
