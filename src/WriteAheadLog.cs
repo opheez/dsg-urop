@@ -22,6 +22,7 @@ public interface IWriteAheadLog
     
     public long Commit(LogEntry entry, StepRequestBuilder requestBuilder);
     public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
+    public void Terminate();
     // public void Recover();
 
 }
@@ -79,6 +80,9 @@ public class DARQWal : IWriteAheadLog {
 
     public void SetCapabilities(IDarqProcessorClientCapabilities capabilities) {
         this.capabilities = capabilities;
+    }
+    public void Terminate(){
+        return;
     }
 }
 public class BatchDARQWal : IWriteAheadLog {
