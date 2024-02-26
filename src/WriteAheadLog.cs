@@ -8,6 +8,8 @@ using FASTER.server;
 using System.Diagnostics;
 using FASTER.common;
 using System.Collections.Concurrent;
+using Grpc.Net.Client;
+using darq;
 
 
 namespace DB 
@@ -30,9 +32,11 @@ public class DARQWal : IWriteAheadLog {
     private IDarqProcessorClientCapabilities capabilities;
     private DarqId me;
     private SimpleObjectPool<StepRequest> requestPool;
+    private DarqProcessor darqProcessor;
 
-    public DARQWal(DarqId me){
+    public DARQWal(DarqId me, Darq darq, List<GrpcChannel> executors, DarqBackgroundWorkerPool workerPool){
         this.me = me;
+        darqProcessor = new DarqProcessor(this, darq, executors, workerPool);
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 

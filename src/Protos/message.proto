@@ -4,6 +4,7 @@ option csharp_namespace = "DB";
 
 service TransactionProcessor {
     rpc Read (ReadRequest) returns (ReadReply);
+    rpc EnqueueWorkload (EnqueueWorkloadRequest) returns (EnqueueWorkloadReply);
     // rpc Update (WriteRequest) returns (WriteReply);
     // rpc Insert (WriteRequest) returns (WriteReply);
     // rpc Begin (BeginRequest) returns (BeginReply);
@@ -19,6 +20,14 @@ message ReadRequest {
 
 message ReadReply {
     bytes value = 1;
+}
+
+message EnqueueWorkloadRequest {
+    string workload = 1;
+}
+
+message EnqueueWorkloadReply {
+    bool success = 1;
 }
 
 // message WriteRequest {

@@ -9,31 +9,28 @@ namespace DB {
 public class RpcClient {
     public const string DomainAddress = "http://127.0.0.1";
     public const int BasePort = 50050;
-    private DarqId me;
-    private IDarqClusterInfo clusterInfo;
-    private Dictionary<DarqId, GrpcChannel> channelMap;
+    private long me;
+    private Dictionary<long, GrpcChannel> channelMap;
 
-    public RpcClient(DarqId me, IDarqClusterInfo clusterInfo){
-        this.clusterInfo = clusterInfo;
+    public RpcClient(long me, Dictionary<long, string> clusterInfo){
         this.me = me;
         // create channel to each server
-        channelMap = new Dictionary<DarqId, GrpcChannel>();
-        foreach (var server in clusterInfo.GetMembers()){
-            DarqId darqId = server.Item1;
-            string address = DomainAddress + ":" + BasePort + darqId.guid;
-            channelMap[darqId] = GrpcChannel.ForAddress(address);
-            Console.WriteLine($"Created channel to {address}");
+        channelMap = new Dictionary<long, GrpcChannel>();
+        foreach (var other in clusterInfo){
+            if (other.Key == me) continue;
+            channelMap[other.Key] = GrpcChannel.ForAddress(other.Value);
+            Console.WriteLine($"Created channel to {other.Value}");
         }
 
     }
 
-    public DarqId GetDarqId(){
+    public long GetDarqId(){
         return me;
     }
     public ReadOnlySpan<byte> Read(long key, TransactionContext ctx){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        var reply = client.Read(new ReadRequest { Key = key, Tid = ctx.tid, Me = me.guid});
+        var reply = client.Read(new ReadRequest { Key = key, Tid = ctx.tid, Me = me});
         return reply.Value.ToByteArray();
     }
 
@@ -43,15 +40,15 @@ public class RpcClient {
     /// <param name="key"></param>
     /// <returns>Null if key maps to itself, appropriate channel otherwise</returns>
     private GrpcChannel? GetServerChannel(long key){
-        var darqId = HashKeyToDarqId(key);
-        Console.WriteLine($"Hashing key {key} to worker id {darqId.guid}");
-        if (darqId.Equals(me)) return null;
-        return channelMap[darqId];
+        var id = HashKeyToDarqId(key);
+        Console.WriteLine($"Hashing key {key} to worker id {id}");
+        if (id.Equals(me)) return null;
+        return channelMap[id];
     }
 
     // TODO: arbitrary for now, define some rules for how to map keys to servers
-    public DarqId HashKeyToDarqId(long key){
-        return new DarqId((int)(key % clusterInfo.GetClusterSize()));
+    public long HashKeyToDarqId(long key){
+        return key % channelMap.Count();
     }
 }
 }
