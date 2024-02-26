@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Net;
 using System.Text;
 using BenchmarkDotNet.Running;
 using darq;
@@ -107,14 +108,19 @@ unsafe class Program {
 
     public static void Main(string[] args)
     {
-        LaunchService(Int32.Parse(args[0]), args.Skip(1).ToArray());
+        LaunchService(Int32.Parse(args[0]));
 
     }
 
-    public static void LaunchService(int me, string[] args) {
+    public static void LaunchService(int me) {
         var builder = WebApplication.CreateBuilder();
 
         builder.Services.AddGrpc();
+        builder.WebHost.ConfigureKestrel(serverOptions =>
+        {
+            serverOptions.Listen(IPAddress.Loopback, 5000 + me,
+                listenOptions => { listenOptions.Protocols = HttpProtocols.Http2; });
+        });
         // Other nodes to communicate with
         var clusterInfo = new HardCodedClusterInfo();
         for (var i = 0; i < 2; i++)
@@ -166,7 +172,6 @@ unsafe class Program {
             )
         );
 
-        builder.Configuration.AddCommandLine(args).Build();
         var app = builder.Build();
         // Configure the HTTP request pipeline.
         app.MapGrpcService<TransactionProcessorService>();
