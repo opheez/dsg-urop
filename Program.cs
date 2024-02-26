@@ -112,7 +112,7 @@ unsafe class Program {
     }
 
     public static void LaunchService() {
-        int me = 1;
+        int me = 0;
         var builder = WebApplication.CreateBuilder();
 
         builder.Services.AddGrpc();
@@ -151,7 +151,7 @@ unsafe class Program {
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
-        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(1, new Dictionary<long, string>{
+        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, new Dictionary<long, string>{
             {0, "http://localhost:5000"},
             {1, "http://localhost:5001"}
         }));

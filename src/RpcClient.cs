@@ -42,7 +42,7 @@ public class RpcClient {
     private GrpcChannel? GetServerChannel(long key){
         var id = HashKeyToDarqId(key);
         Console.WriteLine($"Hashing key {key} to worker id {id}");
-        if (id.Equals(me)) return null;
+        if (id == me) return null;
         return channelMap[id];
     }
 

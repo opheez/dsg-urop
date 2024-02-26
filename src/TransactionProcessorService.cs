@@ -35,7 +35,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
         // TODO: key should be ID of server 
-        table.Write(new KeyAttr(1, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
+        table.Write(new KeyAttr(0, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
 
         var ctx = txnManager.Begin();
         Console.WriteLine("Should go to own");
