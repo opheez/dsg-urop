@@ -143,9 +143,12 @@ unsafe class Program {
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
-        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(1, new Dictionary<long, string>{}));
-        builder.Services.AddSingleton<ShardedTable>();
-        builder.Services.AddSingleton<ShardedTransactionManager>();
+        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(1, new Dictionary<long, string>{
+            {1, "http://localhost:5000"},
+            {1, "http://localhost:5001"}
+        }));
+        builder.Services.AddSingleton<Table, ShardedTable>();
+        builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>();
 
         builder.Services.AddSingleton<TransactionProcessorService>();
 
