@@ -6,15 +6,15 @@ using Microsoft.AspNetCore.Builder;
 namespace DB {
 
 public class TransactionProcessorService : TransactionProcessor.TransactionProcessorBase {
-    long MinKey;
+    // long MinKey;
     private TransactionManager txnManager;
     private Table table;
     private Dictionary<(long, long), TransactionContext> externalTxnIdToTxnCtx = new Dictionary<(long, long), TransactionContext>();
     private IWriteAheadLog wal;
-    public TransactionProcessorService(Table table, TransactionManager txnManager, long minKey, IWriteAheadLog wal) {
+    public TransactionProcessorService(Table table, TransactionManager txnManager, IWriteAheadLog wal) {
         this.table = table;
         this.txnManager = txnManager;
-        MinKey = minKey;
+        // MinKey = minKey;
         this.wal = wal;
     }
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)

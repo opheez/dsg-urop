@@ -112,6 +112,7 @@ unsafe class Program {
     }
 
     public static void LaunchService() {
+        int me = 1;
         var builder = WebApplication.CreateBuilder();
 
         builder.Services.AddGrpc();
@@ -139,16 +140,19 @@ unsafe class Program {
         builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
+        builder.Services.AddSingleton<IWriteAheadLog, DARQWal>(
+            services => new DARQWal(new DarqId(me), services.GetRequiredService<Darq>(), services.GetRequiredService<List<GrpcChannel>>(), services.GetRequiredService<DarqBackgroundWorkerPool>())
+        );
         builder.Services.AddSingleton<DarqProcessor>();
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(1, new Dictionary<long, string>{
             {1, "http://localhost:5000"},
-            {1, "http://localhost:5001"}
+            {2, "http://localhost:5001"}
         }));
         builder.Services.AddSingleton<Table, ShardedTable>();
-        builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>();
+        builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>(services => new ShardedTransactionManager(1, services.GetRequiredService<IWriteAheadLog>()));
 
         builder.Services.AddSingleton<TransactionProcessorService>();
 
