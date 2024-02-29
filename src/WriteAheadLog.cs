@@ -36,9 +36,13 @@ public class DARQWal : IWriteAheadLog {
     private SimpleObjectPool<StepRequest> requestPool;
     private DarqProcessor darqProcessor;
 
-    public DARQWal(DarqId me, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<long, GrpcChannel> clusterMap){
+    // public delegate void OnRestart(IDarqProcessorClientCapabilities capabilities);
+
+    public DARQWal(DarqId me, DarqProcessor darqProcessor){
         this.me = me;
-        darqProcessor = new DarqProcessor(this, darq, workerPool, clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
+        // darqProcessor = new DarqProcessor(SetCapabilities, darq, workerPool, clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
+        this.darqProcessor = darqProcessor;
+        darqProcessor.SetWal(this);
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 

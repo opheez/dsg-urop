@@ -130,6 +130,7 @@ unsafe class Program {
         });
         // DARQ injection
         builder.Services.AddSingleton<Dictionary<long, GrpcChannel>>(clusterMap);
+        builder.Services.AddSingleton<Dictionary<DarqId, GrpcChannel>>(clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
         builder.Services.AddSingleton(new DarqBackgroundWorkerPoolSettings
         {
             numWorkers = 2
@@ -149,11 +150,11 @@ unsafe class Program {
         builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
+        builder.Services.AddSingleton<DarqProcessor>();
         builder.Services.AddSingleton<IWriteAheadLog, DARQWal>(
             services => new DARQWal(new DarqId(me),
-                                    services.GetRequiredService<Darq>(),
-                                    services.GetRequiredService<DarqBackgroundWorkerPool>(), 
-                                    services.GetRequiredService<Dictionary<long, GrpcChannel>>())
+                                    services.GetRequiredService<DarqProcessor>()
+                                    )
         );
         builder.Services.AddSingleton<DarqProcessor>();
 

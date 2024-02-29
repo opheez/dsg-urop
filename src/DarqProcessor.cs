@@ -34,9 +34,7 @@ public class DarqProcessor : IDarqProcessor {
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
 
     
-    public DarqProcessor(IWriteAheadLog wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap){
-        this.wal = wal;
-
+    public DarqProcessor(Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap){
         backend = darq;
         // TODO: inter-DARQ messaging ?? session => clusterInfo
         _backgroundTask = new DarqBackgroundTask(backend, workerPool,  session => new TransactionProcessorProducerWrapper(clusterMap, session));
@@ -125,6 +123,10 @@ public class DarqProcessor : IDarqProcessor {
             default:
                 throw new NotImplementedException();
         }
+    }
+
+    public void SetWal(DARQWal wal) {
+        this.wal = wal;
     }
 
     public void OnRestart(IDarqProcessorClientCapabilities capabilities) {
