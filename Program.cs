@@ -150,13 +150,9 @@ unsafe class Program {
         builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
-        builder.Services.AddSingleton<DarqProcessor>();
         builder.Services.AddSingleton<IWriteAheadLog, DARQWal>(
-            services => new DARQWal(new DarqId(me),
-                                    services.GetRequiredService<DarqProcessor>()
-                                    )
+            services => new DARQWal(new DarqId(me))
         );
-        builder.Services.AddSingleton<DarqProcessor>();
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
@@ -169,7 +165,10 @@ unsafe class Program {
                 me,
                 service.GetRequiredService<Table>(),
                 service.GetRequiredService<TransactionManager>(),
-                service.GetRequiredService<IWriteAheadLog>()
+                service.GetRequiredService<IWriteAheadLog>(),
+                service.GetRequiredService<Darq>(),
+                service.GetRequiredService<DarqBackgroundWorkerPool>(),
+                service.GetRequiredService<Dictionary<DarqId, GrpcChannel>>()
             )
         );
 

@@ -33,7 +33,7 @@ message EnqueueWorkloadReply {
 
 message WalRequest {
     bytes message = 1;
-    int64 producerId = 2;
+    int64 tid = 2;
     int64 lsn = 3;
     int64 me = 10;
 }
