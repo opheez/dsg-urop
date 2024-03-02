@@ -9,6 +9,7 @@ using Grpc.Net.Client;
 using darq;
 using darq.client;
 using System.Collections.Concurrent;
+using Google.Protobuf;
 
 namespace DB {
 
@@ -36,8 +37,7 @@ public class DarqProcessor : IDarqProcessor {
     
     public DarqProcessor(Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap){
         backend = darq;
-        // TODO: inter-DARQ messaging ?? session => clusterInfo
-        _backgroundTask = new DarqBackgroundTask(backend, workerPool,  session => new TransactionProcessorProducerWrapper(clusterMap, session));
+        _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new TransactionProcessorProducerWrapper(clusterMap, session));
         terminationStart = new ManualResetEventSlim();
         terminationComplete = new ManualResetEventSlim();
         this.workerPool = workerPool;
@@ -100,8 +100,23 @@ public class DarqProcessor : IDarqProcessor {
                             return false;
                         }
                     }
-                }                
-                // TODO: verify only IN messages it should receive are PREPARE / COMMIT messages 
+                }
+
+                LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
+                switch (entry.type)
+                {
+                    case LogType.Prepare:
+                        Console.WriteLine($"Got prepare log entry: {entry}");
+                        break;
+                    case LogType.Commit:
+                        Console.WriteLine($"Got commit log entry: {entry}");
+                        // write self message
+                        
+                        break;
+                    default:
+                        throw new NotImplementedException();
+                }
+
                 var requestBuilder = new StepRequestBuilder(reusableRequest);
                 requestBuilder.MarkMessageConsumed(m.GetLsn());
                 requestBuilder.AddRecoveryMessage(m.GetMessageBody());
@@ -151,29 +166,27 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
 
     public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
     {
-        // // do typical darq message sending but also 
-        // var client = clients.GetOrAdd(darqId,
-        //     _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]
-        //         .Intercept(new DprClientInterceptor(session))));
-        // var enqueueRequest = new DarqEnqueueRequest
-        // {
-        //     Message = ByteString.CopyFrom(message),
-        //     ProducerId = producerId,
-        //     Lsn = lsn
-        // };
-        // Task.Run(async () =>
-        // {
-        //     try
-        //     {
-        //         await client.EnqueueAsync(enqueueRequest);
-        //         callback(true);
-        //     }
-        //     catch
-        //     {
-        //         callback(false);
-        //         throw;
-        //     }
-        // });
+        var client = clients.GetOrAdd(darqId,
+            _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]));
+        var walRequest = new WalRequest
+        {
+            Message = ByteString.CopyFrom(message),
+            ProducerId = producerId,
+            Lsn = lsn
+        };
+        Task.Run(async () =>
+        {
+            try
+            {
+                await client.WriteWalEntryAsync(walRequest);
+                callback(true);
+            }
+            catch
+            {
+                callback(false);
+                throw;
+            }
+        });
     }
 
     public void ForceFlush()

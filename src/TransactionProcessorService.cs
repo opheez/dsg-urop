@@ -1,4 +1,6 @@
+using FASTER.common;
 using FASTER.darq;
+using FASTER.libdpr;
 using Google.Protobuf;
 using Grpc.Core;
 using Microsoft.AspNetCore.Builder;
@@ -10,9 +12,10 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     private TransactionManager txnManager;
     private Table table;
     private Dictionary<(long, long), TransactionContext> externalTxnIdToTxnCtx = new Dictionary<(long, long), TransactionContext>();
-    private IWriteAheadLog wal;
+    private IDarqWal wal;
     private long me;
-    public TransactionProcessorService(long me, Table table, TransactionManager txnManager, IWriteAheadLog wal) {
+    private ThreadLocalObjectPool<byte[]> enqueueRequestPool;
+    public TransactionProcessorService(long me, Table table, TransactionManager txnManager, IDarqWal wal) {
         this.table = table;
         this.txnManager = txnManager;
         // MinKey = minKey;
@@ -52,6 +55,30 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         }
         EnqueueWorkloadReply enqueueWorkloadReply = new EnqueueWorkloadReply{Success = true};
         return Task.FromResult(enqueueWorkloadReply);
+    }
+
+    // typically used for Prepare() and Commit() 
+    public override Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
+    {
+        Console.WriteLine("Writing to WAL");
+
+        var enqueueBuffer = enqueueRequestPool.Checkout();
+        SerializedDarqEntryBatch enqueueRequest;
+        unsafe
+        {
+            fixed (byte* b = enqueueBuffer)
+            {
+                enqueueRequest = new SerializedDarqEntryBatch(b);
+                enqueueRequest.SetContent(request.Message.Span);
+            }
+        }
+
+        var ok = wal.GetDarqProcessor().GetBackend().Enqueue(enqueueRequest, request.ProducerId, request.Lsn);
+        enqueueRequestPool.Return(enqueueBuffer);
+        return Task.FromResult(new DarqEnqueueResult
+        {
+            Ok = ok
+        });
     }
 
     public void Dispose(){

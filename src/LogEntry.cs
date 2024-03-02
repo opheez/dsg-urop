@@ -6,6 +6,7 @@ namespace DB {
 
 public enum LogType {
     Begin,
+    Prepare,
     Commit,
     Abort,
     Write

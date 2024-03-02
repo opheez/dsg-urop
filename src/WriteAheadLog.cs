@@ -28,7 +28,11 @@ public interface IWriteAheadLog
 
 }
 
-public class DARQWal : IWriteAheadLog {
+public interface IDarqWal : IWriteAheadLog {
+    public DarqProcessor GetDarqProcessor();
+}
+
+public class DARQWal : IDarqWal {
 
     private long currLsn = 0;
     private IDarqProcessorClientCapabilities capabilities;
@@ -36,11 +40,8 @@ public class DARQWal : IWriteAheadLog {
     private SimpleObjectPool<StepRequest> requestPool;
     private DarqProcessor darqProcessor;
 
-    // public delegate void OnRestart(IDarqProcessorClientCapabilities capabilities);
-
     public DARQWal(DarqId me, DarqProcessor darqProcessor){
         this.me = me;
-        // darqProcessor = new DarqProcessor(SetCapabilities, darq, workerPool, clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
         this.darqProcessor = darqProcessor;
         darqProcessor.SetWal(this);
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
@@ -89,7 +90,10 @@ public class DARQWal : IWriteAheadLog {
     public void Terminate(){
         return;
     }
+
+    public DarqProcessor GetDarqProcessor() => darqProcessor;
 }
+// deprecated 
 public class BatchDARQWal : IWriteAheadLog {
 
     private long currLsn = 0;

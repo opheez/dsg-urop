@@ -5,6 +5,7 @@ option csharp_namespace = "DB";
 service TransactionProcessor {
     rpc Read (ReadRequest) returns (ReadReply);
     rpc EnqueueWorkload (EnqueueWorkloadRequest) returns (EnqueueWorkloadReply);
+    rpc WriteWalEntry (WalRequest) returns (WalReply);
     // rpc Update (WriteRequest) returns (WriteReply);
     // rpc Insert (WriteRequest) returns (WriteReply);
     // rpc Begin (BeginRequest) returns (BeginReply);
@@ -27,6 +28,17 @@ message EnqueueWorkloadRequest {
 }
 
 message EnqueueWorkloadReply {
+    bool success = 1;
+}
+
+message WalRequest {
+    bytes message = 1;
+    int64 producerId = 2;
+    int64 lsn = 3;
+    int64 me = 10;
+}
+
+message WalReply {
     bool success = 1;
 }
 
