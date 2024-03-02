@@ -189,6 +189,10 @@ public unsafe class Table : IDisposable{
         return schema;
     }
 
+    public (int, int) GetAttrMetadata(long attr){
+        return this.metadata[attr];
+    }
+
     public void Debug(){
         Console.WriteLine("Metadata: ");
         foreach (var field in metadata){

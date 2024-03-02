@@ -232,6 +232,14 @@ namespace DB {
         public static bool IsTerminalStatus(TransactionStatus status){
             return status == TransactionStatus.Committed || status == TransactionStatus.Aborted;
         }
+
+        public static int GetLength(byte[][] arr){
+            int len = 0;
+            foreach (byte[] a in arr){
+                len += a.Length;
+            }
+            return len;
+        }
     }
 
 }

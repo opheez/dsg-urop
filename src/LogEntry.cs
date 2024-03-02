@@ -18,15 +18,22 @@ public struct LogEntry{
     public long prevLsn; // do we even need this if we are undoing?
     public long tid;
     public LogType type;
-    public KeyAttr keyAttr;
-    public byte[] val;
-    public static readonly int Size = sizeof(long) * 3 + sizeof(int) + KeyAttr.Size;
+    public KeyAttr[] keyAttrs;
+    public byte[][] vals;
+    public static readonly int MinSize = sizeof(long) * 3 + sizeof(int);
     public LogEntry(long prevLsn, long tid, KeyAttr keyAttr, byte[] val){
         this.prevLsn = prevLsn;
         this.tid = tid;
-        this.keyAttr = keyAttr;
-        this.val = val;
         this.type = LogType.Write;
+        this.keyAttrs = new KeyAttr[1]{keyAttr};
+        this.vals = new byte[][]{val};
+    }
+    public LogEntry(long prevLsn, long tid, KeyAttr[] keyAttr, byte[][] val){
+        this.prevLsn = prevLsn;
+        this.tid = tid;
+        this.type = LogType.Write;
+        this.keyAttrs = keyAttr;
+        this.vals = val;
     }
 
     public LogEntry(long prevLsn, long tid, LogType type){
@@ -40,7 +47,8 @@ public struct LogEntry{
     }
 
     public byte[] ToBytes(){
-        int totalSize = Size + (val != null ? val.Length : 0);
+        // todo: accurate size
+        int totalSize = MinSize + (vals != null ? (sizeof(int) * (keyAttrs.Length + 1)) + Util.GetLength(vals) + (KeyAttr.Size * keyAttrs.Length) : 0);
 
         byte[] arr = new byte[totalSize];
 
@@ -53,33 +61,27 @@ public struct LogEntry{
         MemoryMarshal.Write(span.Slice(sizeof(long)*3), ref typeAsInt);
         
         // Write the variable-sized byte array to the byte array
-        if (type == LogType.Write){
-            byte[] keyAttrBytes = keyAttr.ToBytes();
-            keyAttrBytes.CopyTo(span.Slice(sizeof(long)*3+sizeof(int)));
-            val.CopyTo(span.Slice(Size));
+        if (type == LogType.Write || type == LogType.Prepare){
+            int len = keyAttrs.Length;
+            MemoryMarshal.Write(span.Slice(MinSize), ref len);
+            int offset = MinSize + sizeof(int);
+            for (int i = 0; i < keyAttrs.Length; i++){
+                keyAttrs[i].ToBytes().CopyTo(span.Slice(offset));
+                offset += KeyAttr.Size;
+                int valLen = vals[i].Length;
+                MemoryMarshal.Write(span.Slice(offset), ref valLen);
+                offset += sizeof(int);
+                vals[i].CopyTo(span.Slice(offset));
+                offset += vals[i].Length;
+            }
         }
 
         return arr;
-        // using (MemoryStream m = new MemoryStream()) {
-        //     BinaryFormatter bf = new BinaryFormatter();
-        //     using (BinaryWriter writer = new BinaryWriter(m)) {
-        //         writer.Write(lsn);
-        //         writer.Write(prevLsn);
-        //         writer.Write(tid);
-        //         writer.Write((int)type);
-        //         if (type == LogType.Write){
-        //             writer.Write(keyAttr.ToBytes());
-        //             writer.Write(val.Length);
-        //             writer.Write(val);
-        //         }
-        //     }
-        //     return m.ToArray();
-        // }
     }
 
     public static LogEntry FromBytes(byte[] data, Dictionary<int, Table> tables) {
         // Ensure that the data array has enough bytes for the struct
-        if (data.Length < Size) throw new ArgumentException("Insufficient data to deserialize the struct.");
+        if (data.Length < MinSize) throw new ArgumentException("Insufficient data to deserialize the struct.");
 
         LogEntry result = new LogEntry();
 
@@ -89,27 +91,23 @@ public struct LogEntry{
         result.prevLsn = MemoryMarshal.Read<long>(span.Slice(sizeof(long), sizeof(long)));
         result.tid = MemoryMarshal.Read<long>(span.Slice(sizeof(long)*2, sizeof(long)));
         result.type = (LogType)MemoryMarshal.Read<int>(span.Slice(sizeof(long)*3, sizeof(int)));
-        if (result.type == LogType.Write){
-            result.keyAttr = KeyAttr.FromBytes(span.Slice(sizeof(long)*3+sizeof(int), KeyAttr.Size).ToArray(), tables);
-            result.val = span.Slice(Size).ToArray();
+
+        if (result.type == LogType.Write || result.type == LogType.Prepare){
+            int len = MemoryMarshal.Read<int>(span.Slice(MinSize, sizeof(int)));
+            result.keyAttrs = new KeyAttr[len];
+            result.vals = new byte[len][];
+            int offset = MinSize + sizeof(int);
+            for (int i = 0; i < len; i++){
+                result.keyAttrs[i] = KeyAttr.FromBytes(span.Slice(offset, KeyAttr.Size).ToArray(), tables);
+                offset += KeyAttr.Size;
+                int valLen = MemoryMarshal.Read<int>(span.Slice(offset, sizeof(int)));
+                offset += sizeof(int);
+                result.vals[i] = span.Slice(offset, valLen).ToArray();
+                offset += valLen;
+            }
         }
 
         return result;
-        // LogEntry result = new LogEntry();
-        // using (MemoryStream m = new MemoryStream(data)) {
-        //     using (BinaryReader reader = new BinaryReader(m)) {
-        //         result.lsn = reader.ReadInt64();
-        //         result.prevLsn = reader.ReadInt64();
-        //         result.tid = reader.ReadInt64();
-        //         result.type = (LogType)reader.ReadInt32();
-        //         if (result.type == LogType.Write){
-        //             result.keyAttr = KeyAttr.FromBytes(reader.ReadBytes(KeyAttr.Size), tables);
-        //             int valLength = reader.ReadInt32();
-        //             result.val = reader.ReadBytes(valLength);
-        //         }
-        //     }
-        // }
-        // return result;
     }
 
     public override readonly bool Equals(object? obj)
@@ -119,11 +117,15 @@ public struct LogEntry{
             return false;
         }
         LogEntry o = (LogEntry)obj;
-        return o.lsn == lsn && o.prevLsn == prevLsn && o.tid == tid && o.type == type && o.keyAttr.Equals(keyAttr) && val.AsSpan().SequenceEqual(o.val);
+        if (vals.Length != o.vals.Length) return false;
+        for (int i = 0; i < vals.Length; i++){
+            if (!vals[i].AsSpan().SequenceEqual(o.vals[i])) return false;
+        }
+        return o.lsn == lsn && o.prevLsn == prevLsn && o.tid == tid && o.type == type && o.keyAttrs.SequenceEqual(keyAttrs);
     }
 
     public override readonly string ToString(){
-        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type}, keyAttr={keyAttr}, val={val})";
+        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type}, keyAttr={keyAttrs}, val={vals})";
     }
     
 }

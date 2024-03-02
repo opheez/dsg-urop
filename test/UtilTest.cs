@@ -58,7 +58,7 @@ namespace DB
             entry2.lsn = 5;
 
             Assert.IsTrue(entry.Equals(entry2));
-            entry2.val = new byte[]{8, 8, 8, 9};
+            entry2.vals = new byte[][]{new byte[]{8, 8, 8, 9}};
             Assert.IsFalse(entry.Equals(entry2));
         }
 
@@ -76,11 +76,30 @@ namespace DB
             Assert.IsTrue(entry.Equals(LogEntry.FromBytes(entry.ToBytes(), tables)));
         }
 
+        [TestMethod]
+        public void TestLogEntrySerializePrepare(){
+            (long,int)[] schema = {(12345,3), (56789, 4)};
+            Dictionary<int, Table> tables = new Dictionary<int, Table>();
+            Table table = new Table(schema);
+            tables.Add(table.GetHashCode(), table);
+            KeyAttr keyAttr = new KeyAttr(12345, 67890, table);
+            KeyAttr keyAttr2 = new KeyAttr(56789, 33333, table);
+            byte[] val = {8, 8, 8};
+            byte[] val2 = {5, 5, 5, 5};
+            byte[] val3 = {4,4,4};
+
+            LogEntry entry = new LogEntry(4, 8, new KeyAttr[]{keyAttr, keyAttr2, keyAttr}, new byte[][]{val, val2, val3});
+            entry.lsn = 5;
+
+            Assert.IsTrue(entry.Equals(LogEntry.FromBytes(entry.ToBytes(), tables)));
+        }
+
 
         private void PrintSpan(ReadOnlySpan<byte> val) {
             foreach(byte b in val){
                 Console.Write(b);
             }
+            Console.WriteLine();
         }
     }
 }
