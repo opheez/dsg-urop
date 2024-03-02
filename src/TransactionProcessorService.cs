@@ -20,14 +20,14 @@ namespace DB {
 
 public class WalHandle
 {
-    internal (long, long) externalTid;
+    internal long internalTid;
     internal LogType type;
     internal byte[] result;
     internal TaskCompletionSource<WalReply> tcs = new();
 
-    public WalHandle((long, long) externalTid, LogType type)
+    public WalHandle(long internalTid, LogType type)
     {
-        this.externalTid = externalTid;
+        this.internalTid = internalTid;
         this.type = type;
     }
 }
@@ -35,10 +35,11 @@ public class WalHandle
 public class TransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
     private TransactionManager txnManager;
     private Table table;
-    private Dictionary<(long, long), TransactionContext> externalTxnIdToTxnCtx = new Dictionary<(long, long), TransactionContext>();
-    private IDarqWal wal;
+    private Dictionary<(long, long), long> externalToInternalTxnId = new Dictionary<(long, long), long>();
+    private Dictionary<long, TransactionContext> txnIdToTxnCtx = new Dictionary<long, TransactionContext>();
+    private IWriteAheadLog wal;
     private long me;
-    private ConcurrentDictionary<(long, long), WalHandle> startedWalRequests;
+    private ConcurrentDictionary<long, WalHandle> startedWalRequests;
 
     // from darqProcessor
     private Darq backend;
@@ -57,11 +58,12 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     // private IDarqProcessorClientCapabilities capabilities;
     // private DarqId me;
     private StepRequest reusableRequest = new();
+
+    // TODO: condense table into tables
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
-    public TransactionProcessorService(long me, Table table, TransactionManager txnManager, IDarqWal wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
+    public TransactionProcessorService(long me, Table table, TransactionManager txnManager, IWriteAheadLog wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
         this.table = table;
         this.txnManager = txnManager;
-        // MinKey = minKey;
         this.me = me;
         this.wal = wal;
         table.Write(new KeyAttr(me, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
@@ -96,12 +98,8 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
         Console.WriteLine($"Reading from rpc service");
-        (long, long) key = (request.Me, request.Tid);
-        if (!externalTxnIdToTxnCtx.ContainsKey(key))
-        {
-            externalTxnIdToTxnCtx[key] = txnManager.Begin();
-        }
-        TransactionContext ctx = externalTxnIdToTxnCtx[key];
+        long internalTid = GetOrRegisterTid(request.Me, request.Tid);
+        TransactionContext ctx = txnIdToTxnCtx[internalTid];
         TupleId tupleId = new TupleId(request.Key, table);
         TupleDesc[] tupleDescs = table.GetSchema();
         ReadReply reply = new ReadReply{ Value = ByteString.CopyFrom(table.Read(tupleId, tupleDescs, ctx))};
@@ -133,21 +131,39 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         Console.WriteLine("Writing to WAL");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray(), tables);
 
-        var handle = new WalHandle((request.Me, request.Tid), entry.type);
-        var actualHandle = startedWalRequests.GetOrAdd((request.Me, request.Tid), handle);
+        long internalTid = GetOrRegisterTid(request.Me, request.Tid);
+        entry.tid = internalTid;
+        
+        var handle = new WalHandle(internalTid, entry.type);
+        var actualHandle = startedWalRequests.GetOrAdd(internalTid, handle);
         if (actualHandle == handle)
         {
             // This handle was created by this thread, which gives us the ability to go ahead and start the workflow
             var stepRequest = stepRequestPool.Checkout();
             var requestBuilder = new StepRequestBuilder(stepRequest);
-            requestBuilder.AddRecoveryMessage(request.Message.ToArray());
-            requestBuilder.AddSelfMessage(request.Message.ToArray());
+            
+            requestBuilder.AddRecoveryMessage(entry.ToBytes());
+            requestBuilder.AddSelfMessage(entry.ToBytes());
             await capabilities.Step(requestBuilder.FinishStep());
-            Console.WriteLine($"Workflow {(request.Me, request.Tid)} started");
+            Console.WriteLine($"Workflow {internalTid} started");
             stepRequestPool.Return(stepRequest);
+        } else {
+            // TODO: how do we handle multiple requests 
+            throw new Exception("should not be trying to validate and commit at same time?? ");
         }
         backend.EndAction();
         return await GetWalRequestResultAsync(handle);
+    }
+
+    private long GetOrRegisterTid(long me, long tid) {
+        if (externalToInternalTxnId.ContainsKey((me, tid))) 
+            return externalToInternalTxnId[(me, tid)];
+
+        var ctx = txnManager.Begin();
+        long internalTid = ctx.tid;
+        externalToInternalTxnId[(me, tid)] = internalTid;
+        txnIdToTxnCtx[internalTid] = ctx;
+        return internalTid;
     }
 
     private async Task<WalReply> GetWalRequestResultAsync(WalHandle handle)
@@ -158,7 +174,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
             var result = await handle.tcs.Task;
             if (backend.TryMergeAndStartAction(s)) return result;
             // Otherwise, there has been a rollback, should retry with a new handle, if any
-            while (!startedWalRequests.TryGetValue(handle.externalTid, out handle))
+            while (!startedWalRequests.TryGetValue(handle.internalTid, out handle))
                 await Task.Yield();                
         }
     }
@@ -207,13 +223,30 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                 switch (entry.type)
                 {
                     case LogType.Prepare:
+                    {
                         Console.WriteLine($"Got prepare log entry: {entry}");
+                        // add each write to context before validating
+                        TransactionContext ctx = txnIdToTxnCtx[entry.tid];
+                        for (int i = 0; i < entry.keyAttrs.Length; i++)
+                        {
+                            KeyAttr keyAttr = entry.keyAttrs[i];
+                            (int, int) metadata = table.GetAttrMetadata(keyAttr.Attr);
+                            ctx.AddWriteSet(new TupleId(keyAttr.Key, table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
+                        }
+                        bool success = txnManager.Validate(ctx);
+                        var workflowHandle = startedWalRequests[entry.tid];
+                        workflowHandle.tcs.SetResult(new WalReply{Success = success});
                         break;
+                    }
                     case LogType.Commit:
+                    {
                         Console.WriteLine($"Got commit log entry: {entry}");
-                        // write self message
-                        var workflowHandle = startedWalRequests[(entry.tid, entry.tid)];
+                        // write self message ??? 
+                        bool success = txnManager.Commit(txnIdToTxnCtx[entry.tid]);
+                        var workflowHandle = startedWalRequests[entry.tid];
+                        workflowHandle.tcs.SetResult(new WalReply{Success = success});
                         break;
+                    }
                     default:
                         throw new NotImplementedException();
                 }

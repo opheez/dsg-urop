@@ -83,8 +83,8 @@ public class TransactionManager {
         if (wal != null) wal.Terminate();
     }
 
-    private void ValidateAndWrite(TransactionContext ctx) {
-        bool lockTaken = false;
+    public bool Validate(TransactionContext ctx){
+        bool lockTaken = false; // signals if this thread was able to acquire lock
         int finishTxn;
         List<TransactionContext> finish_active;
         try {
@@ -98,9 +98,7 @@ public class TransactionManager {
         }
         // Console.WriteLine($"Committing {ctx.startTxn} to {finishTxn}, ctx: {ctx}");
 
-        bool valid = true;
         // validate
-        // Console.WriteLine($"curr tnums: {{{string.Join(Environment.NewLine, tnumToCtx)}}}");
         for (int i = ctx.startTxnNum + 1; i <= finishTxn; i++){
             // Console.WriteLine((i & (pastTnumCircularBufferSize - 1)) + " readset: " + ctx.GetReadset().Count + "; writeset:" + ctx.GetWriteset().Count);
             // foreach (var x in tnumToCtx[i % pastTnumCircularBufferSize].GetWriteset()){
@@ -111,12 +109,8 @@ public class TransactionManager {
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
                 if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(tupleId)){
-                    valid = false;
-                    break;
+                    return false;
                 }
-            }
-            if (!valid){
-                break;
             }
         }
         
@@ -125,15 +119,16 @@ public class TransactionManager {
                 TupleId tupleId = item.Item1;
                 if (ctx.InReadSet(tupleId) || ctx.InWriteSet(tupleId)){
                     // Console.WriteLine($"ABORT because conflict: {keyAttr}");
-                    valid = false;
-                    break;
+                    return false;
                 }
             }
-            
-            if (!valid){
-                break;
-            }
         }
+        return true;
+    }
+
+    private void ValidateAndWrite(TransactionContext ctx) {
+        bool valid = Validate(ctx);
+        bool lockTaken = false; // signals if this thread was able to acquire lock
 
         ctx.status = TransactionStatus.Validated;
         StepRequestBuilder requestBuilder;
@@ -214,15 +209,7 @@ public class ShardedTransactionManager : TransactionManager {
     public override bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         // TODO: add prepare message to WAL 
-        txnQueue.Add(ctx);        
-        while (!Util.IsTerminalStatus(ctx.status)){
-            Thread.Yield();
-        }
-        if (ctx.status == TransactionStatus.Aborted){
-            return false;
-        } else if (ctx.status == TransactionStatus.Committed) {
-            return true;
-        }
+        
         return false;
     }
     
