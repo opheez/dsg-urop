@@ -67,6 +67,13 @@ public class DARQWal : IWriteAheadLog {
         return entry.lsn;
     }
 
+    public void Send(DarqId recipient, LogEntry entry){
+        var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        requestBuilder.AddOutMessage(recipient, entry.ToBytes());
+        var v = capabilities.Step(requestBuilder.FinishStep());
+        Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+    }
+
     /// <summary>
     /// Commits or aborts a transaction
     /// </summary>

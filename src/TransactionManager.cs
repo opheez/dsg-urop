@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Threading;
 using FASTER.common;
+using FASTER.darq;
 using FASTER.libdpr;
 
 namespace DB {
@@ -267,15 +268,14 @@ public class ShardedTransactionManager : TransactionManager {
             for (int i = 0; i < writeset.Count; i++){
                 KeyAttr keyAttr = writeset[i].Item1;
                 byte[] val = writeset[i].Item2;
-
-                long prevLsn = txnTbl.GetValueOrDefault(ctx.tid, 0);
-                // requestBuilder
-                long lsn = wal.Log(new LogEntry(prevLsn, ctx.tid, keyAttr, val));
-                txnTbl[ctx.tid] = lsn;
+                LogEntry outEntry = new LogEntry(0, ctx.tid, keyAttr, val);
+                DARQWal wal = (DARQWal)this.wal; // TODO: hacky, fix
+                wal.Send(new DarqId(darqId), outEntry);
             }
 
         }
 
+        
         while (ctx.status != TransactionStatus.Validated || !Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
