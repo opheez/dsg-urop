@@ -6,16 +6,19 @@ namespace DB {
 
 public enum LogType {
     Begin,
-    Prepare,
+    Write,
     Commit,
     Abort,
-    Write
+    // used for 2pc, doesn't use LSN/prevLSN until being logged as a self message
+    Prepare,
+    Ok,
+    Ack
 }
 
 public struct LogEntry{
     public bool persited = false;
-    public long lsn;
-    public long prevLsn; // do we even need this if we are undoing?
+    public long lsn; // value of DarqId for Ack messages
+    public long prevLsn; // do we even need this if we are undoing? for Ack messages, this is original tid
     public long tid;
     public LogType type;
     public KeyAttr[] keyAttrs;
@@ -31,7 +34,7 @@ public struct LogEntry{
     public LogEntry(long prevLsn, long tid, KeyAttr[] keyAttr, byte[][] val){
         this.prevLsn = prevLsn;
         this.tid = tid;
-        this.type = LogType.Write;
+        this.type = LogType.Prepare;
         this.keyAttrs = keyAttr;
         this.vals = val;
     }

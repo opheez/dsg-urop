@@ -33,7 +33,7 @@ public class WalHandle
 }
 
 public class TransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
-    private TransactionManager txnManager;
+    private ShardedTransactionManager txnManager;
     private Table table;
     private Dictionary<(long, long), long> externalToInternalTxnId = new Dictionary<(long, long), long>();
     private Dictionary<long, TransactionContext> txnIdToTxnCtx = new Dictionary<long, TransactionContext>();
@@ -61,7 +61,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
 
     // TODO: condense table into tables
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
-    public TransactionProcessorService(long me, Table table, TransactionManager txnManager, IWriteAheadLog wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
+    public TransactionProcessorService(long me, Table table, ShardedTransactionManager txnManager, IWriteAheadLog wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
         this.table = table;
         this.txnManager = txnManager;
         this.me = me;
@@ -132,27 +132,28 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray(), tables);
 
         long internalTid = GetOrRegisterTid(request.Me, request.Tid);
-        entry.tid = internalTid;
+        entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
+        entry.prevLsn = request.Me; // TODO: hacky place to put sender id
         
-        var handle = new WalHandle(internalTid, entry.type);
-        var actualHandle = startedWalRequests.GetOrAdd(internalTid, handle);
-        if (actualHandle == handle)
-        {
+        // var handle = new WalHandle(internalTid, entry.type);
+        // var actualHandle = startedWalRequests.GetOrAdd(internalTid, handle);
+        // if (actualHandle == handle)
+        // {
             // This handle was created by this thread, which gives us the ability to go ahead and start the workflow
-            var stepRequest = stepRequestPool.Checkout();
-            var requestBuilder = new StepRequestBuilder(stepRequest);
-            
-            requestBuilder.AddRecoveryMessage(entry.ToBytes());
-            requestBuilder.AddSelfMessage(entry.ToBytes());
-            await capabilities.Step(requestBuilder.FinishStep());
-            Console.WriteLine($"Workflow {internalTid} started");
-            stepRequestPool.Return(stepRequest);
-        } else {
-            // TODO: how do we handle multiple requests 
-            throw new Exception("should not be trying to validate and commit at same time?? ");
-        }
+        var stepRequest = stepRequestPool.Checkout();
+        var requestBuilder = new StepRequestBuilder(stepRequest);
+        // TODO: do we need to step messages consumed, self, and out messages 
+        requestBuilder.AddSelfMessage(entry.ToBytes());
+        await capabilities.Step(requestBuilder.FinishStep());
+        Console.WriteLine($"Workflow {internalTid} started");
+        stepRequestPool.Return(stepRequest);
+        // } else {
+        //     // TODO: how do we handle multiple requests 
+        //     throw new Exception("should not be trying to validate and commit at same time?? ");
+        // }
         backend.EndAction();
-        return await GetWalRequestResultAsync(handle);
+        return new WalReply{Success = true};
+        // return await GetWalRequestResultAsync(handle);
     }
 
     private long GetOrRegisterTid(long me, long tid) {
@@ -166,18 +167,18 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         return internalTid;
     }
 
-    private async Task<WalReply> GetWalRequestResultAsync(WalHandle handle)
-    {
-        while (true)
-        {
-            var s = backend.DetachFromWorker();
-            var result = await handle.tcs.Task;
-            if (backend.TryMergeAndStartAction(s)) return result;
-            // Otherwise, there has been a rollback, should retry with a new handle, if any
-            while (!startedWalRequests.TryGetValue(handle.internalTid, out handle))
-                await Task.Yield();                
-        }
-    }
+    // private async Task<WalReply> GetWalRequestResultAsync(WalHandle handle)
+    // {
+    //     while (true)
+    //     {
+    //         var s = backend.DetachFromWorker();
+    //         var result = await handle.tcs.Task;
+    //         if (backend.TryMergeAndStartAction(s)) return result;
+    //         // Otherwise, there has been a rollback, should retry with a new handle, if any
+    //         while (!startedWalRequests.TryGetValue(handle.internalTid, out handle))
+    //             await Task.Yield();                
+    //     }
+    // }
 
     public void Dispose(){
         table.Dispose();
@@ -220,13 +221,25 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                 }
 
                 LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
+                var requestBuilder = new StepRequestBuilder(reusableRequest);
+                requestBuilder.MarkMessageConsumed(m.GetLsn());
+                requestBuilder.AddRecoveryMessage(m.GetMessageBody());
                 switch (entry.type)
                 {
+                    case LogType.Ok:
+                    {
+                        Console.WriteLine($"Got OK log entry: {entry}");
+                        txnManager.MarkAcked(entry.tid, TransactionStatus.Validated, entry.prevLsn);
+                        break;
+                    }
                     case LogType.Prepare:
                     {
                         Console.WriteLine($"Got prepare log entry: {entry}");
+                        long sender = entry.prevLsn; // hacky
+                        long internalTid = entry.lsn; // ""
+
                         // add each write to context before validating
-                        TransactionContext ctx = txnIdToTxnCtx[entry.tid];
+                        TransactionContext ctx = txnIdToTxnCtx[internalTid];
                         for (int i = 0; i < entry.keyAttrs.Length; i++)
                         {
                             KeyAttr keyAttr = entry.keyAttrs[i];
@@ -234,8 +247,13 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                             ctx.AddWriteSet(new TupleId(keyAttr.Key, table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
-                        var workflowHandle = startedWalRequests[entry.tid];
-                        workflowHandle.tcs.SetResult(new WalReply{Success = success});
+                        if (success) {
+                            LogEntry okEntry = new LogEntry(me, entry.tid, LogType.Ok);
+                            requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
+                        }
+                        // var workflowHandle = startedWalRequests[entry.tid];
+                        // workflowHandle.tcs.SetResult(new WalReply{Success = success});
+                        // TODO: step together to send OK message 
                         break;
                     }
                     case LogType.Commit:
@@ -243,17 +261,15 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                         Console.WriteLine($"Got commit log entry: {entry}");
                         // write self message ??? 
                         bool success = txnManager.Commit(txnIdToTxnCtx[entry.tid]);
-                        var workflowHandle = startedWalRequests[entry.tid];
-                        workflowHandle.tcs.SetResult(new WalReply{Success = success});
+                        // var workflowHandle = startedWalRequests[entry.tid];
+                        // workflowHandle.tcs.SetResult(new WalReply{Success = success});
                         break;
                     }
                     default:
                         throw new NotImplementedException();
                 }
 
-                var requestBuilder = new StepRequestBuilder(reusableRequest);
-                requestBuilder.MarkMessageConsumed(m.GetLsn());
-                requestBuilder.AddRecoveryMessage(m.GetMessageBody());
+                
                 m.Dispose();
                 var v = capabilities.Step(requestBuilder.FinishStep());
                 Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
