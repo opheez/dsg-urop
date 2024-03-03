@@ -25,6 +25,21 @@ public class RpcClient {
         return reply.Value.ToByteArray();
     }
 
+    public void WriteWalEntry(LogEntry entry){
+        // TODO: do work here in producer wrapper
+        // var channel = GetServerChannel(shard.Key);
+        // var client = new TransactionProcessor.TransactionProcessorClient(channel);
+        
+        // var reply = client.WriteWalEntry(new WalRequest {Me = me, Tid = entry.tid, Message = ByteString.CopyFrom(entry.ToBytes())});
+        // if (!reply.Success){
+        //     return false;
+        // }
+        
+        // return true;
+    }
+
+    public void AckPrepare(Dictionary<long, List<KeyAttr>> shardToWriteset, TransactionContext ctx){
+    }
     /// <summary>
     /// Returns the appropriate channel to talk to correct shard
     /// </summary>
@@ -40,6 +55,10 @@ public class RpcClient {
     // TODO: arbitrary for now, define some rules for how to map keys to servers
     public long HashKeyToDarqId(long key){
         return key % clusterMap.Count();
+    }
+
+    public int GetNumServers(){
+        return clusterMap.Count();
     }
 }
 }

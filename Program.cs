@@ -158,13 +158,16 @@ unsafe class Program {
         builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
         builder.Services.AddSingleton<Table, ShardedTable>();
-        builder.Services.AddSingleton<TransactionManager, ShardedTransactionManager>(services => new ShardedTransactionManager(1, services.GetRequiredService<IWriteAheadLog>()));
+        builder.Services.AddSingleton<ShardedTransactionManager>(
+            services => new ShardedTransactionManager(1,
+                            services.GetRequiredService<IWriteAheadLog>(),
+                            services.GetRequiredService<RpcClient>()));
 
         builder.Services.AddSingleton<TransactionProcessorService>(
             service => new TransactionProcessorService(
                 me,
                 service.GetRequiredService<Table>(),
-                service.GetRequiredService<TransactionManager>(),
+                service.GetRequiredService<ShardedTransactionManager>(),
                 service.GetRequiredService<IWriteAheadLog>(),
                 service.GetRequiredService<Darq>(),
                 service.GetRequiredService<DarqBackgroundWorkerPool>(),

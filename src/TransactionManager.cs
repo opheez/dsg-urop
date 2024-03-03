@@ -52,7 +52,7 @@ public class TransactionManager {
     /// </summary>
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
-    virtual public bool Commit(TransactionContext ctx){
+    public bool Commit(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
         while (!Util.IsTerminalStatus(ctx.status)){
@@ -126,73 +126,77 @@ public class TransactionManager {
         return true;
     }
 
-    private void ValidateAndWrite(TransactionContext ctx) {
-        bool valid = Validate(ctx);
+    public void Write(TransactionContext ctx){
         bool lockTaken = false; // signals if this thread was able to acquire lock
-
-        ctx.status = TransactionStatus.Validated;
-        StepRequestBuilder requestBuilder;
         if (wal != null) {
             var res = wal.Begin(ctx.tid);
-            long writtenLsn = res.Item1;
-            requestBuilder = res.Item2;
+            long writtenLsn = res;
             txnTbl[ctx.tid] = writtenLsn;
         }
-        if (valid) {
-            // write phase
-            foreach (var item in ctx.GetWriteset()){
-                TupleId tupleId = item.Item1;
-                int start = 0;
-                foreach (TupleDesc td in item.Item2){
-                    // TODO: should not throw exception here, but if it does, abort. 
-                    // failure here means crashed before commit. would need to rollback
-                    if (this.wal != null) {
-                        wal.Write(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray()), requestBuilder);
-                        // wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
-                    }
-                    tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
-                    start += td.Size;
+        foreach (var item in ctx.GetWriteset()){
+            TupleId tupleId = item.Item1;
+            int start = 0;
+            foreach (TupleDesc td in item.Item2){
+                // TODO: should not throw exception here, but if it does, abort. 
+                // failure here means crashed before commit. would need to rollback
+                if (this.wal != null) {
+                    wal.Write(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray()));
+                    // wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
                 }
+                tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
+                start += td.Size;
             }
-            // TODO: verify that should be logged before removing from active
-            if (wal != null){
-                long prevLsn = txnTbl[ctx.tid];
-                
-                txnTbl.TryRemove(ctx.tid, out _);
-                wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Commit), requestBuilder);
+        }
+        // TODO: verify that should be logged before removing from active
+        if (wal != null){
+            long prevLsn = txnTbl[ctx.tid];
+            
+            txnTbl.TryRemove(ctx.tid, out _);
+            wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+        }
+        // assign num 
+        int finalTxnNum;
+        try {
+            sl.Enter(ref lockTaken);
+            txnc += 1; // TODO: deal with int overflow
+            finalTxnNum = txnc;
+            active.Remove(ctx);
+            if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
+                ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
             }
-            // assign num 
-            int finalTxnNum;
-            try {
-                sl.Enter(ref lockTaken);
-                txnc += 1; // TODO: deal with int overflow
-                finalTxnNum = txnc;
-                active.Remove(ctx);
-                if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
-                    ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
-                }
-                tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
-            } finally {
-                if (lockTaken) sl.Exit();
-                lockTaken = false;
-            }
+            tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
+        } finally {
+            if (lockTaken) sl.Exit();
+            lockTaken = false;
+        }
+    }
 
+    public void Abort(TransactionContext ctx){
+        bool lockTaken = false; // signals if this thread was able to acquire lock
+        // TODO: verify that should be logged before removing from active
+        if (wal != null){
+            long prevLsn = txnTbl[ctx.tid];
+            txnTbl.TryRemove(ctx.tid, out _);
+            wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
+        }
+        try {
+            sl.Enter(ref lockTaken);
+            active.Remove(ctx);
+        } finally {
+            if (lockTaken) sl.Exit();
+            lockTaken = false;
+        }
+    }
+
+    virtual protected void ValidateAndWrite(TransactionContext ctx) {
+        bool valid = Validate(ctx);
+
+        if (valid) {
+            ctx.status = TransactionStatus.Validated;
+            Write(ctx);
             ctx.status = TransactionStatus.Committed;
         } else {
-            // TODO: verify that should be logged before removing from active
-            if (wal != null){
-                long prevLsn = txnTbl[ctx.tid];
-                txnTbl.TryRemove(ctx.tid, out _);
-                wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Abort), requestBuilder);
-            }
-            try {
-                sl.Enter(ref lockTaken);
-                active.Remove(ctx);
-            } finally {
-                if (lockTaken) sl.Exit();
-                lockTaken = false;
-            }
-
+            Abort(ctx);
             ctx.status = TransactionStatus.Aborted;
         }
     }
@@ -203,14 +207,86 @@ public class TransactionManager {
 }
 
 public class ShardedTransactionManager : TransactionManager {
-    public ShardedTransactionManager(int numThreads, IWriteAheadLog? wal) : base(numThreads, wal){
+    private RpcClient rpcClient;
+    private ConcurrentDictionary<long, ConcurrentDictionary<long, TransactionStatus>> acked = new ConcurrentDictionary<long, ConcurrentDictionary<long, TransactionStatus>>();
+    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient) : base(numThreads, wal){
+        this.rpcClient = rpcClient;
     }
 
-    public override bool Commit(TransactionContext ctx){
+    public void MarkAcked(long tid, TransactionStatus status, long shard){
+        if (status == TransactionStatus.Aborted){
+            active[(int)tid].status = TransactionStatus.Aborted;
+            return;
+        }
+
+        if (!acked.ContainsKey(tid)){
+            acked.TryAdd(tid, new ConcurrentDictionary<long, TransactionStatus>());
+        }
+        acked[tid][shard] = status;
+
+        if (acked[tid].Count == rpcClient.GetNumServers()){
+            active[(int)tid].status = TransactionStatus.Validated;
+        }
+    }
+
+    override protected void ValidateAndWrite(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
-        // TODO: add prepare message to WAL 
-        
-        return false;
+        // validate own, need a map to track which has responded 
+        bool valid = Validate(ctx);
+
+        // send via rpcClient to all shards
+        // does same thing except on success, sends out message of ACK success
+        Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
+        for (int i = 0; i < ctx.GetReadset().Count; i++){
+            TupleId tupleId = ctx.GetReadset()[i].Item1;
+
+            if (rpcClient.GetId() != rpcClient.HashKeyToDarqId(tupleId.Key)){
+                shardToWriteset.TryAdd(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
+            }
+        }
+        for (int i = 0; i < ctx.GetWriteset().Count; i++){
+            var item = ctx.GetWriteset()[i];
+            TupleId tupleId = item.Item1;
+            TupleDesc[] tds = item.Item2;
+            long shardDest = rpcClient.HashKeyToDarqId(tupleId.Key);
+
+            for (int j = 0; j < tds.Length; j++){
+                KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
+                if (rpcClient.GetId() != shardDest){
+                    if (!shardToWriteset.ContainsKey(shardDest)){
+                        shardToWriteset.Add(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
+                    }
+                    shardToWriteset[shardDest].Add((keyAttr, item.Item3));
+                }
+            }
+        }
+
+        foreach (var shard in shardToWriteset) {
+            long darqId = shard.Key;
+            List<(KeyAttr, byte[])> writeset = shard.Value;
+            for (int i = 0; i < writeset.Count; i++){
+                KeyAttr keyAttr = writeset[i].Item1;
+                byte[] val = writeset[i].Item2;
+
+                long prevLsn = txnTbl.GetValueOrDefault(ctx.tid, 0);
+                // requestBuilder
+                long lsn = wal.Log(new LogEntry(prevLsn, ctx.tid, keyAttr, val));
+                txnTbl[ctx.tid] = lsn;
+            }
+
+        }
+
+        while (ctx.status != TransactionStatus.Validated || !Util.IsTerminalStatus(ctx.status)){
+            Thread.Yield();
+        }
+
+        if (ctx.status == TransactionStatus.Validated) {
+            Write(ctx);
+            ctx.status = TransactionStatus.Committed;
+        } else {
+            Abort(ctx);
+        }
+
     }
     
 }

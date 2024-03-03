@@ -18,10 +18,10 @@ namespace DB
 public interface IWriteAheadLog
 {
     public long Log(LogEntry entry);
-    public (long, StepRequestBuilder) Begin(long tid);
-    public long Write(LogEntry entry, StepRequestBuilder requestBuilder);
+    public long Begin(long tid);
+    public long Write(LogEntry entry);
     
-    public long Commit(LogEntry entry, StepRequestBuilder requestBuilder);
+    public long Commit(LogEntry entry);
     public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
     public void Terminate();
     // public void Recover();
@@ -34,21 +34,23 @@ public class DARQWal : IWriteAheadLog {
     private IDarqProcessorClientCapabilities capabilities;
     private DarqId me;
     private SimpleObjectPool<StepRequest> requestPool;
+    private ConcurrentDictionary<long, StepRequestBuilder> requestBuilders = new ConcurrentDictionary<long, StepRequestBuilder>();
     public DARQWal(DarqId me){
         this.me = me;
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 
-    public (long, StepRequestBuilder) Begin(long tid){
+    public long Begin(long tid){
         long lsn = GetNewLsn();
         LogEntry entry = new LogEntry(lsn, tid, LogType.Begin);
         entry.lsn = lsn;
-        var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        var requestBuilder = requestBuilders.GetOrAdd(tid, _ => new StepRequestBuilder(requestPool.Checkout()));
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
-        return (lsn, requestBuilder);
+        return lsn;
     }
      
-    public long Write(LogEntry entry, StepRequestBuilder requestBuilder){
+    public long Write(LogEntry entry){
+        StepRequestBuilder requestBuilder = requestBuilders[entry.tid];
         entry.lsn = GetNewLsn();
 
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
@@ -57,18 +59,26 @@ public class DARQWal : IWriteAheadLog {
 
     public long Log(LogEntry entry){
         entry.lsn = GetNewLsn();
-        var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        var requestBuilder = requestBuilders.GetOrAdd(entry.tid, _ => new StepRequestBuilder(requestPool.Checkout()));
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+        requestBuilders.Remove(entry.tid, out _);
         return entry.lsn;
     }
 
-    public long Commit(LogEntry entry, StepRequestBuilder requestBuilder){
+    /// <summary>
+    /// Commits or aborts a transaction
+    /// </summary>
+    /// <param name="entry"></param>
+    /// <returns></returns>
+    public long Commit(LogEntry entry){
         entry.lsn = GetNewLsn();
+        StepRequestBuilder requestBuilder = requestBuilders[entry.tid];
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         var v = capabilities.Step(requestBuilder.FinishStep());
         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+        requestBuilders.Remove(entry.tid, out _);
         return entry.lsn;
     }
 
@@ -85,7 +95,7 @@ public class DARQWal : IWriteAheadLog {
 
 }
 // deprecated 
-public class BatchDARQWal : IWriteAheadLog {
+public class BatchDARQWal {
 
     private long currLsn = 0;
     private IDarqProcessorClientCapabilities capabilities;
