@@ -137,7 +137,8 @@ unsafe class Program {
         });
         builder.Services.AddSingleton(new DarqSettings
         {
-            LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data.log", deleteOnClose: true),
+            LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data-{me}.log", deleteOnClose: true),
+            LogCommitDir = $"C:\\Users\\Administrator\\Desktop\\{me}",
             PageSize = 1L << 22,
             MemorySize = 1L << 28,
             SegmentSize = 1L << 30,
