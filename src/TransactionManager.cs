@@ -54,7 +54,7 @@ public class TransactionManager {
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
     public bool Commit(TransactionContext ctx){
-        Console.WriteLine("adding ctx to queue for commit");
+        Console.WriteLine($"adding ctx to queue for commit for {ctx.GetHashCode()}");
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
         while (!Util.IsTerminalStatus(ctx.status)){
@@ -230,6 +230,7 @@ public class ShardedTransactionManager : TransactionManager {
 
         if (acked[tid].Count == rpcClient.GetNumServers() - 1){
             TransactionContext ctx = active.Find(ctx => ctx.tid == tid);
+            Console.WriteLine($"done w validation for {ctx.GetHashCode()}");
             if (ctx == null) throw new Exception("ctx not found");
             ctx.status = TransactionStatus.Validated;
         }
@@ -279,7 +280,7 @@ public class ShardedTransactionManager : TransactionManager {
 
         }
 
-        Console.WriteLine("waiting for validation...");
+        Console.WriteLine($"waiting for validation for {ctx.GetHashCode()}");
         while (ctx.status != TransactionStatus.Validated || !Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
