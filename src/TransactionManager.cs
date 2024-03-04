@@ -228,8 +228,10 @@ public class ShardedTransactionManager : TransactionManager {
         acked[tid][shard] = status;
         Console.WriteLine($"Marked acked {tid} from {shard} with status {status}");
 
-        if (acked[tid].Count == rpcClient.GetNumServers()){
-            active[(int)tid].status = TransactionStatus.Validated;
+        if (acked[tid].Count == rpcClient.GetNumServers() - 1){
+            TransactionContext ctx = active.Find(ctx => ctx.tid == tid);
+            if (ctx == null) throw new Exception("ctx not found");
+            ctx.status = TransactionStatus.Validated;
         }
     }
 
