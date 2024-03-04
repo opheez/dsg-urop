@@ -75,7 +75,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         this.workerPool = workerPool;
         backend.ConnectToCluster();
         
-        _backgroundTask.StopProcessing();
+        _backgroundTask.BeginProcessing();
 
         refreshThread = new Thread(() =>
         {
@@ -108,6 +108,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
 
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
+        txnManager.Run();
         var ctx = txnManager.Begin();
         Console.WriteLine("Should go to own");
         var own = table.Read(new TupleId(0, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
@@ -121,6 +122,9 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         foreach (var b in other.ToArray()){
             Console.WriteLine(b);
         }
+        Console.WriteLine("Starting commit");
+        txnManager.Commit(ctx);
+        txnManager.Terminate();
         EnqueueWorkloadReply enqueueWorkloadReply = new EnqueueWorkloadReply{Success = true};
         return Task.FromResult(enqueueWorkloadReply);
     }
@@ -134,6 +138,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
         long internalTid = GetOrRegisterTid(request.Me, request.Tid);
         entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
         entry.prevLsn = request.Me; // TODO: hacky place to put sender id
+        Console.WriteLine("sender is " + request.Me);
         
         // var handle = new WalHandle(internalTid, entry.type);
         // var actualHandle = startedWalRequests.GetOrAdd(internalTid, handle);
@@ -157,11 +162,13 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     }
 
     private long GetOrRegisterTid(long me, long tid) {
+        Console.WriteLine($"Getting or registering tid: ({me}, {tid})");
         if (externalToInternalTxnId.ContainsKey((me, tid))) 
             return externalToInternalTxnId[(me, tid)];
 
         var ctx = txnManager.Begin();
         long internalTid = ctx.tid;
+        Console.WriteLine("Registering new tid: " + internalTid);
         externalToInternalTxnId[(me, tid)] = internalTid;
         txnIdToTxnCtx[internalTid] = ctx;
         return internalTid;
@@ -247,6 +254,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                             ctx.AddWriteSet(new TupleId(keyAttr.Key, table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
+                        Console.WriteLine($"Validated at node {me}: {success}; now sending OK to {sender}");
                         if (success) {
                             LogEntry okEntry = new LogEntry(me, entry.tid, LogType.Ok);
                             requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
@@ -314,7 +322,7 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
     public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
     {
         LogEntry entry = LogEntry.FromBytes(message.ToArray(), new Dictionary<int, Table>());
-        
+        Console.WriteLine("am making an out request");
         var client = clients.GetOrAdd(darqId,
             _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]));
         var walRequest = new WalRequest

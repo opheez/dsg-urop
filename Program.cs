@@ -139,6 +139,8 @@ unsafe class Program {
         {
             LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data-{me}.log", deleteOnClose: true),
             LogCommitDir = $"C:\\Users\\Administrator\\Desktop\\{me}",
+            Me = new DarqId(me),
+            // MyDpr = new DprWorkerId(me),
             PageSize = 1L << 22,
             MemorySize = 1L << 28,
             SegmentSize = 1L << 30,

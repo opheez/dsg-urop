@@ -54,11 +54,13 @@ public class TransactionManager {
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
     public bool Commit(TransactionContext ctx){
+        Console.WriteLine("adding ctx to queue for commit");
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
         while (!Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
+        Console.WriteLine("TERMINAL STATUS !!");
         if (ctx.status == TransactionStatus.Aborted){
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
@@ -224,6 +226,7 @@ public class ShardedTransactionManager : TransactionManager {
             acked.TryAdd(tid, new ConcurrentDictionary<long, TransactionStatus>());
         }
         acked[tid][shard] = status;
+        Console.WriteLine($"Marked acked {tid} from {shard} with status {status}");
 
         if (acked[tid].Count == rpcClient.GetNumServers()){
             active[(int)tid].status = TransactionStatus.Validated;
@@ -234,6 +237,7 @@ public class ShardedTransactionManager : TransactionManager {
         ctx.status = TransactionStatus.Pending;
         // validate own, need a map to track which has responded 
         bool valid = Validate(ctx);
+        Console.WriteLine($"Validate own ctx: {valid}");
 
         // send via rpcClient to all shards
         // does same thing except on success, sends out message of ACK success
@@ -265,20 +269,19 @@ public class ShardedTransactionManager : TransactionManager {
         foreach (var shard in shardToWriteset) {
             long darqId = shard.Key;
             List<(KeyAttr, byte[])> writeset = shard.Value;
-            for (int i = 0; i < writeset.Count; i++){
-                KeyAttr keyAttr = writeset[i].Item1;
-                byte[] val = writeset[i].Item2;
-                LogEntry outEntry = new LogEntry(0, ctx.tid, keyAttr, val);
-                DARQWal wal = (DARQWal)this.wal; // TODO: hacky, fix
-                wal.Send(new DarqId(darqId), outEntry);
-            }
+            LogEntry outEntry = new LogEntry(0, ctx.tid, writeset.Select(x => x.Item1).ToArray(),  writeset.Select(x => x.Item2).ToArray());
+            DARQWal wal = (DARQWal)this.wal; // TODO: hacky, fix
+            Console.WriteLine($"sending prepare msg to {darqId} with keys {string.Join(", ", writeset.Select(x => x.Item1))}");
+            wal.Send(new DarqId(darqId), outEntry);
+            
 
         }
 
-        
+        Console.WriteLine("waiting for validation...");
         while (ctx.status != TransactionStatus.Validated || !Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
+        Console.WriteLine("DONE!");
 
         if (ctx.status == TransactionStatus.Validated) {
             Write(ctx);
