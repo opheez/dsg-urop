@@ -116,6 +116,9 @@ public class ShardedDarqWal : DARQWal {
 
         // TODO: make sure it is correct lsn/prevLsn values
         entry.lsn = GetNewLsn();
+        entry.keyAttrs = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item1)).ToArray();
+        entry.vals = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item2)).ToArray();
+        
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
 
         // add out message to each shard
