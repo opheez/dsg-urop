@@ -140,7 +140,6 @@ unsafe class Program {
             LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data-{me}.log", deleteOnClose: true),
             LogCommitDir = $"C:\\Users\\Administrator\\Desktop\\{me}",
             Me = new DarqId(me),
-            // MyDpr = new DprWorkerId(me),
             PageSize = 1L << 22,
             MemorySize = 1L << 28,
             SegmentSize = 1L << 30,
@@ -153,25 +152,25 @@ unsafe class Program {
         builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
-        builder.Services.AddSingleton<IWriteAheadLog, DARQWal>(
-            services => new DARQWal(new DarqId(me))
+        builder.Services.AddSingleton<ShardedDarqWal>(
+            services => new ShardedDarqWal(new DarqId(me))
         );
 
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
-        builder.Services.AddSingleton<Table, ShardedTable>();
+        builder.Services.AddSingleton<ShardedTable>();
         builder.Services.AddSingleton<ShardedTransactionManager>(
             services => new ShardedTransactionManager(1,
-                            services.GetRequiredService<IWriteAheadLog>(),
+                            services.GetRequiredService<ShardedDarqWal>(),
                             services.GetRequiredService<RpcClient>()));
 
         builder.Services.AddSingleton<TransactionProcessorService>(
             service => new TransactionProcessorService(
                 me,
-                service.GetRequiredService<Table>(),
+                service.GetRequiredService<ShardedTable>(),
                 service.GetRequiredService<ShardedTransactionManager>(),
-                service.GetRequiredService<IWriteAheadLog>(),
+                service.GetRequiredService<ShardedDarqWal>(),
                 service.GetRequiredService<Darq>(),
                 service.GetRequiredService<DarqBackgroundWorkerPool>(),
                 service.GetRequiredService<Dictionary<DarqId, GrpcChannel>>()

@@ -16,7 +16,7 @@ public class TransactionManager {
     internal SimpleObjectPool<TransactionContext> ctxPool;
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
-    internal IWriteAheadLog? wal;
+    private IWriteAheadLog? wal;
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
@@ -86,7 +86,13 @@ public class TransactionManager {
         if (wal != null) wal.Terminate();
     }
 
+    /// <summary>
+    /// Mutates "active", sets fields to mark active transaction
+    /// </summary>
+    /// <param name="ctx"></param>
+    /// <returns></returns>
     public bool Validate(TransactionContext ctx){
+        Console.WriteLine($"Validating own keys for tid {ctx.tid}");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         int finishTxn;
         List<TransactionContext> finish_active;
@@ -129,7 +135,7 @@ public class TransactionManager {
         return true;
     }
 
-    public void Write(TransactionContext ctx){
+    protected void Write(TransactionContext ctx, Action<LogEntry> commit){
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
             var res = wal.Begin(ctx.tid);
@@ -143,7 +149,8 @@ public class TransactionManager {
                 // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
                 if (this.wal != null) {
-                    wal.Write(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray()));
+                    long writtenLsn = wal.Write(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray()));
+                    txnTbl[ctx.tid] = writtenLsn;
                     // wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
                 }
                 tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
@@ -155,7 +162,8 @@ public class TransactionManager {
             long prevLsn = txnTbl[ctx.tid];
             
             txnTbl.TryRemove(ctx.tid, out _);
-            wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+            commit(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+            // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
         }
         // assign num 
         int finalTxnNum;
@@ -175,12 +183,13 @@ public class TransactionManager {
     }
 
     public void Abort(TransactionContext ctx){
+        Console.WriteLine($"Aborting tid {ctx.tid}");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         // TODO: verify that should be logged before removing from active
         if (wal != null){
             long prevLsn = txnTbl[ctx.tid];
             txnTbl.TryRemove(ctx.tid, out _);
-            wal.Commit(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
+            wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
         }
         try {
             sl.Enter(ref lockTaken);
@@ -196,7 +205,7 @@ public class TransactionManager {
 
         if (valid) {
             ctx.status = TransactionStatus.Validated;
-            Write(ctx);
+            Write(ctx, (LogEntry entry) => wal.Finish(entry));
             ctx.status = TransactionStatus.Committed;
         } else {
             Abort(ctx);
@@ -211,28 +220,38 @@ public class TransactionManager {
 
 public class ShardedTransactionManager : TransactionManager {
     private RpcClient rpcClient;
-    private ConcurrentDictionary<long, ConcurrentDictionary<long, TransactionStatus>> acked = new ConcurrentDictionary<long, ConcurrentDictionary<long, TransactionStatus>>();
-    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient) : base(numThreads, wal){
+    private ShardedDarqWal wal;
+    private ConcurrentDictionary<long, List<long>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<long>>(); // tid to num shards waiting on
+    public ShardedTransactionManager(int numThreads, ShardedDarqWal wal, RpcClient rpcClient) : base(numThreads, wal){
         this.rpcClient = rpcClient;
+        this.wal = wal;
     }
 
-    public void MarkAcked(long tid, TransactionStatus status, long shard){
+    public void MarkAcked(long tid, TransactionStatus status, long darqLsn){
+        TransactionContext? ctx = active.Find(ctx => ctx.tid == tid);
+        if (ctx == null) return; // already aborted, ignore
         if (status == TransactionStatus.Aborted){
-            active[(int)tid].status = TransactionStatus.Aborted;
+            Abort(ctx);
+            ctx.status = TransactionStatus.Aborted;
+            // TODO: should consume all existing OKs 
             return;
+        } else if (status != TransactionStatus.Validated){
+            throw new Exception($"Invalid status {status} for tid {tid}");
         }
 
-        if (!acked.ContainsKey(tid)){
-            acked.TryAdd(tid, new ConcurrentDictionary<long, TransactionStatus>());
-        }
-        acked[tid][shard] = status;
-        Console.WriteLine($"Marked acked {tid} from {shard} with status {status}");
+        txnIdToOKDarqLsns[tid].Add(darqLsn);
+        // TODO: add field for shard in log entry
+        LogEntry shardEntry = new LogEntry(txnTbl[tid], tid, LogType.Ok);
+        long writtenLsn = wal.Log(shardEntry);
+        txnTbl[tid] = writtenLsn;
 
-        if (acked[tid].Count == rpcClient.GetNumServers() - 1){
-            TransactionContext ctx = active.Find(ctx => ctx.tid == tid);
-            Console.WriteLine($"done w validation for {ctx.GetHashCode()}");
-            if (ctx == null) throw new Exception("ctx not found");
+        Console.WriteLine($"Marked acked {tid}");
+
+        if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
+            Console.WriteLine($"done w validation for {ctx.tid}");
             ctx.status = TransactionStatus.Validated;
+            Write(ctx, (LogEntry entry) => wal.Finish(entry, txnIdToOKDarqLsns[tid]));
+            ctx.status = TransactionStatus.Committed;
         }
     }
 
@@ -242,55 +261,40 @@ public class ShardedTransactionManager : TransactionManager {
         bool valid = Validate(ctx);
         Console.WriteLine($"Validate own ctx: {valid}");
 
-        // send via rpcClient to all shards
-        // does same thing except on success, sends out message of ACK success
-        Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
-        for (int i = 0; i < ctx.GetReadset().Count; i++){
-            TupleId tupleId = ctx.GetReadset()[i].Item1;
+        if (valid) {
+            // split writeset into shards
+            Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
+            for (int i = 0; i < ctx.GetReadset().Count; i++){
+                TupleId tupleId = ctx.GetReadset()[i].Item1;
 
-            if (rpcClient.GetId() != rpcClient.HashKeyToDarqId(tupleId.Key)){
-                shardToWriteset.TryAdd(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
-            }
-        }
-        for (int i = 0; i < ctx.GetWriteset().Count; i++){
-            var item = ctx.GetWriteset()[i];
-            TupleId tupleId = item.Item1;
-            TupleDesc[] tds = item.Item2;
-            long shardDest = rpcClient.HashKeyToDarqId(tupleId.Key);
-
-            for (int j = 0; j < tds.Length; j++){
-                KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
-                if (rpcClient.GetId() != shardDest){
-                    if (!shardToWriteset.ContainsKey(shardDest)){
-                        shardToWriteset.Add(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
-                    }
-                    shardToWriteset[shardDest].Add((keyAttr, item.Item3));
+                if (rpcClient.GetId() != rpcClient.HashKeyToDarqId(tupleId.Key)){
+                    shardToWriteset.TryAdd(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
                 }
             }
-        }
+            for (int i = 0; i < ctx.GetWriteset().Count; i++){
+                var item = ctx.GetWriteset()[i];
+                TupleId tupleId = item.Item1;
+                TupleDesc[] tds = item.Item2;
+                long shardDest = rpcClient.HashKeyToDarqId(tupleId.Key);
 
-        foreach (var shard in shardToWriteset) {
-            long darqId = shard.Key;
-            List<(KeyAttr, byte[])> writeset = shard.Value;
-            LogEntry outEntry = new LogEntry(0, ctx.tid, writeset.Select(x => x.Item1).ToArray(),  writeset.Select(x => x.Item2).ToArray());
-            DARQWal wal = (DARQWal)this.wal; // TODO: hacky, fix
-            Console.WriteLine($"sending prepare msg to {darqId} with keys {string.Join(", ", writeset.Select(x => x.Item1))}");
-            wal.Send(new DarqId(darqId), outEntry);
-            
-
-        }
-
-        Console.WriteLine($"waiting for validation for {ctx.GetHashCode()}");
-        while (ctx.status != TransactionStatus.Validated || !Util.IsTerminalStatus(ctx.status)){
-            Thread.Yield();
-        }
-        Console.WriteLine("DONE!");
-
-        if (ctx.status == TransactionStatus.Validated) {
-            Write(ctx);
-            ctx.status = TransactionStatus.Committed;
+                for (int j = 0; j < tds.Length; j++){
+                    KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
+                    if (rpcClient.GetId() != shardDest){
+                        if (!shardToWriteset.ContainsKey(shardDest)){
+                            shardToWriteset.Add(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
+                        }
+                        shardToWriteset[shardDest].Add((keyAttr, item.Item3));
+                    }
+                }
+            }
+            // send out prepare messages and wait; the commit is finished by calls to MarkAcked
+            long prepareLsn = wal.Prepare(shardToWriteset, new LogEntry(txnTbl[ctx.tid], ctx.tid, LogType.Prepare));
+            txnTbl[ctx.tid] = prepareLsn;
+            if (!txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
+            txnIdToOKDarqLsns[tid] = new List<long>();
         } else {
             Abort(ctx);
+            ctx.status = TransactionStatus.Aborted;
         }
 
     }
