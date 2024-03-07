@@ -290,8 +290,9 @@ public class ShardedTransactionManager : TransactionManager {
             // send out prepare messages and wait; the commit is finished by calls to MarkAcked
             long prepareLsn = wal.Prepare(shardToWriteset, new LogEntry(0, ctx.tid, LogType.Prepare));
             txnTbl[ctx.tid] = prepareLsn;
-            if (!txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
-            txnIdToOKDarqLsns[tid] = new List<long>();
+            if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
+            Console.WriteLine($"Created list for {ctx.tid}");
+            txnIdToOKDarqLsns[ctx.tid] = new List<long>();
         } else {
             Abort(ctx);
             ctx.status = TransactionStatus.Aborted;
