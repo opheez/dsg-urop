@@ -229,19 +229,19 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
 
                 LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
                 var requestBuilder = new StepRequestBuilder(reusableRequest);
-                requestBuilder.MarkMessageConsumed(m.GetLsn());
-                requestBuilder.AddRecoveryMessage(m.GetMessageBody());
+                // requestBuilder.AddRecoveryMessage(m.GetMessageBody());
                 switch (entry.type)
                 {
                     case LogType.Ok:
                     {
                         Console.WriteLine($"Got OK log entry: {entry}");
-                        txnManager.MarkAcked(entry.tid, TransactionStatus.Validated, entry.prevLsn);
+                        txnManager.MarkAcked(entry.tid, TransactionStatus.Validated, m.GetLsn(), entry.prevLsn);
                         break;
                     }
                     case LogType.Prepare:
                     {
                         Console.WriteLine($"Got prepare log entry: {entry}");
+                        requestBuilder.MarkMessageConsumed(m.GetLsn());
                         long sender = entry.prevLsn; // hacky
                         long internalTid = entry.lsn; // ""
 
@@ -267,10 +267,14 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                     case LogType.Commit:
                     {
                         Console.WriteLine($"Got commit log entry: {entry}");
+                        requestBuilder.MarkMessageConsumed(m.GetLsn());
                         // write self message ??? 
-                        bool success = txnManager.Commit(txnIdToTxnCtx[entry.tid]);
-                        // var workflowHandle = startedWalRequests[entry.tid];
-                        // workflowHandle.tcs.SetResult(new WalReply{Success = success});
+                        long sender = entry.prevLsn; // hacky
+                        txnManager.Write(txnIdToTxnCtx[entry.tid], (LogEntry entry) => wal.Write(entry));
+
+                        Console.WriteLine($"Committed at node {me}; now sending ACK to {sender}");
+                        LogEntry ackEntry = new LogEntry(me, entry.tid, LogType.Ack);
+                        requestBuilder.AddOutMessage(new DarqId(sender), ackEntry.ToBytes());
                         break;
                     }
                     default:

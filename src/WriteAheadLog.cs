@@ -134,13 +134,20 @@ public class ShardedDarqWal : DARQWal {
         return entry.lsn;
     }
 
-    public long Finish(LogEntry entry, List<long> darqLsnsToConsume){
+    public long Finish(LogEntry entry, List<(long, long)> darqLsnsToConsume){
         StepRequestBuilder requestBuilder = requestBuilders[entry.tid]; // throw error if doesn't exist
 
         entry.lsn = GetNewLsn();
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
-        foreach (var darqLsn in darqLsnsToConsume) {
+        foreach (var item in darqLsnsToConsume) {
+            long darqLsn = item.Item1;
             requestBuilder.MarkMessageConsumed(darqLsn);
+        }
+        // todo: fix lsn
+        LogEntry outEntry = new LogEntry(0, entry.tid, LogType.Commit);
+        foreach (var item in darqLsnsToConsume) {
+            long shard = item.Item2;
+            requestBuilder.AddOutMessage(new DarqId(shard), outEntry.ToBytes());
         }
 
         StepAndReturnRequestBuilder(requestBuilder);

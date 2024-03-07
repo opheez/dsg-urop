@@ -135,7 +135,7 @@ public class TransactionManager {
         return true;
     }
 
-    protected void Write(TransactionContext ctx, Action<LogEntry> commit){
+    public void Write(TransactionContext ctx, Action<LogEntry> commit){
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
             var res = wal.Begin(ctx.tid);
@@ -221,13 +221,13 @@ public class TransactionManager {
 public class ShardedTransactionManager : TransactionManager {
     private RpcClient rpcClient;
     private ShardedDarqWal wal;
-    private ConcurrentDictionary<long, List<long>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<long>>(); // tid to num shards waiting on
+    private ConcurrentDictionary<long, List<(long, long)>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<(long, long)>>(); // tid to num shards waiting on
     public ShardedTransactionManager(int numThreads, ShardedDarqWal wal, RpcClient rpcClient) : base(numThreads, wal){
         this.rpcClient = rpcClient;
         this.wal = wal;
     }
 
-    public void MarkAcked(long tid, TransactionStatus status, long darqLsn){
+    public void MarkAcked(long tid, TransactionStatus status, long darqLsn, long shard){
         TransactionContext? ctx = active.Find(ctx => ctx.tid == tid);
         if (ctx == null) return; // already aborted, ignore
         if (status == TransactionStatus.Aborted){
@@ -239,7 +239,7 @@ public class ShardedTransactionManager : TransactionManager {
             throw new Exception($"Invalid status {status} for tid {tid}");
         }
 
-        txnIdToOKDarqLsns[tid].Add(darqLsn);
+        txnIdToOKDarqLsns[tid].Add((darqLsn, shard));
         // TODO: add field for shard in log entry
         LogEntry shardEntry = new LogEntry(txnTbl[tid], tid, LogType.Ok);
         long writtenLsn = wal.Log(shardEntry);
@@ -292,7 +292,7 @@ public class ShardedTransactionManager : TransactionManager {
             txnTbl[ctx.tid] = prepareLsn;
             if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
             Console.WriteLine($"Created list for {ctx.tid}");
-            txnIdToOKDarqLsns[ctx.tid] = new List<long>();
+            txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
         } else {
             Abort(ctx);
             ctx.status = TransactionStatus.Aborted;
