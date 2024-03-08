@@ -132,33 +132,25 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
     // typically used for Prepare() and Commit() 
     public override async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
     {
-        Console.WriteLine("Writing to WAL");
+        Console.WriteLine($"Writing to WAL from {request.Me}");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray(), tables);
 
-        long internalTid = GetOrRegisterTid(request.Me, request.Tid);
-        entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
-        entry.prevLsn = request.Me; // TODO: hacky place to put sender id
-        Console.WriteLine("sender is " + request.Me);
+        if (entry.type == LogType.Prepare || entry.type == LogType.Commit)
+        {
+            long internalTid = GetOrRegisterTid(request.Me, request.Tid);
+            entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
+            entry.prevLsn = request.Me; // TODO: hacky place to put sender id
+        }
         
-        // var handle = new WalHandle(internalTid, entry.type);
-        // var actualHandle = startedWalRequests.GetOrAdd(internalTid, handle);
-        // if (actualHandle == handle)
-        // {
-            // This handle was created by this thread, which gives us the ability to go ahead and start the workflow
         var stepRequest = stepRequestPool.Checkout();
         var requestBuilder = new StepRequestBuilder(stepRequest);
         // TODO: do we need to step messages consumed, self, and out messages 
         requestBuilder.AddSelfMessage(entry.ToBytes());
         await capabilities.Step(requestBuilder.FinishStep());
-        Console.WriteLine($"Workflow {internalTid} started");
+        Console.WriteLine($"Workflow {entry.lsn} started");
         stepRequestPool.Return(stepRequest);
-        // } else {
-        //     // TODO: how do we handle multiple requests 
-        //     throw new Exception("should not be trying to validate and commit at same time?? ");
-        // }
         backend.EndAction();
         return new WalReply{Success = true};
-        // return await GetWalRequestResultAsync(handle);
     }
 
     private long GetOrRegisterTid(long me, long tid) {
@@ -232,12 +224,20 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                 // requestBuilder.AddRecoveryMessage(m.GetMessageBody());
                 switch (entry.type)
                 {
+                    // Coordinator side
                     case LogType.Ok:
                     {
                         Console.WriteLine($"Got OK log entry: {entry}");
                         txnManager.MarkAcked(entry.tid, TransactionStatus.Validated, m.GetLsn(), entry.prevLsn);
                         break;
                     }
+                    case LogType.Ack:
+                    {
+                        Console.WriteLine($"Got ACK log entry: {entry}");
+                        // can ignore in DARQ since we know out commit message is sent
+                        break;
+                    }
+                    // Worker side
                     case LogType.Prepare:
                     {
                         Console.WriteLine($"Got prepare log entry: {entry}");
@@ -268,9 +268,10 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                     {
                         Console.WriteLine($"Got commit log entry: {entry}");
                         requestBuilder.MarkMessageConsumed(m.GetLsn());
-                        // write self message ??? 
                         long sender = entry.prevLsn; // hacky
-                        txnManager.Write(txnIdToTxnCtx[entry.tid], (LogEntry entry) => wal.Write(entry));
+                        long internalTid = entry.lsn; // ""
+                        
+                        txnManager.Write(txnIdToTxnCtx[internalTid], (LogEntry entry) => wal.Write(entry));
 
                         Console.WriteLine($"Committed at node {me}; now sending ACK to {sender}");
                         LogEntry ackEntry = new LogEntry(me, entry.tid, LogType.Ack);
@@ -335,7 +336,6 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
             Tid = entry.tid,
             Me = producerId,
             Lsn = lsn,
-
         };
         Task.Run(async () =>
         {
