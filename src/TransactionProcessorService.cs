@@ -271,7 +271,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
                         long sender = entry.prevLsn; // hacky
                         long internalTid = entry.lsn; // ""
                         
-                        txnManager.Write(txnIdToTxnCtx[internalTid], (LogEntry entry) => wal.Write(entry));
+                        txnManager.Write(txnIdToTxnCtx[internalTid], (tid, type) => wal.Finish(tid, type));
 
                         Console.WriteLine($"Committed at node {me}; now sending ACK to {sender}");
                         LogEntry ackEntry = new LogEntry(me, entry.tid, LogType.Ack);

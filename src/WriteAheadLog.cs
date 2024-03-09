@@ -18,11 +18,11 @@ namespace DB
 {
 public interface IWriteAheadLog
 {
-    public long Log(LogEntry entry);
+    public long RecordOk(long tid, long shard);
     public long Begin(long tid);
-    public long Write(LogEntry entry);
+    public long Write(long tid, KeyAttr keyAttr, byte[] val);
     
-    public long Finish(LogEntry entry);
+    public long Finish(long tid, LogType type);
     public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
     public void Terminate();
     // public void Recover();
@@ -35,6 +35,7 @@ public class DARQWal : IWriteAheadLog {
     protected IDarqProcessorClientCapabilities capabilities;
     protected DarqId me;
     protected SimpleObjectPool<StepRequest> requestPool;
+    internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
     // requestBuilders should last for a Begin,Write,Finish cycle or TODO and should NEVER overlap 
     protected ConcurrentDictionary<long, StepRequestBuilder> requestBuilders = new ConcurrentDictionary<long, StepRequestBuilder>();
     public DARQWal(DarqId me){
@@ -46,26 +47,32 @@ public class DARQWal : IWriteAheadLog {
         // use GetOrAdd because may be in the middle of requestBuilder cycle
         StepRequestBuilder requestBuilder = requestBuilders.GetOrAdd(tid, _ => new StepRequestBuilder(requestPool.Checkout()));
 
-        long lsn = GetNewLsn();
-        LogEntry entry = new LogEntry(lsn, tid, LogType.Begin);
-        entry.lsn = lsn;
+        LogEntry entry = new LogEntry(GetNewLsn(), tid, LogType.Begin);
+        entry.lsn = entry.prevLsn;
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
-        return lsn;
+        txnTbl[tid] = entry.lsn;
+
+        return entry.lsn;
     }
      
-    public long Write(LogEntry entry){
+    public long Write(long tid, KeyAttr keyAttr, byte[] val){
+        LogEntry entry = new LogEntry(txnTbl[tid], tid, keyAttr, val);
         StepRequestBuilder requestBuilder = requestBuilders[entry.tid]; // throw error if doesn't exist
         entry.lsn = GetNewLsn();
 
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
+        txnTbl[tid] = entry.lsn;
         return entry.lsn;
     }
 
-    public long Log(LogEntry entry){
+    // TODO: add field for shard in log entry
+    public long RecordOk(long tid, long shard){
         StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
 
+        LogEntry entry = new LogEntry(txnTbl[tid], tid, LogType.Ok);
         entry.lsn = GetNewLsn();
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
+        txnTbl[tid] = entry.lsn;
 
         StepAndReturnRequestBuilder(requestBuilder);
         return entry.lsn;
@@ -76,14 +83,16 @@ public class DARQWal : IWriteAheadLog {
     /// </summary>
     /// <param name="entry"></param>
     /// <returns></returns>
-    virtual public long Finish(LogEntry entry){
-        StepRequestBuilder requestBuilder = requestBuilders[entry.tid]; // throw error if doesn't exist
+    public long Finish(long tid, LogType type){
+        StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
+        LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
         entry.lsn = GetNewLsn();
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
 
         StepAndReturnRequestBuilder(requestBuilder);
         requestBuilders.Remove(entry.tid, out _);
+        txnTbl.TryRemove(tid, out _);
         return entry.lsn;
     }
 
@@ -111,15 +120,18 @@ public class ShardedDarqWal : DARQWal {
     public ShardedDarqWal(DarqId me) : base(me) {
     }
 
-    public long Prepare(Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset, LogEntry entry) {
+    public long Prepare(Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset, long tid) {
         StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
 
+        // should be first 
+        LogEntry entry = new LogEntry(GetNewLsn(), tid, LogType.Prepare);
         // TODO: make sure it is correct lsn/prevLsn values
-        entry.lsn = GetNewLsn();
+        entry.lsn = entry.prevLsn;
         entry.keyAttrs = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item1)).ToArray();
         entry.vals = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item2)).ToArray();
         
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
+        txnTbl[tid] = entry.lsn;
 
         // add out message to each shard
         foreach (var shard in shardToWriteset) {
@@ -134,9 +146,10 @@ public class ShardedDarqWal : DARQWal {
         return entry.lsn;
     }
 
-    public long Finish(LogEntry entry, List<(long, long)> darqLsnsToConsume){
-        StepRequestBuilder requestBuilder = requestBuilders[entry.tid]; // throw error if doesn't exist
+    public long Finish(long tid, LogType type, List<(long, long)> darqLsnsToConsume){
+        StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
+        LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
         entry.lsn = GetNewLsn();
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         foreach (var item in darqLsnsToConsume) {
@@ -152,6 +165,7 @@ public class ShardedDarqWal : DARQWal {
 
         StepAndReturnRequestBuilder(requestBuilder);
         requestBuilders.Remove(entry.tid, out _);
+        txnTbl.TryRemove(tid, out _);
         return entry.lsn;
     }
 }

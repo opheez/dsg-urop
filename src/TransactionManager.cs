@@ -17,7 +17,6 @@ public class TransactionManager {
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
     private IWriteAheadLog? wal;
-    internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
         this.wal = (DARQWal)wal;
@@ -135,12 +134,10 @@ public class TransactionManager {
         return true;
     }
 
-    public void Write(TransactionContext ctx, Action<LogEntry> commit){
+    public void Write(TransactionContext ctx, Action<long, LogType> commit){
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
-            var res = wal.Begin(ctx.tid);
-            long writtenLsn = res;
-            txnTbl[ctx.tid] = writtenLsn;
+            wal.Begin(ctx.tid);            
         }
         foreach (var item in ctx.GetWriteset()){
             TupleId tupleId = item.Item1;
@@ -149,9 +146,7 @@ public class TransactionManager {
                 // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
                 if (this.wal != null) {
-                    long writtenLsn = wal.Write(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray()));
-                    txnTbl[ctx.tid] = writtenLsn;
-                    // wal.Log(new LogEntry(txnTbl[ctx.tid], ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), val));
+                    wal.Write(ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray());
                 }
                 tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
                 start += td.Size;
@@ -159,10 +154,7 @@ public class TransactionManager {
         }
         // TODO: verify that should be logged before removing from active
         if (wal != null){
-            long prevLsn = txnTbl[ctx.tid];
-            
-            txnTbl.TryRemove(ctx.tid, out _);
-            commit(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+            commit(ctx.tid, LogType.Commit);
             // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
         }
         // assign num 
@@ -187,9 +179,7 @@ public class TransactionManager {
         bool lockTaken = false; // signals if this thread was able to acquire lock
         // TODO: verify that should be logged before removing from active
         if (wal != null){
-            long prevLsn = txnTbl[ctx.tid];
-            txnTbl.TryRemove(ctx.tid, out _);
-            wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Abort));
+            wal.Finish(ctx.tid, LogType.Abort);
         }
         try {
             sl.Enter(ref lockTaken);
@@ -205,7 +195,7 @@ public class TransactionManager {
 
         if (valid) {
             ctx.status = TransactionStatus.Validated;
-            Write(ctx, (LogEntry entry) => wal.Finish(entry));
+            Write(ctx, (tid, type) => wal.Finish(tid, type));
             ctx.status = TransactionStatus.Committed;
         } else {
             Abort(ctx);
@@ -239,18 +229,15 @@ public class ShardedTransactionManager : TransactionManager {
             throw new Exception($"Invalid status {status} for tid {tid}");
         }
 
-        txnIdToOKDarqLsns[tid].Add((darqLsn, shard));
-        // TODO: add field for shard in log entry
-        LogEntry shardEntry = new LogEntry(txnTbl[tid], tid, LogType.Ok);
-        long writtenLsn = wal.Log(shardEntry);
-        txnTbl[tid] = writtenLsn;
+        txnIdToOKDarqLsns[tid].Add((darqLsn, shard));        
+        wal.RecordOk(tid, shard);
 
         Console.WriteLine($"Marked acked {tid}");
 
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
             Console.WriteLine($"done w validation for {ctx.tid}");
             ctx.status = TransactionStatus.Validated;
-            Write(ctx, (LogEntry entry) => wal.Finish(entry, txnIdToOKDarqLsns[tid]));
+            Write(ctx, (tid, type) => wal.Finish(tid, type, txnIdToOKDarqLsns[tid]));
             ctx.status = TransactionStatus.Committed;
         }
     }
@@ -288,8 +275,8 @@ public class ShardedTransactionManager : TransactionManager {
                 }
             }
             // send out prepare messages and wait; the commit is finished by calls to MarkAcked
-            long prepareLsn = wal.Prepare(shardToWriteset, new LogEntry(0, ctx.tid, LogType.Prepare));
-            txnTbl[ctx.tid] = prepareLsn;
+            wal.Prepare(shardToWriteset, ctx.tid);
+            
             if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
             Console.WriteLine($"Created list for {ctx.tid}");
             txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
