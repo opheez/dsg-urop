@@ -23,13 +23,15 @@ public interface IWriteAheadLog
     public long Write(long tid, KeyAttr keyAttr, byte[] val);
     
     public long Finish(long tid, LogType type);
-    public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
+    public long Prepare(Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset, long tid);
+    public long Finish2pc(long tid, LogType type, List<(long, long)> okLsnsToConsume);
+    // public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
     public void Terminate();
     // public void Recover();
 
 }
 
-public class DARQWal : IWriteAheadLog {
+public class DarqWal : IWriteAheadLog {
 
     protected long currLsn = 0;
     protected IDarqProcessorClientCapabilities capabilities;
@@ -38,7 +40,7 @@ public class DARQWal : IWriteAheadLog {
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
     // requestBuilders should last for a Begin,Write,Finish cycle or TODO and should NEVER overlap 
     protected ConcurrentDictionary<long, StepRequestBuilder> requestBuilders = new ConcurrentDictionary<long, StepRequestBuilder>();
-    public DARQWal(DarqId me){
+    public DarqWal(DarqId me){
         this.me = me;
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
@@ -82,7 +84,7 @@ public class DARQWal : IWriteAheadLog {
     /// Commits or aborts a transaction
     /// </summary>
     /// <param name="entry"></param>
-    /// <returns></returns>
+    /// <returns>lsn of finish log</returns>
     public long Finish(long tid, LogType type){
         StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
@@ -96,30 +98,12 @@ public class DARQWal : IWriteAheadLog {
         return entry.lsn;
     }
 
-    protected long GetNewLsn() {
-        return Interlocked.Increment(ref currLsn);
-    }
-
-    protected void StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
-        StepRequest stepRequest = requestBuilder.FinishStep();
-        var v = capabilities.Step(stepRequest);
-        Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
-        requestPool.Return(stepRequest);
-    }
-
-    public void SetCapabilities(IDarqProcessorClientCapabilities capabilities) {
-        this.capabilities = capabilities;
-    }
-    public void Terminate(){
-        return;
-    }
-
-}
-
-public class ShardedDarqWal : DARQWal {
-    public ShardedDarqWal(DarqId me) : base(me) {
-    }
-
+    /// <summary>
+    /// Writes prepare log and sends out prepare messages to shards
+    /// </summary>
+    /// <param name="shardToWriteset"></param>
+    /// <param name="tid"></param>
+    /// <returns>lsn of prepare log</returns>
     public long Prepare(Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset, long tid) {
         StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
 
@@ -146,7 +130,14 @@ public class ShardedDarqWal : DARQWal {
         return entry.lsn;
     }
 
-    public long Finish(long tid, LogType type, List<(long, long)> darqLsnsToConsume){
+    /// <summary>
+    /// Commit or abort a transaction and consume OK messages from 2PC 
+    /// </summary>
+    /// <param name="tid"></param>
+    /// <param name="type"></param>
+    /// <param name="darqLsnsToConsume"></param>
+    /// <returns>lsn of finish log</returns>
+    public long Finish2pc(long tid, LogType type, List<(long, long)> darqLsnsToConsume){
         StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
         LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
@@ -168,91 +159,24 @@ public class ShardedDarqWal : DARQWal {
         txnTbl.TryRemove(tid, out _);
         return entry.lsn;
     }
+    protected long GetNewLsn() {
+        return Interlocked.Increment(ref currLsn);
+    }
+
+    protected void StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
+        StepRequest stepRequest = requestBuilder.FinishStep();
+        var v = capabilities.Step(stepRequest);
+        Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+        requestPool.Return(stepRequest);
+    }
+
+    public void SetCapabilities(IDarqProcessorClientCapabilities capabilities) {
+        this.capabilities = capabilities;
+    }
+    public void Terminate(){
+        return;
+    }
+
 }
-
-// deprecated, made for 6.810 report
-// public class BatchDARQWal {
-
-//     private long currLsn = 0;
-//     private IDarqProcessorClientCapabilities capabilities;
-//     private DarqId me;
-//     private SimpleObjectPool<StepRequest> requestPool;
-//     private BlockingCollection<LogEntry> buffer = new BlockingCollection<LogEntry>();
-//     private Thread logger;
-//     private int flushSize = 1000;
-
-//     public BatchDARQWal(DarqId me){
-//         this.me = me;
-//         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
-//         // start thread that flushes buffer every 1000 entries
-//         logger = new Thread(() => {
-//             while (true){
-//                 var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
-//                 var count = 0;
-//                 foreach (LogEntry e in buffer.GetConsumingEnumerable()){
-//                     e.SetPersisted();
-//                     requestBuilder.AddRecoveryMessage(e.ToBytes());
-//                     count++;
-//                     if (count >= flushSize) break;
-//                 }
-//                 var v = capabilities.Step(requestBuilder.FinishStep());
-//                 Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
-                
-//                 Console.WriteLine("flushed");
-//             }
-//         });
-//         logger.Start();
-//     }
-
-//     private void AddToBuffer(LogEntry entry){
-//         buffer.Add(entry);
-//         while (entry.persited == false){
-//             Thread.Yield();
-//         }
-//     }
-
-//     public (long, StepRequestBuilder) Begin(long tid){
-//         long lsn = GetNewLsn();
-//         LogEntry entry = new LogEntry(lsn, tid, LogType.Begin);
-//         entry.lsn = lsn;
-//         AddToBuffer(entry);
-        
-//         return (lsn, new StepRequestBuilder(requestPool.Checkout()));
-//     }
-     
-//     public long Write(LogEntry entry, StepRequestBuilder requestBuilder){
-//         entry.lsn = GetNewLsn();
-
-//         AddToBuffer(entry);
-//         return entry.lsn;
-//     }
-
-//     public long Log(LogEntry entry){
-//         entry.lsn = GetNewLsn();
-//         var requestBuilder = new StepRequestBuilder(requestPool.Checkout());
-//         requestBuilder.AddRecoveryMessage(entry.ToBytes());
-//         var v = capabilities.Step(requestBuilder.FinishStep());
-//         Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
-//         return entry.lsn;
-//     }
-
-//     public long Commit(LogEntry entry, StepRequestBuilder requestBuilder){
-//         entry.lsn = GetNewLsn();
-//         AddToBuffer(entry);
-//         return entry.lsn;
-//     }
-
-//     private long GetNewLsn() {
-//         return Interlocked.Increment(ref currLsn);
-//     }
-
-//     public void SetCapabilities(IDarqProcessorClientCapabilities capabilities) {
-//         this.capabilities = capabilities;
-//     }
-
-//     public void Terminate(){
-//         logger.Interrupt();
-//     }
-// }
 
 }

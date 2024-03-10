@@ -19,7 +19,7 @@ public class TransactionManager {
     private IWriteAheadLog? wal;
 
     public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
-        this.wal = (DARQWal)wal;
+        this.wal = wal;
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
@@ -210,9 +210,9 @@ public class TransactionManager {
 
 public class ShardedTransactionManager : TransactionManager {
     private RpcClient rpcClient;
-    private ShardedDarqWal wal;
+    private IWriteAheadLog wal;
     private ConcurrentDictionary<long, List<(long, long)>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<(long, long)>>(); // tid to num shards waiting on
-    public ShardedTransactionManager(int numThreads, ShardedDarqWal wal, RpcClient rpcClient) : base(numThreads, wal){
+    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient) : base(numThreads, wal){
         this.rpcClient = rpcClient;
         this.wal = wal;
     }
@@ -237,7 +237,7 @@ public class ShardedTransactionManager : TransactionManager {
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
             Console.WriteLine($"done w validation for {ctx.tid}");
             ctx.status = TransactionStatus.Validated;
-            Write(ctx, (tid, type) => wal.Finish(tid, type, txnIdToOKDarqLsns[tid]));
+            Write(ctx, (tid, type) => wal.Finish2pc(tid, type, txnIdToOKDarqLsns[tid]));
             ctx.status = TransactionStatus.Committed;
         }
     }

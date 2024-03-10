@@ -152,8 +152,8 @@ unsafe class Program {
         builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
-        builder.Services.AddSingleton<ShardedDarqWal>(
-            services => new ShardedDarqWal(new DarqId(me))
+        builder.Services.AddSingleton<DarqWal>(
+            services => new DarqWal(new DarqId(me))
         );
 
         var schema = new (long, int)[]{(12345,8)};
@@ -162,15 +162,15 @@ unsafe class Program {
         builder.Services.AddSingleton<ShardedTable>();
         builder.Services.AddSingleton<ShardedTransactionManager>(
             services => new ShardedTransactionManager(1,
-                            services.GetRequiredService<ShardedDarqWal>(),
+                            services.GetRequiredService<DarqWal>(),
                             services.GetRequiredService<RpcClient>()));
 
-        builder.Services.AddSingleton<TransactionProcessorService>(
-            service => new TransactionProcessorService(
+        builder.Services.AddSingleton<DarqTransactionProcessorService>(
+            service => new DarqTransactionProcessorService(
                 me,
                 service.GetRequiredService<ShardedTable>(),
                 service.GetRequiredService<ShardedTransactionManager>(),
-                service.GetRequiredService<ShardedDarqWal>(),
+                service.GetRequiredService<DarqWal>(),
                 service.GetRequiredService<Darq>(),
                 service.GetRequiredService<DarqBackgroundWorkerPool>(),
                 service.GetRequiredService<Dictionary<DarqId, GrpcChannel>>()
@@ -179,7 +179,7 @@ unsafe class Program {
 
         var app = builder.Build();
         // Configure the HTTP request pipeline.
-        app.MapGrpcService<TransactionProcessorService>();
+        app.MapGrpcService<DarqTransactionProcessorService>();
         app.MapGet("/", () => "Communication with gRPC endpoints must be made through a gRPC client. To learn how to create a client, visit: https://go.microsoft.com/fwlink/?linkid=2086909");
         app.Run();
     }

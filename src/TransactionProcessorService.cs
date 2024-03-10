@@ -32,12 +32,12 @@ public class WalHandle
     }
 }
 
-public class TransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
+public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
     private ShardedTransactionManager txnManager;
     private Table table;
     private Dictionary<(long, long), long> externalToInternalTxnId = new Dictionary<(long, long), long>();
     private Dictionary<long, TransactionContext> txnIdToTxnCtx = new Dictionary<long, TransactionContext>();
-    private IWriteAheadLog wal;
+    private DarqWal wal;
     private long me;
     private ConcurrentDictionary<long, WalHandle> startedWalRequests;
 
@@ -61,7 +61,7 @@ public class TransactionProcessorService : TransactionProcessor.TransactionProce
 
     // TODO: condense table into tables
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
-    public TransactionProcessorService(long me, Table table, ShardedTransactionManager txnManager, IWriteAheadLog wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
+    public DarqTransactionProcessorService(long me, Table table, ShardedTransactionManager txnManager, DarqWal wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
         this.table = table;
         this.txnManager = txnManager;
         this.me = me;
