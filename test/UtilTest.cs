@@ -10,7 +10,7 @@ namespace DB
         [TestMethod]
         public void TestTupleIdEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TupleId tid1 = new TupleId(12345, table);
             TupleId tid2 = new TupleId(12345, table);
 
@@ -20,7 +20,7 @@ namespace DB
         [TestMethod]
         public void TestKeyAttrEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             KeyAttr keyAttr1 = new KeyAttr(12345, 67890, table);
             KeyAttr keyAttr2 = new KeyAttr(12345, 67890, table);
 
@@ -31,8 +31,8 @@ namespace DB
         public void TestKeyAttrSerialize(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
-            Table table = new Table(schema);
-            tables.Add(table.GetHashCode(), table);
+            Table table = new Table(1, schema);
+            tables.Add(table.GetId(), table);
             KeyAttr keyAttr = new KeyAttr(12345, 67890, table);
             byte[] bytes = keyAttr.ToBytes();
             KeyAttr keyAttr2 = KeyAttr.FromBytes(bytes, tables);
@@ -44,8 +44,8 @@ namespace DB
         public void TestLogEntryEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
-            Table table = new Table(schema);
-            tables.Add(table.GetHashCode(), table);
+            Table table = new Table(1, schema);
+            tables.Add(table.GetId(), table);
 
             KeyAttr keyAttr = new KeyAttr(12345, 67890, table);
             byte[] val = {8, 8, 8, 8};
@@ -66,8 +66,8 @@ namespace DB
         public void TestLogEntrySerialize(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
-            Table table = new Table(schema);
-            tables.Add(table.GetHashCode(), table);
+            Table table = new Table(1, schema);
+            tables.Add(table.GetId(), table);
             KeyAttr keyAttr = new KeyAttr(12345, 67890, table);
             byte[] val = {8, 8, 8, 8};
             LogEntry entry = new LogEntry(4, 8, keyAttr, val);
@@ -80,8 +80,8 @@ namespace DB
         public void TestLogEntrySerializePrepare(){
             (long,int)[] schema = {(12345,3), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
-            Table table = new Table(schema);
-            tables.Add(table.GetHashCode(), table);
+            Table table = new Table(1, schema);
+            tables.Add(table.GetId(), table);
             KeyAttr keyAttr = new KeyAttr(12345, 67890, table);
             KeyAttr keyAttr2 = new KeyAttr(56789, 33333, table);
             byte[] val = {8, 8, 8};

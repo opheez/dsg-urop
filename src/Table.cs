@@ -17,6 +17,7 @@ namespace DB {
 /// Assumes schema is never changed after creation 
 /// </summary>
 public unsafe class Table : IDisposable{
+    private int id;
     private long lastId = 0;
     internal int rowSize;
     // TODO: bool can be a single bit
@@ -25,7 +26,8 @@ public unsafe class Table : IDisposable{
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
-    public Table((long, int)[] schema){
+    public Table(int id, (long, int)[] schema){
+        this.id = id;
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
         
@@ -193,6 +195,10 @@ public unsafe class Table : IDisposable{
         return this.metadata[attr];
     }
 
+    public int GetId(){
+        return this.id;
+    }
+
     public void Debug(){
         Console.WriteLine("Metadata: ");
         foreach (var field in metadata){
@@ -235,7 +241,7 @@ public unsafe class Table : IDisposable{
 
 public class ShardedTable : Table {
     private RpcClient rpcClient;
-    public ShardedTable((long, int)[] schema, RpcClient rpcClient) : base(schema) {
+    public ShardedTable(int id, (long, int)[] schema, RpcClient rpcClient) : base(id, schema) {
         this.rpcClient = rpcClient;
     }
 

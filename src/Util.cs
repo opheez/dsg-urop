@@ -161,8 +161,8 @@ namespace DB {
             Span<byte> span = arr.AsSpan();
             MemoryMarshal.Write(span, ref Key);
             MemoryMarshal.Write(span.Slice(sizeof(long)), ref Attr);
-            int tableHash = Table.GetHashCode();
-            MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref tableHash);
+            int tableId = Table.GetId();
+            MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref tableId);
 
             return arr;
             // using (MemoryStream m = new MemoryStream()) {
@@ -210,7 +210,7 @@ namespace DB {
 
         public int GetHashCode(KeyAttr obj)
         {
-            return (int)obj.Key + obj.Table.GetHashCode(); //Already an int
+            return (int)obj.Key + obj.Table.GetId();
         }
     }
 

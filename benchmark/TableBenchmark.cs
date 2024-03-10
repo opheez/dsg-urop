@@ -214,7 +214,7 @@ public abstract class TableBenchmark
         for (int i = 0; i < cfg.iterationCount; i++){
             TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, wal);
             txnManager.Run();
-            using (Table tbl = new Table(schema)) {
+            using (Table tbl = new Table(1, schema)) {
                 // tables.Add(tbl.GetHashCode(), tbl);
                 var insertSw = Stopwatch.StartNew();
                 int insertAborts = InsertMultiThreadedTransactions(tbl, txnManager); // setup

@@ -9,7 +9,7 @@ namespace DB
         [TestMethod]
         [ExpectedException(typeof(ArgumentException))]
         public void TestInvalidReadsetAdd(){
-            Table tbl = new Table(new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3)});
 
             TransactionContext ctx = new TransactionContext();
             ctx.Init(0, 0);
@@ -20,7 +20,7 @@ namespace DB
 
         [TestMethod]
         public void TestGetFromRset(){
-            Table tbl = new Table(new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3)});
 
             TransactionContext ctx = new TransactionContext();
             ctx.Init(0, 0);
@@ -42,7 +42,7 @@ namespace DB
 
         [TestMethod]
         public void TestGetFromWset(){
-            Table tbl = new Table(new (long,int)[]{(1,3), (2,3), (3,3)});
+            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3), (3,3)});
 
             TransactionContext ctx = new TransactionContext();
             ctx.Init(0, 0);
@@ -72,7 +72,7 @@ namespace DB
 
         [TestMethod]
         public void TestGetFromContextNull(){
-            Table tbl = new Table(new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3)});
 
             TransactionContext ctx = new TransactionContext();
             ctx.Init(0, 0);

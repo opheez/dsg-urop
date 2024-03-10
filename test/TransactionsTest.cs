@@ -19,7 +19,7 @@ namespace DB
         [ExpectedException(typeof(ArgumentException))]
         public void TestOversizeInsert(){
             (long,int)[] schema = {(12345,10)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -35,7 +35,7 @@ namespace DB
         [ExpectedException(typeof(ArgumentException))]
         public void TestUndersizeInsert(){
             (long,int)[] schema = {(12345,10)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -51,7 +51,7 @@ namespace DB
         [ExpectedException(typeof(ArgumentException))]
         public void TestEmptyInsert(){
             (long,int)[] schema = {(12345,10)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -67,7 +67,7 @@ namespace DB
         [ExpectedException(typeof(ArgumentException))]
         public void TestInsertExistingKey(){
             (long,int)[] schema = {(12345,10)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -83,7 +83,7 @@ namespace DB
         [TestMethod]
         public void TestSingleInsertReadTransaction(){
             (long,int)[] schema = {(12345,4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -102,7 +102,7 @@ namespace DB
         [TestMethod]
         public void TestSingleInsertUpdateTransaction(){
             (long,int)[] schema = {(12345,4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -123,7 +123,7 @@ namespace DB
         [TestMethod]
         public void TestSerialInsertUpdate(){
             (long,int)[] schema = {(12345,4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -141,7 +141,7 @@ namespace DB
         [TestMethod]
         public void TestInsertAllAttributes(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -166,7 +166,7 @@ namespace DB
         [TestMethod]
         public void TestInsertSomeAttributes(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -189,7 +189,7 @@ namespace DB
         [TestMethod]
         public void TestReadAllAttributes(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
 
@@ -215,7 +215,7 @@ namespace DB
         /// </summary>
         public void TestWRNoIntersectWWIntersectWRIntersect(){
             (long,int)[] schema = {(12345,4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
@@ -253,7 +253,7 @@ namespace DB
         /// </summary>
         public void TestWRNoIntersectRWIntersectWWNoIntersect(){
             (long,int)[] schema = {(12345,4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
@@ -296,7 +296,7 @@ namespace DB
         /// </summary>
         public void TestWRIntersectRWIntersectWWNoIntersect(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
@@ -329,7 +329,7 @@ namespace DB
         /// </summary>
         public void TestWRUnionWIntersect(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
-            Table table = new Table(schema);
+            Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads);
             txnManager.Run();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};

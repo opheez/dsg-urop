@@ -13,20 +13,20 @@ namespace DB
         public void TestInvalidSizeSchema(){
             (long,int)[] schema = {(12345,0)};
         
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
         }
 
         [TestMethod]
         public void TestValidVarLenSchema(){
             (long,int)[] schema = {(12345,-1)};
 
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
         }
 
         [TestMethod]
         public void TestInvalidKey(){
             (long,int)[] schema = {(12345,100)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
 
             TupleId ka = new TupleId(11111, test);
             var retName = test.Read(ka);
@@ -49,7 +49,7 @@ namespace DB
         [TestMethod]
         public void TestWriteRead(){
             (long,int)[] schema = {(12345,8), (67890, 4)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
 
             byte[] input = Encoding.ASCII.GetBytes("John Doe");
             KeyAttr ka = new KeyAttr(11111, 12345, test);
@@ -61,7 +61,7 @@ namespace DB
         [TestMethod]
         public void TestMultipleWriteRead(){
             (long,int)[] schema = {(12345,8), (67890, 4)};
-            Table test = new Table(schema);
+            Table test = new Table(1, schema);
             
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             KeyAttr ka = new KeyAttr(11111, 12345, test);
