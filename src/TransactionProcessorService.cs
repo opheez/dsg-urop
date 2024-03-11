@@ -5,32 +5,13 @@ using Google.Protobuf;
 using Grpc.Core;
 using FASTER.client;
 using FASTER.core;
-using FASTER.darq;
-using FASTER.libdpr;
 using System.Diagnostics;
-using FASTER.common;
 using Grpc.Net.Client;
 using darq;
 using darq.client;
 using System.Collections.Concurrent;
-using Google.Protobuf;
-
 
 namespace DB {
-
-public class WalHandle
-{
-    internal long internalTid;
-    internal LogType type;
-    internal byte[] result;
-    internal TaskCompletionSource<WalReply> tcs = new();
-
-    public WalHandle(long internalTid, LogType type)
-    {
-        this.internalTid = internalTid;
-        this.type = type;
-    }
-}
 
 public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
     private ShardedTransactionManager txnManager;
@@ -39,8 +20,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     private Dictionary<long, TransactionContext> txnIdToTxnCtx = new Dictionary<long, TransactionContext>();
     private DarqWal wal;
     private long me;
-    private ConcurrentDictionary<long, WalHandle> startedWalRequests;
-
     // from darqProcessor
     private Darq backend;
     private readonly DarqBackgroundTask _backgroundTask;
@@ -166,19 +145,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return internalTid;
     }
 
-    // private async Task<WalReply> GetWalRequestResultAsync(WalHandle handle)
-    // {
-    //     while (true)
-    //     {
-    //         var s = backend.DetachFromWorker();
-    //         var result = await handle.tcs.Task;
-    //         if (backend.TryMergeAndStartAction(s)) return result;
-    //         // Otherwise, there has been a rollback, should retry with a new handle, if any
-    //         while (!startedWalRequests.TryGetValue(handle.internalTid, out handle))
-    //             await Task.Yield();                
-    //     }
-    // }
-
     public void Dispose(){
         table.Dispose();
         txnManager.Terminate();
@@ -259,9 +225,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                             LogEntry okEntry = new LogEntry(me, entry.tid, LogType.Ok);
                             requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
                         }
-                        // var workflowHandle = startedWalRequests[entry.tid];
-                        // workflowHandle.tcs.SetResult(new WalReply{Success = success});
-                        // TODO: step together to send OK message 
                         break;
                     }
                     case LogType.Commit:
