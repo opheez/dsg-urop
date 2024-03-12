@@ -17,8 +17,8 @@ public struct BenchmarkConfig {
     public int nCommitterThreads;
 
     public BenchmarkConfig(
-        int seed,
-        double ratio,
+        int seed = 12345,
+        double ratio = 0.2,
         int threadCount = 16,
         int attrCount = 2,
         int perThreadDataCount = 100000,
@@ -44,15 +44,15 @@ public struct BenchmarkConfig {
 
 public abstract class TableBenchmark
 {
-    internal BenchmarkConfig cfg;   
-    internal long[] keys;
-    internal byte[][] values;
-    internal BitArray isWrite;
-    internal (long, int)[] schema; // TODO: in the future support multiple tables, make this list
-    internal TupleDesc[] td; // TODO: this is the same as schema
-    internal Thread[] workers;
-    internal BenchmarkStatistics? stats;
-    internal IWriteAheadLog? wal;
+    protected internal BenchmarkConfig cfg;   
+    protected internal long[] keys;
+    protected internal byte[][] values;
+    protected internal BitArray isWrite;
+    protected internal (long, int)[] schema; // TODO: in the future support multiple tables, make this list
+    protected internal TupleDesc[] td; // TODO: this is the same as schema
+    protected internal Thread[] workers;
+    protected internal BenchmarkStatistics? stats;
+    protected internal IWriteAheadLog? wal;
 
     public TableBenchmark(BenchmarkConfig cfg, IWriteAheadLog? wal = null){
         this.cfg = cfg;
@@ -73,7 +73,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
+    virtual protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
         int abortCount = 0;
         int c = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
@@ -105,7 +105,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    internal int InsertMultiThreadedTransactions(Table tbl, TransactionManager txnManager)
+    protected internal int InsertMultiThreadedTransactions(Table tbl, TransactionManager txnManager)
     {
         int totalAborts = 0;
         for (int thread = 0; thread < cfg.threadCount; thread++) {
@@ -133,7 +133,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
+    protected internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
         int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
@@ -145,6 +145,7 @@ public abstract class TableBenchmark
                 // TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
 
                 if (isWrite[loc]) {
+                    // shift value by thread_idx to write new value
                     int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
                     // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
                     byte[] val = values[newValueIndex];
@@ -173,7 +174,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
+    protected internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
         for (int thread = 0; thread < cfg.threadCount; thread++) {
@@ -210,7 +211,7 @@ public abstract class TableBenchmark
     // }
 
     // public void RunTransactions(ref Dictionary<int, Table> tables){
-    public void RunTransactions(){
+    virtual public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
             TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, wal);
             txnManager.Run();

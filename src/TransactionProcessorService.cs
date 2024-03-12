@@ -15,7 +15,7 @@ namespace DB {
 
 public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
     private ShardedTransactionManager txnManager;
-    private Table table;
+    private ShardedTable table;
     private Dictionary<(long, long), long> externalToInternalTxnId = new Dictionary<(long, long), long>();
     private Dictionary<long, TransactionContext> txnIdToTxnCtx = new Dictionary<long, TransactionContext>();
     private DarqWal wal;
@@ -40,11 +40,13 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     // TODO: condense table into tables
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
-    public DarqTransactionProcessorService(long me, Table table, ShardedTransactionManager txnManager, DarqWal wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
+    Dictionary<DarqId, GrpcChannel> clusterMap;
+    public DarqTransactionProcessorService(long me, ShardedTable table, ShardedTransactionManager txnManager, DarqWal wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
         this.table = table;
         this.txnManager = txnManager;
         this.me = me;
         this.wal = wal;
+        this.clusterMap = clusterMap;
         table.Write(new KeyAttr(me, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
 
         backend = darq;
@@ -87,23 +89,33 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
-        txnManager.Run();
-        var ctx = txnManager.Begin();
-        Console.WriteLine("Should go to own");
-        var own = table.Read(new TupleId(0, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
-        Console.WriteLine(own.ToString());
-        foreach (var b in own.ToArray()){
-            Console.WriteLine(b);
-        }
-        Console.WriteLine("Should RPC:");
-        var other = table.Read(new TupleId(1, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
-        Console.WriteLine(other.ToString());
-        foreach (var b in other.ToArray()){
-            Console.WriteLine(b);
-        }
-        Console.WriteLine("Starting commit");
-        txnManager.Commit(ctx);
-        txnManager.Terminate();
+        BenchmarkConfig testCfg = new BenchmarkConfig(
+            ratio: 0.2,
+            attrCount: 10,
+            threadCount: 3,
+            iterationCount: 1,
+            perThreadDataCount: 10
+        );
+        TableBenchmark b = new ShardedBenchmark("2pc", testCfg, txnManager, table, wal);
+        b.RunTransactions();
+
+        // txnManager.Run();
+        // var ctx = txnManager.Begin();
+        // Console.WriteLine("Should go to own");
+        // var own = table.Read(new TupleId(0, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
+        // Console.WriteLine(own.ToString());
+        // foreach (var b in own.ToArray()){
+        //     Console.WriteLine(b);
+        // }
+        // Console.WriteLine("Should RPC:");
+        // var other = table.Read(new TupleId(1, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
+        // Console.WriteLine(other.ToString());
+        // foreach (var b in other.ToArray()){
+        //     Console.WriteLine(b);
+        // }
+        // Console.WriteLine("Starting commit");
+        // txnManager.Commit(ctx);
+        // txnManager.Terminate();
         EnqueueWorkloadReply enqueueWorkloadReply = new EnqueueWorkloadReply{Success = true};
         return Task.FromResult(enqueueWorkloadReply);
     }

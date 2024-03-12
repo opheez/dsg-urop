@@ -251,7 +251,7 @@ public class ShardedTable : Table {
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
             Console.WriteLine($"hashing to {rpcClient.HashKeyToDarqId(tupleId.Key)}");
-            if (rpcClient.GetId() == rpcClient.HashKeyToDarqId(tupleId.Key)) {
+            if (rpcClient.IsLocalKey(tupleId.Key)) {
                 Console.WriteLine("actually reading own");
                 value = Read(tupleId);
             } else {

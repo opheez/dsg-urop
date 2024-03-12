@@ -78,11 +78,23 @@ public class TransactionManager {
         }
     }
 
+    public void Reset() {
+        txnQueue.CompleteAdding();
+        txnQueue = new BlockingCollection<TransactionContext>();
+        active = new List<TransactionContext>();
+        sl = new SpinLock();
+        txnc = 0;
+        tid = 0;
+        tnumToCtx = new TransactionContext[pastTnumCircularBufferSize];
+        ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
+    }
+
     public void Terminate(){
         for (int i = 0; i < committer.Length; i++) {
             committer[i]?.Interrupt();
         }
         if (wal != null) wal.Terminate();
+        ctxPool.Dispose();
     }
 
     /// <summary>
@@ -251,22 +263,14 @@ public class ShardedTransactionManager : TransactionManager {
         if (valid) {
             // split writeset into shards
             Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
-            for (int i = 0; i < ctx.GetReadset().Count; i++){
-                TupleId tupleId = ctx.GetReadset()[i].Item1;
-
-                if (rpcClient.GetId() != rpcClient.HashKeyToDarqId(tupleId.Key)){
-                    shardToWriteset.TryAdd(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
-                }
-            }
             for (int i = 0; i < ctx.GetWriteset().Count; i++){
                 var item = ctx.GetWriteset()[i];
                 TupleId tupleId = item.Item1;
                 TupleDesc[] tds = item.Item2;
                 long shardDest = rpcClient.HashKeyToDarqId(tupleId.Key);
-
-                for (int j = 0; j < tds.Length; j++){
-                    KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
-                    if (rpcClient.GetId() != shardDest){
+                if (rpcClient.GetId() != shardDest){
+                    for (int j = 0; j < tds.Length; j++){
+                        KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
                         if (!shardToWriteset.ContainsKey(shardDest)){
                             shardToWriteset.Add(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
                         }
@@ -285,6 +289,10 @@ public class ShardedTransactionManager : TransactionManager {
             ctx.status = TransactionStatus.Aborted;
         }
 
+    }
+
+    public RpcClient GetRpcClient(){
+        return rpcClient;
     }
     
 }
