@@ -69,7 +69,8 @@ public class DarqWal : IWriteAheadLog {
 
     // TODO: add field for shard in log entry
     public long RecordOk(long tid, long shard){
-        StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
+        // OK message is stepped by itself 
+        StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
 
         LogEntry entry = new LogEntry(txnTbl[tid], tid, LogType.Ok);
         entry.lsn = GetNewLsn();
