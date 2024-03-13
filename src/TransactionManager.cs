@@ -272,18 +272,27 @@ public class ShardedTransactionManager : TransactionManager {
                     for (int j = 0; j < tds.Length; j++){
                         KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
                         if (!shardToWriteset.ContainsKey(shardDest)){
-                            shardToWriteset.Add(rpcClient.HashKeyToDarqId(tupleId.Key), new List<(KeyAttr, byte[])>());
+                            shardToWriteset[shardDest] = new List<(KeyAttr, byte[])>();
                         }
                         shardToWriteset[shardDest].Add((keyAttr, item.Item3));
                     }
                 }
             }
-            // send out prepare messages and wait; the commit is finished by calls to MarkAcked
-            wal.Prepare(shardToWriteset, ctx.tid);
-            
-            if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
-            Console.WriteLine($"Created list for {ctx.tid}");
-            txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
+            if (shardToWriteset.Count > 0) {
+                // send out prepare messages and wait; the commit is finished by calls to MarkAcked
+                wal.Prepare(shardToWriteset, ctx.tid);
+
+                if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
+                Console.WriteLine($"Created list for {ctx.tid}");
+                txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
+                for (int shard = 0; shard < rpcClient.GetNumServers(); shard++){
+                    if (shard == rpcClient.GetId() || shardToWriteset.ContainsKey(shard)) continue;
+                    txnIdToOKDarqLsns[ctx.tid].Add((-1, shard)); // hacky way to indicate that we don't need to wait for this shard
+                }
+            } else {
+                Write(ctx, (tid, type) => wal.Finish(tid, type));
+                ctx.status = TransactionStatus.Committed;
+            }
         } else {
             Abort(ctx);
             ctx.status = TransactionStatus.Aborted;
