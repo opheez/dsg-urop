@@ -79,7 +79,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
-        Console.WriteLine($"Reading from rpc service");
+        PrintDebug($"Reading from rpc service");
         long internalTid = GetOrRegisterTid(request.Me, request.Tid);
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
         TupleId tupleId = new TupleId(request.Key, table);
@@ -124,7 +124,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     // typically used for Prepare() and Commit() 
     public override async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
     {
-        Console.WriteLine($"Writing to WAL from {request.Me}");
+        PrintDebug($"Writing to WAL from {request.Me}");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray());
 
         if (entry.type == LogType.Prepare || entry.type == LogType.Commit)
@@ -139,20 +139,20 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         // TODO: do we need to step messages consumed, self, and out messages 
         requestBuilder.AddSelfMessage(entry.ToBytes());
         await capabilities.Step(requestBuilder.FinishStep());
-        Console.WriteLine($"Workflow {entry.lsn} started");
+        PrintDebug($"Workflow {entry.lsn} started");
         stepRequestPool.Return(stepRequest);
         backend.EndAction();
         return new WalReply{Success = true};
     }
 
     private long GetOrRegisterTid(long me, long tid) {
-        Console.WriteLine($"Getting or registering tid: ({me}, {tid})");
+        PrintDebug($"Getting or registering tid: ({me}, {tid})");
         if (externalToInternalTxnId.ContainsKey((me, tid))) 
             return externalToInternalTxnId[(me, tid)];
 
         var ctx = txnManager.Begin();
         long internalTid = ctx.tid;
-        Console.WriteLine("Registering new tid: " + internalTid);
+        PrintDebug("Registering new tid: " + internalTid);
         externalToInternalTxnId[(me, tid)] = internalTid;
         txnIdToTxnCtx[internalTid] = ctx;
         return internalTid;
@@ -177,7 +177,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     public Darq GetBackend() => backend;
 
     public bool ProcessMessage(DarqMessage m){
-        Console.WriteLine($"Processing message");
+        PrintDebug($"Processing message");
         bool recoveryMode = false;
         switch (m.GetMessageType()){
             case DarqMessageType.IN:
@@ -206,14 +206,14 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                     // Coordinator side
                     case LogType.Ok:
                     {
-                        Console.WriteLine($"Got OK log entry: {entry}");
+                        PrintDebug($"Got OK log entry: {entry}");
                         txnManager.MarkAcked(entry.tid, TransactionStatus.Validated, m.GetLsn(), entry.prevLsn);
                         m.Dispose();
                         return true;
                     }
                     case LogType.Ack:
                     {
-                        Console.WriteLine($"Got ACK log entry: {entry}");
+                        PrintDebug($"Got ACK log entry: {entry}");
                         // can ignore in DARQ since we know out commit message is sent
                         m.Dispose();
                         return true;
@@ -221,7 +221,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                     // Worker side
                     case LogType.Prepare:
                     {
-                        Console.WriteLine($"Got prepare log entry: {entry}");
+                        PrintDebug($"Got prepare log entry: {entry}");
                         requestBuilder.MarkMessageConsumed(m.GetLsn());
                         long sender = entry.prevLsn; // hacky
                         long internalTid = entry.lsn; // ""
@@ -235,7 +235,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                             ctx.AddWriteSet(new TupleId(keyAttr.Key, table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
-                        Console.WriteLine($"Validated at node {me}: {success}; now sending OK to {sender}");
+                        PrintDebug($"Validated at node {me}: {success}; now sending OK to {sender}");
                         if (success) {
                             LogEntry okEntry = new LogEntry(me, entry.tid, LogType.Ok);
                             requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
@@ -244,14 +244,14 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                     }
                     case LogType.Commit:
                     {
-                        Console.WriteLine($"Got commit log entry: {entry}");
+                        PrintDebug($"Got commit log entry: {entry}");
                         requestBuilder.MarkMessageConsumed(m.GetLsn());
                         long sender = entry.prevLsn; // hacky
                         long internalTid = entry.lsn; // ""
                         
                         txnManager.Write(txnIdToTxnCtx[internalTid], (tid, type) => wal.Finish(tid, type));
 
-                        Console.WriteLine($"Committed at node {me}; now sending ACK to {sender}");
+                        PrintDebug($"Committed at node {me}; now sending ACK to {sender}");
                         LogEntry ackEntry = new LogEntry(me, entry.tid, LogType.Ack);
                         requestBuilder.AddOutMessage(new DarqId(sender), ackEntry.ToBytes());
                         break;
@@ -267,11 +267,11 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 return true;
             }
             case DarqMessageType.RECOVERY: // this is on recovery; TODO: do we need to double pass?
-                Console.WriteLine($"Recovering?, got log");
+                PrintDebug($"Recovering?, got log");
                 if (recoveryMode) {
                     LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray());
                     
-                    Console.WriteLine($"Recovering, got log entry: {entry}");
+                    PrintDebug($"Recovering, got log entry: {entry}");
 
                 }
                 m.Dispose();
@@ -284,6 +284,10 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     public void OnRestart(IDarqProcessorClientCapabilities capabilities) {
         this.capabilities = capabilities;
         this.wal.SetCapabilities(capabilities);
+    }
+
+    void PrintDebug(string msg, TransactionContext ctx = null){
+        Console.WriteLine($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 
@@ -305,7 +309,7 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
     public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
     {
         LogEntry entry = LogEntry.FromBytes(message.ToArray());
-        Console.WriteLine("am making an out request");
+        Console.WriteLine($"[TPS Producer Wrapper {producerId}] am making an out request to {darqId.guid}");
         var client = clients.GetOrAdd(darqId,
             _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]));
         var walRequest = new WalRequest

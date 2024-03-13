@@ -53,13 +53,13 @@ public class TransactionManager {
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
     public bool Commit(TransactionContext ctx){
-        Console.WriteLine($"adding ctx to queue for commit for {ctx.GetHashCode()}");
+        Debug($"adding ctx to queue for commit", ctx);
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
         while (!Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
-        Console.WriteLine("TERMINAL STATUS !!");
+        Debug("TERMINAL STATUS !!", ctx);
         if (ctx.status == TransactionStatus.Aborted){
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
@@ -102,7 +102,7 @@ public class TransactionManager {
     /// <param name="ctx"></param>
     /// <returns></returns>
     public bool Validate(TransactionContext ctx){
-        Console.WriteLine($"Validating own keys for tid {ctx.tid}");
+        Debug($"Validating own keys", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         int finishTxn;
         List<TransactionContext> finish_active;
@@ -115,7 +115,7 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
-        // Console.WriteLine($"Committing {ctx.startTxn} to {finishTxn}, ctx: {ctx}");
+        // Debug($"Committing {ctx.startTxn} to {finishTxn}", ctx);
 
         // validate
         for (int i = ctx.startTxnNum + 1; i <= finishTxn; i++){
@@ -146,7 +146,7 @@ public class TransactionManager {
     }
 
     public void Write(TransactionContext ctx, Action<long, LogType> commit){
-        Console.WriteLine("Write phase");
+        Debug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
             wal.Begin(ctx.tid);            
@@ -184,11 +184,11 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
-        Console.WriteLine("Write phase done");
+        Debug("Write phase done", ctx);
     }
 
     public void Abort(TransactionContext ctx){
-        Console.WriteLine($"Aborting tid {ctx.tid}");
+        Debug($"Aborting tid {ctx.tid}");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         // TODO: verify that should be logged before removing from active
         if (wal != null){
@@ -214,6 +214,10 @@ public class TransactionManager {
             Abort(ctx);
             ctx.status = TransactionStatus.Aborted;
         }
+    }
+
+    virtual public void Debug(string msg, TransactionContext ctx = null){
+        Console.WriteLine($"[TM TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
     private long NewTransactionId(){
@@ -245,10 +249,10 @@ public class ShardedTransactionManager : TransactionManager {
         txnIdToOKDarqLsns[tid].Add((darqLsn, shard));        
         wal.RecordOk(tid, shard);
 
-        Console.WriteLine($"Marked acked {tid}");
+        Debug($"Marked acked", ctx);
 
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
-            Console.WriteLine($"done w validation for {ctx.tid}");
+            Debug($"done w validation", ctx);
             ctx.status = TransactionStatus.Validated;
             Write(ctx, (tid, type) => wal.Finish2pc(tid, type, txnIdToOKDarqLsns[tid]));
             ctx.status = TransactionStatus.Committed;
@@ -259,7 +263,7 @@ public class ShardedTransactionManager : TransactionManager {
         ctx.status = TransactionStatus.Pending;
         // validate own, need a map to track which has responded 
         bool valid = Validate(ctx);
-        Console.WriteLine($"Validate own ctx: {valid}");
+        Debug($"Validate own ctx: {valid}");
 
         if (valid) {
             // split writeset into shards
@@ -284,7 +288,7 @@ public class ShardedTransactionManager : TransactionManager {
                 wal.Prepare(shardToWriteset, ctx.tid);
 
                 if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
-                Console.WriteLine($"Created list for {ctx.tid}");
+                Debug($"Created waiting for OK list", ctx);
                 txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
                 for (int shard = 0; shard < rpcClient.GetNumServers(); shard++){
                     if (shard == rpcClient.GetId() || shardToWriteset.ContainsKey(shard)) continue;
@@ -303,6 +307,10 @@ public class ShardedTransactionManager : TransactionManager {
 
     public RpcClient GetRpcClient(){
         return rpcClient;
+    }
+
+    void Debug(string msg, TransactionContext ctx = null){
+        Console.WriteLine($"[STM {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
     
 }

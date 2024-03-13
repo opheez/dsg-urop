@@ -50,7 +50,7 @@ public unsafe class Table : IDisposable{
     // will never return null, empty 
     virtual public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        Console.WriteLine($"Reading normal {tupleId.Key}");
+        Debug($"Reading normal {tupleId.Key}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
@@ -130,7 +130,7 @@ public unsafe class Table : IDisposable{
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns></returns>
     public void Insert(TupleId id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
-        Console.WriteLine($"Inserting {id.Key}");
+        Debug($"Inserting {id.Key}", ctx);
         if (this.data.ContainsKey(id.Key)){
             throw new ArgumentException($"Key {id.Key} already exists in this table"); // TODO ensure this aborts transaction
         }
@@ -201,7 +201,11 @@ public unsafe class Table : IDisposable{
         return this.id;
     }
 
-    public void Debug(){
+    virtual public void Debug(string msg, TransactionContext ctx = null){
+        Console.WriteLine($"[Table TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+    }
+
+    public void PrintTable(){
         Console.WriteLine("Metadata: ");
         foreach (var field in metadata){
             Console.Write($"{field.Key} is {field.Value.Item1 == -1} {field.Value.Item1} {field.Value.Item2}\n");
@@ -249,16 +253,15 @@ public class ShardedTable : Table {
 
     public override ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        Console.WriteLine($"Reading {tupleId.Key}");
+        Debug($"Reading {tupleId.Key}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
-            Console.WriteLine($"hashing to {rpcClient.HashKeyToDarqId(tupleId.Key)}");
             if (rpcClient.IsLocalKey(tupleId.Key)) {
-                Console.WriteLine("actually reading own");
+                Debug("actually reading own", ctx);
                 value = Read(tupleId);
             } else {
-                Console.WriteLine("actually reading rpc");
+                Debug("actually reading rpc", ctx);
                 value = rpcClient.Read(tupleId.Key, ctx);
             }
         }
@@ -280,6 +283,10 @@ public class ShardedTable : Table {
         // project out the attributes
         ctx.AddReadSet(tupleId, result);
         return project(result, tupleDescs);
+    }
+
+    override public void Debug(string msg, TransactionContext ctx = null){
+        Console.WriteLine($"[ST {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 }
