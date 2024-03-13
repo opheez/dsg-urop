@@ -13,7 +13,6 @@ public class FixedLenTableBenchmark : TableBenchmark
         int offset = 0;
         for (int i = 0; i < cfg.attrCount; i++){
             long attr = r.NextInt64();
-            schema[i] = (attr, sizeOfAttr);
             td[i] = new TupleDesc(attr, sizeOfAttr, offset);
             offset += sizeOfAttr;
         }

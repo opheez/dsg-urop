@@ -19,7 +19,7 @@ namespace DB {
 public unsafe class Table : IDisposable{
     private int id;
     private long lastId = 0;
-    internal int rowSize;
+    public int rowSize;
     // TODO: bool can be a single bit
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen

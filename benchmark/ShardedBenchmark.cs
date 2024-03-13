@@ -15,16 +15,8 @@ public class ShardedBenchmark : TableBenchmark
         this.txnManager = txnManager;
         this.table = table;
         this.wal = wal;
-        int sizeOfAttr = 10;
         Random r = new Random(cfg.seed);
-        // Load data
-        int offset = 0;
-        for (int i = 0; i < cfg.attrCount; i++){
-            long attr = r.NextInt64();
-            schema[i] = (attr, sizeOfAttr);
-            td[i] = new TupleDesc(attr, sizeOfAttr, offset);
-            offset += sizeOfAttr;
-        }
+        td = table.GetSchema();
 
         // randomly assign reads and writes
         int numWrites = (int)(cfg.datasetSize * cfg.ratio);
@@ -40,7 +32,7 @@ public class ShardedBenchmark : TableBenchmark
         }
 
         for (int i = 0; i < cfg.datasetSize; i++){
-            values[i] = new byte[sizeOfAttr*cfg.attrCount];
+            values[i] = new byte[table.rowSize];
             r.NextBytes(values[i]);
         }
 

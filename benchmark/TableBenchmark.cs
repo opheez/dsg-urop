@@ -48,7 +48,7 @@ public abstract class TableBenchmark
     protected internal long[] keys;
     protected internal byte[][] values;
     protected internal BitArray isWrite;
-    protected internal (long, int)[] schema; // TODO: in the future support multiple tables, make this list
+    // TODO: in the future support multiple tables, make this list
     protected internal TupleDesc[] td; // TODO: this is the same as schema
     protected internal Thread[] workers;
     protected internal BenchmarkStatistics? stats;
@@ -57,7 +57,6 @@ public abstract class TableBenchmark
     public TableBenchmark(BenchmarkConfig cfg, IWriteAheadLog? wal = null){
         this.cfg = cfg;
         this.wal = wal;
-        schema = new (long, int)[cfg.attrCount];
         td = new TupleDesc[cfg.attrCount];
         workers = new Thread[cfg.threadCount];
 
@@ -215,6 +214,10 @@ public abstract class TableBenchmark
         for (int i = 0; i < cfg.iterationCount; i++){
             TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, wal);
             txnManager.Run();
+            (long, int)[] schema = new (long, int)[cfg.attrCount];
+            for (int j = 0; j < td.Length; j++){
+                schema[j] = (td[j].Attr, td[j].Size);
+            }
             using (Table tbl = new Table(1, schema)) {
                 // tables.Add(tbl.GetHashCode(), tbl);
                 var insertSw = Stopwatch.StartNew();
