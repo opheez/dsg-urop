@@ -94,7 +94,6 @@ public class TransactionManager {
             committer[i]?.Interrupt();
         }
         if (wal != null) wal.Terminate();
-        ctxPool.Dispose();
     }
 
     /// <summary>
@@ -159,9 +158,9 @@ public class TransactionManager {
                 // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
                 if (this.wal != null) {
-                    wal.Write(ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size).ToArray());
+                    wal.Write(ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table.GetId()), item.Item3.AsSpan(start, td.Size).ToArray());
                 }
-                tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table), item.Item3.AsSpan(start, td.Size));
+                tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table.GetId()), item.Item3.AsSpan(start, td.Size));
                 start += td.Size;
             }
         }
@@ -272,7 +271,7 @@ public class ShardedTransactionManager : TransactionManager {
                 long shardDest = rpcClient.HashKeyToDarqId(tupleId.Key);
                 if (rpcClient.GetId() != shardDest){
                     for (int j = 0; j < tds.Length; j++){
-                        KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table);
+                        KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table.GetId());
                         if (!shardToWriteset.ContainsKey(shardDest)){
                             shardToWriteset[shardDest] = new List<(KeyAttr, byte[])>();
                         }

@@ -43,11 +43,12 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     Dictionary<DarqId, GrpcChannel> clusterMap;
     public DarqTransactionProcessorService(long me, ShardedTable table, ShardedTransactionManager txnManager, DarqWal wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
         this.table = table;
+        tables[table.GetId()] = table;
         this.txnManager = txnManager;
         this.me = me;
         this.wal = wal;
         this.clusterMap = clusterMap;
-        table.Write(new KeyAttr(me, 12345, table), new byte[]{1,2,3,4,5,6,7,8});
+        table.Write(new KeyAttr(me, 12345, table.GetId()), new byte[]{1,2,3,4,5,6,7,8});
 
         backend = darq;
         _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new TransactionProcessorProducerWrapper(clusterMap, session));
@@ -124,7 +125,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     public override async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
     {
         Console.WriteLine($"Writing to WAL from {request.Me}");
-        LogEntry entry = LogEntry.FromBytes(request.Message.ToArray(), tables);
+        LogEntry entry = LogEntry.FromBytes(request.Message.ToArray());
 
         if (entry.type == LogType.Prepare || entry.type == LogType.Commit)
         {
@@ -197,7 +198,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                     }
                 }
 
-                LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
+                LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray());
                 var requestBuilder = new StepRequestBuilder(reusableRequest);
                 // requestBuilder.AddRecoveryMessage(m.GetMessageBody());
                 switch (entry.type)
@@ -268,7 +269,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             case DarqMessageType.RECOVERY: // this is on recovery; TODO: do we need to double pass?
                 Console.WriteLine($"Recovering?, got log");
                 if (recoveryMode) {
-                    LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray(), tables);
+                    LogEntry entry = LogEntry.FromBytes(m.GetMessageBody().ToArray());
                     
                     Console.WriteLine($"Recovering, got log entry: {entry}");
 
@@ -303,7 +304,7 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
 
     public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
     {
-        LogEntry entry = LogEntry.FromBytes(message.ToArray(), new Dictionary<int, Table>());
+        LogEntry entry = LogEntry.FromBytes(message.ToArray());
         Console.WriteLine("am making an out request");
         var client = clients.GetOrAdd(darqId,
             _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]));

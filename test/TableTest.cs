@@ -52,9 +52,9 @@ namespace DB
             Table test = new Table(1, schema);
 
             byte[] input = Encoding.ASCII.GetBytes("John Doe");
-            KeyAttr ka = new KeyAttr(11111, 12345, test);
+            KeyAttr ka = new KeyAttr(11111, 12345, test.GetId());
             test.Write(ka, input);
-            var ret = test.Read(new TupleId(ka.Key, ka.Table));
+            var ret = test.Read(new TupleId(ka.Key, test));
             CollectionAssert.AreEqual(input.Concat(new byte[4]).ToArray(), ret.ToArray());
         }
 
@@ -64,8 +64,8 @@ namespace DB
             Table test = new Table(1, schema);
             
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
-            KeyAttr ka = new KeyAttr(11111, 12345, test);
-            KeyAttr ka2 = new KeyAttr(11111, 67890, test);
+            KeyAttr ka = new KeyAttr(11111, 12345, test.GetId());
+            KeyAttr ka2 = new KeyAttr(11111, 67890, test.GetId());
             byte[] val1 = BitConverter.GetBytes(21);
             byte[] val2 = BitConverter.GetBytes(40);
             test.Write(ka, name);
@@ -74,7 +74,7 @@ namespace DB
             name = Encoding.ASCII.GetBytes("Anna Lee");
             test.Write(ka, name);
 
-            var retName = test.Read(new TupleId(ka.Key, ka.Table));
+            var retName = test.Read(new TupleId(ka.Key, test));
 
             Assert.AreEqual(Encoding.ASCII.GetString(name.Concat(val2).ToArray()), Encoding.ASCII.GetString(retName));
         }

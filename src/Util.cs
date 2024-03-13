@@ -140,14 +140,14 @@ namespace DB {
     }
 
     public struct KeyAttr {
-        public KeyAttr(long key, long attr, Table t){
+        public KeyAttr(long key, long attr, int tableId){
             Key = key;
             Attr = attr;
-            Table = t;
+            TableId = tableId;
         }
         public long Key;
         public long Attr;
-        public Table Table;
+        public int TableId;
         public static int Size = sizeof(long) * 2 + sizeof(int);
 
         public override string ToString(){
@@ -161,8 +161,7 @@ namespace DB {
             Span<byte> span = arr.AsSpan();
             MemoryMarshal.Write(span, ref Key);
             MemoryMarshal.Write(span.Slice(sizeof(long)), ref Attr);
-            int tableId = Table.GetId();
-            MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref tableId);
+            MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref TableId);
 
             return arr;
             // using (MemoryStream m = new MemoryStream()) {
@@ -175,14 +174,13 @@ namespace DB {
             // }
         }
 
-        public static KeyAttr FromBytes(byte[] data, Dictionary<int, Table> tables) {
+        public static KeyAttr FromBytes(byte[] data) {
             KeyAttr result = new KeyAttr();
 
             Span<byte> span = data.AsSpan();
             result.Key = MemoryMarshal.Read<long>(span);
             result.Attr = MemoryMarshal.Read<long>(span.Slice(sizeof(long)));
-            int tableHash = MemoryMarshal.Read<int>(span.Slice(sizeof(long)*2));
-            result.Table = tables[tableHash];
+            result.TableId = MemoryMarshal.Read<int>(span.Slice(sizeof(long)*2));
 
             // result.Key = BitConverter.ToInt64(data, 0);
             // result.Attr = BitConverter.ToInt64(data, sizeof(long));
@@ -205,12 +203,12 @@ namespace DB {
     {
         public bool Equals(KeyAttr x, KeyAttr y)
         {
-            return x.Key == y.Key && x.Table == y.Table;
+            return x.Key == y.Key && x.TableId == y.TableId;
         }
 
         public int GetHashCode(KeyAttr obj)
         {
-            return (int)obj.Key + obj.Table.GetId();
+            return (int)obj.Key + obj.TableId;
         }
     }
 

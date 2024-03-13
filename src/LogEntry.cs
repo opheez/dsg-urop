@@ -82,7 +82,7 @@ public struct LogEntry{
         return arr;
     }
 
-    public static LogEntry FromBytes(byte[] data, Dictionary<int, Table> tables) {
+    public static LogEntry FromBytes(byte[] data) {
         // Ensure that the data array has enough bytes for the struct
         if (data.Length < MinSize) throw new ArgumentException("Insufficient data to deserialize the struct.");
 
@@ -101,7 +101,7 @@ public struct LogEntry{
             result.vals = new byte[len][];
             int offset = MinSize + sizeof(int);
             for (int i = 0; i < len; i++){
-                result.keyAttrs[i] = KeyAttr.FromBytes(span.Slice(offset, KeyAttr.Size).ToArray(), tables);
+                result.keyAttrs[i] = KeyAttr.FromBytes(span.Slice(offset, KeyAttr.Size).ToArray());
                 offset += KeyAttr.Size;
                 int valLen = MemoryMarshal.Read<int>(span.Slice(offset, sizeof(int)));
                 offset += sizeof(int);

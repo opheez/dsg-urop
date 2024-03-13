@@ -160,7 +160,7 @@ unsafe class Program {
         builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
         builder.Services.AddSingleton<ShardedTable>(
-            services => new ShardedTable(me, schema, services.GetRequiredService<RpcClient>())
+            services => new ShardedTable(0, schema, services.GetRequiredService<RpcClient>())
         );
         builder.Services.AddSingleton<ShardedTransactionManager>(
             services => new ShardedTransactionManager(1,
