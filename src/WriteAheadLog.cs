@@ -40,8 +40,10 @@ public class DarqWal : IWriteAheadLog {
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
     // requestBuilders should last for a Begin,Write,Finish cycle or TODO and should NEVER overlap 
     protected ConcurrentDictionary<long, StepRequestBuilder> requestBuilders = new ConcurrentDictionary<long, StepRequestBuilder>();
-    public DarqWal(DarqId me){
+    protected ILogger logger;
+    public DarqWal(DarqId me, ILogger logger = null){
         this.me = me;
+        this.logger = logger;
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
 
@@ -179,9 +181,7 @@ public class DarqWal : IWriteAheadLog {
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-#if DEBUG
-        Console.WriteLine($"[WAL {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
-#endif
+        logger.LogInformation($"[WAL {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
 }

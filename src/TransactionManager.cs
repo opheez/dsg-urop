@@ -17,9 +17,11 @@ public class TransactionManager {
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
     private IWriteAheadLog? wal;
+    protected ILogger logger;
 
-    public TransactionManager(int numThreads, IWriteAheadLog? wal = null){
+    public TransactionManager(int numThreads, IWriteAheadLog? wal = null, ILogger logger = null){
         this.wal = wal;
+        this.logger = logger;
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
@@ -53,13 +55,13 @@ public class TransactionManager {
     /// <param name="ctx">Context to commit</param>
     /// <returns>True if the transaction committed, false otherwise</returns>
     public bool Commit(TransactionContext ctx){
-        Debug($"adding ctx to queue for commit", ctx);
+        PrintDebug($"adding ctx to queue for commit", ctx);
         ctx.status = TransactionStatus.Pending;
         txnQueue.Add(ctx);        
         while (!Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
-        Debug("TERMINAL STATUS !!", ctx);
+        PrintDebug("TERMINAL STATUS !!", ctx);
         if (ctx.status == TransactionStatus.Aborted){
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
@@ -102,7 +104,7 @@ public class TransactionManager {
     /// <param name="ctx"></param>
     /// <returns></returns>
     public bool Validate(TransactionContext ctx){
-        Debug($"Validating own keys", ctx);
+        PrintDebug($"Validating own keys", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         int finishTxn;
         List<TransactionContext> finish_active;
@@ -115,7 +117,7 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
-        // Debug($"Committing {ctx.startTxn} to {finishTxn}", ctx);
+        // PrintDebug($"Committing {ctx.startTxn} to {finishTxn}", ctx);
 
         // validate
         for (int i = ctx.startTxnNum + 1; i <= finishTxn; i++){
@@ -146,7 +148,7 @@ public class TransactionManager {
     }
 
     public void Write(TransactionContext ctx, Action<long, LogType> commit){
-        Debug("Write phase", ctx);
+        PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
             wal.Begin(ctx.tid);            
@@ -184,11 +186,11 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
-        Debug("Write phase done", ctx);
+        PrintDebug("Write phase done", ctx);
     }
 
     public void Abort(TransactionContext ctx){
-        Debug($"Aborting tid {ctx.tid}");
+        PrintDebug($"Aborting tid {ctx.tid}");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         // TODO: verify that should be logged before removing from active
         if (wal != null){
@@ -216,8 +218,8 @@ public class TransactionManager {
         }
     }
 
-    virtual public void Debug(string msg, TransactionContext ctx = null){
-        Console.WriteLine($"[TM TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+    virtual public void PrintDebug(string msg, TransactionContext ctx = null){
+        logger.LogInformation($"[TM TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
     private long NewTransactionId(){
@@ -229,7 +231,7 @@ public class ShardedTransactionManager : TransactionManager {
     private RpcClient rpcClient;
     private IWriteAheadLog wal;
     private ConcurrentDictionary<long, List<(long, long)>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<(long, long)>>(); // tid to num shards waiting on
-    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient) : base(numThreads, wal){
+    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient, ILogger logger = null) : base(numThreads, wal, logger){
         this.rpcClient = rpcClient;
         this.wal = wal;
     }
@@ -249,10 +251,10 @@ public class ShardedTransactionManager : TransactionManager {
         txnIdToOKDarqLsns[tid].Add((darqLsn, shard));        
         wal.RecordOk(tid, shard);
 
-        Debug($"Marked acked", ctx);
+        PrintDebug($"Marked acked", ctx);
 
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
-            Debug($"done w validation", ctx);
+            PrintDebug($"done w validation", ctx);
             ctx.status = TransactionStatus.Validated;
             Write(ctx, (tid, type) => wal.Finish2pc(tid, type, txnIdToOKDarqLsns[tid]));
             ctx.status = TransactionStatus.Committed;
@@ -263,7 +265,7 @@ public class ShardedTransactionManager : TransactionManager {
         ctx.status = TransactionStatus.Pending;
         // validate own, need a map to track which has responded 
         bool valid = Validate(ctx);
-        Debug($"Validate own ctx: {valid}");
+        PrintDebug($"Validate own ctx: {valid}");
 
         if (valid) {
             // split writeset into shards
@@ -288,7 +290,7 @@ public class ShardedTransactionManager : TransactionManager {
                 wal.Prepare(shardToWriteset, ctx.tid);
 
                 if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
-                Debug($"Created waiting for OK list", ctx);
+                PrintDebug($"Created waiting for OK list", ctx);
                 txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
                 for (int shard = 0; shard < rpcClient.GetNumServers(); shard++){
                     if (shard == rpcClient.GetId() || shardToWriteset.ContainsKey(shard)) continue;
@@ -309,8 +311,8 @@ public class ShardedTransactionManager : TransactionManager {
         return rpcClient;
     }
 
-    void Debug(string msg, TransactionContext ctx = null){
-        Console.WriteLine($"[STM {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+    void PrintDebug(string msg, TransactionContext ctx = null){
+        logger.LogInformation($"[STM {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
     
 }

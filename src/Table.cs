@@ -24,12 +24,14 @@ public unsafe class Table : IDisposable{
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<long, byte[]> data;
+    protected ILogger logger;
     // public Dictionary index; 
 
-    public Table(int id, (long, int)[] schema, ILogger){
+    public Table(int id, (long, int)[] schema, ILogger logger = null){
         this.id = id;
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
+        this.logger = logger;
         
         int offset = 0;
         int size = 0;
@@ -202,10 +204,7 @@ public unsafe class Table : IDisposable{
     }
 
     virtual public void PrintDebug(string msg, TransactionContext ctx = null){
-#if DEBUG
-
-        Console.WriteLine($"[Table TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
-#endif
+        logger.LogInformation($"[Table TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
     public void PrintTable(){
@@ -250,7 +249,7 @@ public unsafe class Table : IDisposable{
 
 public class ShardedTable : Table {
     private RpcClient rpcClient;
-    public ShardedTable(int id, (long, int)[] schema, RpcClient rpcClient) : base(id, schema) {
+    public ShardedTable(int id, (long, int)[] schema, RpcClient rpcClient, ILogger logger = null) : base(id, schema, logger) {
         this.rpcClient = rpcClient;
     }
 
@@ -289,9 +288,7 @@ public class ShardedTable : Table {
     }
 
     override public void PrintDebug(string msg, TransactionContext ctx = null){
-#if DEBUG
-        Console.WriteLine($"[ST {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
-#endif
+        logger.LogInformation($"[ST {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 }

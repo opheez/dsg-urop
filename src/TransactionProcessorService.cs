@@ -41,8 +41,19 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     // TODO: condense table into tables
     Dictionary<int, Table> tables = new Dictionary<int, Table>();
     Dictionary<DarqId, GrpcChannel> clusterMap;
-    public DarqTransactionProcessorService(long me, ShardedTable table, ShardedTransactionManager txnManager, DarqWal wal, Darq darq, DarqBackgroundWorkerPool workerPool, Dictionary<DarqId, GrpcChannel> clusterMap) {
+    protected ILogger logger;
+    public DarqTransactionProcessorService(
+        long me,
+        ShardedTable table,
+        ShardedTransactionManager txnManager,
+        DarqWal wal,
+        Darq darq,
+        DarqBackgroundWorkerPool workerPool,
+        Dictionary<DarqId, GrpcChannel> clusterMap,
+        ILogger logger = null
+    ) {
         this.table = table;
+        this.logger = logger;
         tables[table.GetId()] = table;
         this.txnManager = txnManager;
         this.me = me;
@@ -287,9 +298,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-#if DEBUG
-        Console.WriteLine($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
-#endif
+        logger.LogInformation($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 
