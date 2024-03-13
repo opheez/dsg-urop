@@ -287,7 +287,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
+#if DEBUG
         Console.WriteLine($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+#endif
     }
 }
 

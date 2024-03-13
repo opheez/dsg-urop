@@ -26,7 +26,7 @@ public unsafe class Table : IDisposable{
     internal ConcurrentDictionary<long, byte[]> data;
     // public Dictionary index; 
 
-    public Table(int id, (long, int)[] schema){
+    public Table(int id, (long, int)[] schema, ILogger){
         this.id = id;
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
@@ -50,7 +50,7 @@ public unsafe class Table : IDisposable{
     // will never return null, empty 
     virtual public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        Debug($"Reading normal {tupleId.Key}", ctx);
+        PrintDebug($"Reading normal {tupleId.Key}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
@@ -130,7 +130,7 @@ public unsafe class Table : IDisposable{
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns></returns>
     public void Insert(TupleId id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
-        Debug($"Inserting {id.Key}", ctx);
+        PrintDebug($"Inserting {id.Key}", ctx);
         if (this.data.ContainsKey(id.Key)){
             throw new ArgumentException($"Key {id.Key} already exists in this table"); // TODO ensure this aborts transaction
         }
@@ -201,8 +201,11 @@ public unsafe class Table : IDisposable{
         return this.id;
     }
 
-    virtual public void Debug(string msg, TransactionContext ctx = null){
+    virtual public void PrintDebug(string msg, TransactionContext ctx = null){
+#if DEBUG
+
         Console.WriteLine($"[Table TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+#endif
     }
 
     public void PrintTable(){
@@ -253,15 +256,15 @@ public class ShardedTable : Table {
 
     public override ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        Debug($"Reading {tupleId.Key}", ctx);
+        PrintDebug($"Reading {tupleId.Key}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
             if (rpcClient.IsLocalKey(tupleId.Key)) {
-                Debug("actually reading own", ctx);
+                PrintDebug("actually reading own", ctx);
                 value = Read(tupleId);
             } else {
-                Debug("actually reading rpc", ctx);
+                PrintDebug("actually reading rpc", ctx);
                 value = rpcClient.Read(tupleId.Key, ctx);
             }
         }
@@ -285,8 +288,10 @@ public class ShardedTable : Table {
         return project(result, tupleDescs);
     }
 
-    override public void Debug(string msg, TransactionContext ctx = null){
+    override public void PrintDebug(string msg, TransactionContext ctx = null){
+#if DEBUG
         Console.WriteLine($"[ST {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+#endif
     }
 }
 }
