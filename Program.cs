@@ -159,7 +159,9 @@ unsafe class Program {
         var schema = new (long, int)[]{(12345,8)};
         builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
-        builder.Services.AddSingleton<ShardedTable>();
+        builder.Services.AddSingleton<ShardedTable>(
+            services => new ShardedTable(me, schema, services.GetRequiredService<RpcClient>())
+        );
         builder.Services.AddSingleton<ShardedTransactionManager>(
             services => new ShardedTransactionManager(1,
                             services.GetRequiredService<DarqWal>(),

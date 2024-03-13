@@ -92,9 +92,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         BenchmarkConfig testCfg = new BenchmarkConfig(
             ratio: 0.2,
             attrCount: 10,
-            threadCount: 3,
+            threadCount: 2,
             iterationCount: 1,
-            perThreadDataCount: 10
+            perThreadDataCount: 2
         );
         TableBenchmark b = new ShardedBenchmark("2pc", testCfg, txnManager, table, wal);
         b.RunTransactions();
@@ -207,13 +207,15 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                     {
                         Console.WriteLine($"Got OK log entry: {entry}");
                         txnManager.MarkAcked(entry.tid, TransactionStatus.Validated, m.GetLsn(), entry.prevLsn);
-                        break;
+                        m.Dispose();
+                        return true;
                     }
                     case LogType.Ack:
                     {
                         Console.WriteLine($"Got ACK log entry: {entry}");
                         // can ignore in DARQ since we know out commit message is sent
-                        break;
+                        m.Dispose();
+                        return true;
                     }
                     // Worker side
                     case LogType.Prepare:

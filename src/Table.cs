@@ -50,6 +50,7 @@ public unsafe class Table : IDisposable{
     // will never return null, empty 
     virtual public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
+        Console.WriteLine($"Reading normal {tupleId.Key}");
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
@@ -247,6 +248,7 @@ public class ShardedTable : Table {
 
     public override ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
+        Console.WriteLine($"Reading {tupleId.Key}");
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
