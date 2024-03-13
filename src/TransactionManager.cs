@@ -147,6 +147,7 @@ public class TransactionManager {
     }
 
     public void Write(TransactionContext ctx, Action<long, LogType> commit){
+        Console.WriteLine("Write phase");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
             wal.Begin(ctx.tid);            
@@ -184,6 +185,7 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
+        Console.WriteLine("Write phase done");
     }
 
     public void Abort(TransactionContext ctx){

@@ -73,27 +73,5 @@ public class ShardedBenchmark : TableBenchmark
         stats?.SaveStatsToFile();
     }
 
-    override protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
-        int abortCount = 0;
-        int c = 0;
-        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
-            TransactionContext t = txnManager.Begin();
-            for (int j = 0; j < cfg.perTransactionCount; j++) {
-                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                if (rpcClient.IsLocalKey(keys[loc])) {
-                    Console.WriteLine($"Inserting {keys[loc]}");
-                    tbl.Insert(new TupleId(keys[loc], table), td, values[loc], t);
-                }
-            }
-            var success = txnManager.Commit(t);
-            if (!success){
-                abortCount++;
-            } else {
-                c++;
-            }
-        }
-        return abortCount;
-    }
-
 }
 }

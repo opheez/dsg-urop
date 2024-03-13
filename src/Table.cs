@@ -130,6 +130,7 @@ public unsafe class Table : IDisposable{
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns></returns>
     public void Insert(TupleId id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+        Console.WriteLine($"Inserting {id.Key}");
         if (this.data.ContainsKey(id.Key)){
             throw new ArgumentException($"Key {id.Key} already exists in this table"); // TODO ensure this aborts transaction
         }
