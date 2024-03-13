@@ -16,8 +16,8 @@ namespace DB {
 public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
     private ShardedTransactionManager txnManager;
     private ShardedTable table;
-    private Dictionary<(long, long), long> externalToInternalTxnId = new Dictionary<(long, long), long>();
-    private Dictionary<long, TransactionContext> txnIdToTxnCtx = new Dictionary<long, TransactionContext>();
+    private ConcurrentDictionary<(long, long), long> externalToInternalTxnId = new ConcurrentDictionary<(long, long), long>();
+    private ConcurrentDictionary<long, TransactionContext> txnIdToTxnCtx = new ConcurrentDictionary<long, TransactionContext>();
     private DarqWal wal;
     private long me;
     // from darqProcessor
@@ -105,8 +105,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             ratio: 0.2,
             attrCount: 10,
             threadCount: 2,
-            iterationCount: 1,
-            perThreadDataCount: 2
+            iterationCount: 1
+            // perThreadDataCount: 2
         );
         TableBenchmark b = new ShardedBenchmark("2pc", testCfg, txnManager, table, wal);
         b.RunTransactions();
@@ -320,7 +320,6 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
     public void EnqueueMessageWithCallback(DarqId darqId, ReadOnlySpan<byte> message, Action<bool> callback, long producerId, long lsn)
     {
         LogEntry entry = LogEntry.FromBytes(message.ToArray());
-        Console.WriteLine($"[TPS Producer Wrapper {producerId}] am making an out request to {darqId.guid}");
         var client = clients.GetOrAdd(darqId,
             _ => new TransactionProcessor.TransactionProcessorClient(clusterMap[darqId]));
         var walRequest = new WalRequest

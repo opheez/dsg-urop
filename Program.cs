@@ -1,6 +1,4 @@
-﻿#define DEBUG
-
-using System;
+﻿using System;
 using System.Collections;
 using System.Net;
 using System.Text;
@@ -116,7 +114,7 @@ unsafe class Program {
 
     public static void LaunchService(int me) {
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddLogging(builder => builder.AddFilter("Microsoft", LogLevel.Information).AddConsole());
+        builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Error).AddConsole());
         // create channel to each server
         Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();
         for (int i = 0; i < NumProcessors; i++){
