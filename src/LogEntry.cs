@@ -1,6 +1,7 @@
 
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
 
 namespace DB {
 
@@ -49,64 +50,70 @@ public struct LogEntry{
         persited = true;
     }
 
-    public byte[] ToBytes(){
-        // todo: accurate size
-        int totalSize = MinSize + (vals != null ? (sizeof(int) * (keyAttrs.Length + 1)) + Util.GetLength(vals) + (KeyAttr.Size * keyAttrs.Length) : 0);
+    public unsafe byte[] ToBytes(){
+        int totalSize = MinSize + (vals != null ? sizeof(int) : 0);
+        if (vals != null) for (int i = 0; i < vals.Length; i++) totalSize += vals[i].Length + sizeof(int) + KeyAttr.Size;
 
         byte[] arr = new byte[totalSize];
 
-        // Using MemoryMarshal to write the fixed-size fields to the byte array
-        Span<byte> span = arr.AsSpan();
-        MemoryMarshal.Write(span, ref lsn);
-        MemoryMarshal.Write(span.Slice(sizeof(long)), ref prevLsn);
-        MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref tid);
-        int typeAsInt = (int)type;
-        MemoryMarshal.Write(span.Slice(sizeof(long)*3), ref typeAsInt);
-        
-        // Write the variable-sized byte array to the byte array
-        if (type == LogType.Write || type == LogType.Prepare){
-            int len = keyAttrs.Length;
-            MemoryMarshal.Write(span.Slice(MinSize), ref len);
-            int offset = MinSize + sizeof(int);
-            for (int i = 0; i < keyAttrs.Length; i++){
-                keyAttrs[i].ToBytes().CopyTo(span.Slice(offset));
-                offset += KeyAttr.Size;
-                int valLen = vals[i].Length;
-                MemoryMarshal.Write(span.Slice(offset), ref valLen);
-                offset += sizeof(int);
-                vals[i].CopyTo(span.Slice(offset));
-                offset += vals[i].Length;
+        fixed (byte* b = arr) {
+            var head = b;
+            *(long*)head = lsn;
+            head += sizeof(long);
+            *(long*)head = prevLsn;
+            head += sizeof(long);
+            *(long*)head = tid;
+            head += sizeof(long);
+            *(int*)head = (int)type;
+            head += sizeof(int);
+            if (type == LogType.Write || type == LogType.Prepare){
+                Debug.Assert(keyAttrs.Length == vals.Length);
+                *(int*)head = keyAttrs.Length;
+                head += sizeof(int);
+                for (int i = 0; i < keyAttrs.Length; i++){
+                    keyAttrs[i].ToBytes().CopyTo(new Span<byte>(head, KeyAttr.Size));
+                    head += KeyAttr.Size;
+                    *(int*)head = vals[i].Length;
+                    head += sizeof(int);
+                    vals[i].CopyTo(new Span<byte>(head, vals[i].Length));
+                    head += vals[i].Length;
+                }
             }
         }
 
         return arr;
     }
 
-    public static LogEntry FromBytes(byte[] data) {
+    public static unsafe LogEntry FromBytes(byte[] data) {
         // Ensure that the data array has enough bytes for the struct
         if (data.Length < MinSize) throw new ArgumentException("Insufficient data to deserialize the struct.");
 
         LogEntry result = new LogEntry();
 
-        // Using MemoryMarshal to read the fixed-size fields from the byte array
-        Span<byte> span = data.AsSpan();
-        result.lsn = MemoryMarshal.Read<long>(span.Slice(0, sizeof(long)));
-        result.prevLsn = MemoryMarshal.Read<long>(span.Slice(sizeof(long), sizeof(long)));
-        result.tid = MemoryMarshal.Read<long>(span.Slice(sizeof(long)*2, sizeof(long)));
-        result.type = (LogType)MemoryMarshal.Read<int>(span.Slice(sizeof(long)*3, sizeof(int)));
-
-        if (result.type == LogType.Write || result.type == LogType.Prepare){
-            int len = MemoryMarshal.Read<int>(span.Slice(MinSize, sizeof(int)));
-            result.keyAttrs = new KeyAttr[len];
-            result.vals = new byte[len][];
-            int offset = MinSize + sizeof(int);
-            for (int i = 0; i < len; i++){
-                result.keyAttrs[i] = KeyAttr.FromBytes(span.Slice(offset, KeyAttr.Size).ToArray());
-                offset += KeyAttr.Size;
-                int valLen = MemoryMarshal.Read<int>(span.Slice(offset, sizeof(int)));
-                offset += sizeof(int);
-                result.vals[i] = span.Slice(offset, valLen).ToArray();
-                offset += valLen;
+        fixed (byte* b = data) {
+            var head = b;
+            result.lsn = *(long*)head;
+            head += sizeof(long);
+            result.prevLsn = *(long*)head;
+            head += sizeof(long);
+            result.tid = *(long*)head;
+            head += sizeof(long);
+            result.type = (LogType)(*(int*)head);
+            head += sizeof(int);
+            if (result.type == LogType.Write || result.type == LogType.Prepare){
+                int len = *(int*)head;
+                head += sizeof(int);
+                result.keyAttrs = new KeyAttr[len];
+                result.vals = new byte[len][];
+                for (int i = 0; i < len; i++){
+                    result.keyAttrs[i] = KeyAttr.FromBytes(new Span<byte>(head, KeyAttr.Size).ToArray());
+                    head += KeyAttr.Size;
+                    int valLen = *(int*)head;
+                    head += sizeof(int);
+                    result.vals[i] = new byte[valLen];
+                    new Span<byte>(head, valLen).CopyTo(result.vals[i]);
+                    head += valLen;
+                }
             }
         }
 
