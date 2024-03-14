@@ -286,8 +286,6 @@ public class ShardedTransactionManager : TransactionManager {
                 }
             }
             if (shardToWriteset.Count > 0) {
-                // send out prepare messages and wait; the commit is finished by calls to MarkAcked
-                wal.Prepare(shardToWriteset, ctx.tid);
 
                 if (txnIdToOKDarqLsns.ContainsKey(ctx.tid)) throw new Exception($"Ctx TID {ctx.tid} already started validating?");
                 PrintDebug($"Created waiting for OK list", ctx);
@@ -296,7 +294,10 @@ public class ShardedTransactionManager : TransactionManager {
                     if (shard == rpcClient.GetId() || shardToWriteset.ContainsKey(shard)) continue;
                     txnIdToOKDarqLsns[ctx.tid].Add((-1, shard)); // hacky way to indicate that we don't need to wait for this shard
                 }
+                // send out prepare messages and wait; the commit is finished by calls to MarkAcked
+                wal.Prepare(shardToWriteset, ctx.tid);
             } else {
+                PrintDebug($"Commit on local, no waiting needed", ctx);
                 Write(ctx, (tid, type) => wal.Finish(tid, type));
                 ctx.status = TransactionStatus.Committed;
             }

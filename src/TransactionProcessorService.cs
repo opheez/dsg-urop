@@ -101,14 +101,13 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
-        BenchmarkConfig testCfg = new BenchmarkConfig(
+        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
             ratio: 0.2,
             attrCount: 10,
-            threadCount: 2,
+            threadCount: 12,
             iterationCount: 1
-            // perThreadDataCount: 2
         );
-        TableBenchmark b = new ShardedBenchmark("2pc", testCfg, txnManager, table, wal);
+        TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, table, wal);
         b.RunTransactions();
 
         // txnManager.Run();
@@ -135,7 +134,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     // typically used for Prepare() and Commit() 
     public override async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
     {
-        PrintDebug($"Writing to WAL from {request.Me}");
+        // PrintDebug($"Writing to WAL from {request.Me}");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray());
 
         if (entry.type == LogType.Prepare || entry.type == LogType.Commit)
@@ -143,6 +142,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             long internalTid = GetOrRegisterTid(request.Me, request.Tid);
             entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
             entry.prevLsn = request.Me; // TODO: hacky place to put sender id
+            PrintDebug($"Stepping prepare/commit {entry.lsn}");
+        } else {
+            PrintDebug($"Stepping ok/ack {entry.tid}");
         }
         
         var stepRequest = stepRequestPool.Checkout();
@@ -150,7 +152,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         // TODO: do we need to step messages consumed, self, and out messages 
         requestBuilder.AddSelfMessage(entry.ToBytes());
         await capabilities.Step(requestBuilder.FinishStep());
-        PrintDebug($"Workflow {entry.lsn} started");
         stepRequestPool.Return(stepRequest);
         backend.EndAction();
         return new WalReply{Success = true};
