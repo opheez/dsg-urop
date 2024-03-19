@@ -109,16 +109,17 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
         b.RunTransactions();
 
+        // Table table = tables[0];
         // txnManager.Run();
         // var ctx = txnManager.Begin();
         // Console.WriteLine("Should go to own");
-        // var own = table.Read(new TupleId(0, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
+        // var own = table.Read(new PrimaryKey(table.GetId(), 0), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
         // Console.WriteLine(own.ToString());
         // foreach (var b in own.ToArray()){
         //     Console.WriteLine(b);
         // }
         // Console.WriteLine("Should RPC:");
-        // var other = table.Read(new TupleId(1, table), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
+        // var other = table.Read(new PrimaryKey(table.GetId(), 1), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
         // Console.WriteLine(other.ToString());
         // foreach (var b in other.ToArray()){
         //     Console.WriteLine(b);
