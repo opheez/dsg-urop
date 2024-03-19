@@ -231,9 +231,9 @@ public class TransactionManager {
 
 public class ShardedTransactionManager : TransactionManager {
     private RpcClient rpcClient;
-    private IWriteAheadLog wal;
+    private IWriteAheadLog? wal;
     private ConcurrentDictionary<long, List<(long, long)>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<(long, long)>>(); // tid to num shards waiting on
-    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient, Dictionary<int, ShardedTable> tables, ILogger logger = null) : base(numThreads, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), wal, logger){
+    public ShardedTransactionManager(int numThreads, RpcClient rpcClient, Dictionary<int, ShardedTable> tables, IWriteAheadLog? wal = null, ILogger logger = null) : base(numThreads, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), wal, logger){
         this.rpcClient = rpcClient;
         this.wal = wal;
     }

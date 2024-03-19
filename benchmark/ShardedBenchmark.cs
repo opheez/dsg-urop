@@ -7,9 +7,8 @@ public class ShardedBenchmark : TableBenchmark
 {
     private TransactionManager txnManager;
     private Table table;
-
     private RpcClient rpcClient;
-    public ShardedBenchmark(string name, BenchmarkConfig cfg, ShardedTransactionManager txnManager, ShardedTable tables, IWriteAheadLog? wal = null) : base(cfg) {
+    public ShardedBenchmark(string name, BenchmarkConfig cfg, ShardedTransactionManager txnManager, ShardedTable table, IWriteAheadLog? wal = null) : base(cfg) {
         System.Console.WriteLine("Init");
         this.rpcClient = txnManager.GetRpcClient();
         this.txnManager = txnManager;
