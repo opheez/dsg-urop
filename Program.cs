@@ -157,11 +157,54 @@ unsafe class Program {
             services => new DarqWal(new DarqId(me), services.GetRequiredService<ILogger<DarqWal>>())
         );
 
-        var schema = new (long, int)[]{(12345,8)};
-        builder.Services.AddSingleton(schema);
         builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
-        builder.Services.AddSingleton<ShardedTable>(
-            services => new ShardedTable(0, schema, services.GetRequiredService<RpcClient>(), services.GetRequiredService<ILogger<ShardedTable>>())
+        builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(
+            services => {
+                Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
+                foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
+                    (long, int, Type)[] schema = new (long, int, Type)[0];
+                    switch (tEnum) {
+                        case TableType.Warehouse:
+                            schema = TpccSchema.WAREHOUSE_SCHEMA;
+                            break;
+                        case TableType.District:
+                            schema = TpccSchema.DISTRICT_SCHEMA;
+                            break;
+                        case TableType.Customer:
+                            schema = TpccSchema.CUSTOMER_SCHEMA;
+                            break;
+                        case TableType.History:
+                            schema = TpccSchema.HISTORY_SCHEMA;
+                            break;  
+                        case TableType.Item:
+                            schema = TpccSchema.ITEM_SCHEMA;
+                            break;
+                        case TableType.NewOrder:
+                            schema = TpccSchema.NEW_ORDER_SCHEMA;
+                            break;
+                        case TableType.Order:
+                            schema = TpccSchema.ORDER_SCHEMA;
+                            break;
+                        case TableType.OrderLine:
+                            schema = TpccSchema.ORDER_LINE_SCHEMA;
+                            break;
+                        case TableType.Stock:
+                            schema = TpccSchema.STOCK_SCHEMA;
+                            break;
+                        default:
+                            throw new Exception("Invalid table type");
+                    }
+                    int i = (int)tEnum;
+                    tables[i] = new ShardedTable(
+                        i,
+                        schema.Select(x => (x.Item1, x.Item2)).ToArray(),
+                        services.GetRequiredService<RpcClient>(),
+                        services.GetRequiredService<ILogger<ShardedTable>>()
+                    );
+                }
+                
+                return tables;
+            }
         );
         builder.Services.AddSingleton<ShardedTransactionManager>(
             services => new ShardedTransactionManager(1,
@@ -173,7 +216,7 @@ unsafe class Program {
         builder.Services.AddSingleton<DarqTransactionProcessorService>(
             service => new DarqTransactionProcessorService(
                 me,
-                service.GetRequiredService<ShardedTable>(),
+                service.GetRequiredService<Dictionary<int, ShardedTable>>(),
                 service.GetRequiredService<ShardedTransactionManager>(),
                 service.GetRequiredService<DarqWal>(),
                 service.GetRequiredService<Darq>(),

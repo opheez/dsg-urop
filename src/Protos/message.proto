@@ -15,7 +15,8 @@ service TransactionProcessor {
 
 message ReadRequest {
     int64 key = 1; // TupleId
-    int64 tid = 2; // tid of transaction context 
+    int32 table = 2; // TableId
+    int64 tid = 3; // tid of transaction context 
     int64 me = 10;
 }
 

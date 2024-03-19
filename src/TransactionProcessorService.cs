@@ -15,7 +15,6 @@ namespace DB {
 
 public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
     private ShardedTransactionManager txnManager;
-    private ShardedTable table;
     private ConcurrentDictionary<(long, long), long> externalToInternalTxnId = new ConcurrentDictionary<(long, long), long>();
     private ConcurrentDictionary<long, TransactionContext> txnIdToTxnCtx = new ConcurrentDictionary<long, TransactionContext>();
     private DarqWal wal;
@@ -39,12 +38,12 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     private StepRequest reusableRequest = new();
 
     // TODO: condense table into tables
-    Dictionary<int, Table> tables = new Dictionary<int, Table>();
+    Dictionary<int, ShardedTable> tables;
     Dictionary<DarqId, GrpcChannel> clusterMap;
     protected ILogger logger;
     public DarqTransactionProcessorService(
         long me,
-        ShardedTable table,
+        Dictionary<int, ShardedTable> tables,
         ShardedTransactionManager txnManager,
         DarqWal wal,
         Darq darq,
@@ -52,14 +51,12 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         Dictionary<DarqId, GrpcChannel> clusterMap,
         ILogger logger = null
     ) {
-        this.table = table;
+        this.tables = tables;
         this.logger = logger;
-        tables[table.GetId()] = table;
         this.txnManager = txnManager;
         this.me = me;
         this.wal = wal;
         this.clusterMap = clusterMap;
-        table.Write(new KeyAttr(me, 12345, table.GetId()), new byte[]{1,2,3,4,5,6,7,8});
 
         backend = darq;
         _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new TransactionProcessorProducerWrapper(clusterMap, session));
@@ -92,6 +89,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     {
         PrintDebug($"Reading from rpc service");
         long internalTid = GetOrRegisterTid(request.Me, request.Tid);
+        Table table = tables[request.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
         TupleId tupleId = new TupleId(request.Key, table);
         TupleDesc[] tupleDescs = table.GetSchema();
@@ -107,7 +105,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             threadCount: 12,
             iterationCount: 1
         );
-        TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, table, wal);
+        // only uses single table
+        TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
         b.RunTransactions();
 
         // txnManager.Run();
@@ -171,7 +170,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
 
     public void Dispose(){
-        table.Dispose();
+        foreach (var table in tables.Values) {
+            table.Dispose();
+        }
         txnManager.Terminate();
         terminationStart.Set();
         // TODO(Tianyu): this shutdown process is unsafe and may leave things unsent/unprocessed in the queue
@@ -243,6 +244,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                         for (int i = 0; i < entry.keyAttrs.Length; i++)
                         {
                             KeyAttr keyAttr = entry.keyAttrs[i];
+                            Table table = tables[keyAttr.TableId];
                             (int, int) metadata = table.GetAttrMetadata(keyAttr.Attr);
                             ctx.AddWriteSet(new TupleId(keyAttr.Key, table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
                         }
