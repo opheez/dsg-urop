@@ -210,6 +210,7 @@ unsafe class Program {
             services => new ShardedTransactionManager(1,
                             services.GetRequiredService<DarqWal>(),
                             services.GetRequiredService<RpcClient>(),
+                            services.GetRequiredService<Dictionary<int, ShardedTable>>(),
                             services.GetRequiredService<ILogger<ShardedTransactionManager>>()
                             ));
 

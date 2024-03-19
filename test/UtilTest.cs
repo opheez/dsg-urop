@@ -8,11 +8,23 @@ namespace DB
     {
 
         [TestMethod]
-        public void TestTupleIdEquals(){
+        public void TestPrimaryKeyEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Table table = new Table(1, schema);
-            TupleId tid1 = new TupleId(12345, table);
-            TupleId tid2 = new TupleId(12345, table);
+            PrimaryKey tid1 = new PrimaryKey(table.GetId(), 12345);
+            PrimaryKey tid2 = new PrimaryKey(table.GetId(), 12345);
+
+            Assert.IsTrue(tid1.Equals(tid2));
+        }
+
+        [TestMethod]
+        public void TestPrimaryKeySerialize(){
+            (long,int)[] schema = {(12345,4), (56789, 4)};
+            Table table = new Table(1, schema);
+            PrimaryKey tid1 = new PrimaryKey(table.GetId(), 12345);
+            PrimaryKey tid2 = PrimaryKey.FromBytes(tid1.ToBytes());
+            Console.WriteLine(tid1);
+            Console.WriteLine(tid2);
 
             Assert.IsTrue(tid1.Equals(tid2));
         }
@@ -21,8 +33,9 @@ namespace DB
         public void TestKeyAttrEquals(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Table table = new Table(1, schema);
-            KeyAttr keyAttr1 = new KeyAttr(12345, 67890, table.GetId());
-            KeyAttr keyAttr2 = new KeyAttr(12345, 67890, table.GetId());
+            PrimaryKey pk = new PrimaryKey(table.GetId(), 12345);
+            KeyAttr keyAttr1 = new KeyAttr(pk, 67890);
+            KeyAttr keyAttr2 = new KeyAttr(pk, 67890);
 
             Assert.IsTrue(keyAttr1.Equals(keyAttr2));
         }
@@ -32,9 +45,13 @@ namespace DB
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
             Table table = new Table(1, schema);
-            KeyAttr keyAttr = new KeyAttr(12345, 67890, table.GetId());
+            PrimaryKey pk = new PrimaryKey(table.GetId(), 12345);
+            KeyAttr keyAttr = new KeyAttr(pk, 67890);
             byte[] bytes = keyAttr.ToBytes();
             KeyAttr keyAttr2 = KeyAttr.FromBytes(bytes);
+            Console.WriteLine(keyAttr);
+            
+            Console.WriteLine(keyAttr2);
 
             Assert.IsTrue(keyAttr.Equals(keyAttr2));
         }
@@ -45,12 +62,13 @@ namespace DB
             Dictionary<int, Table> tables = new Dictionary<int, Table>();
             Table table = new Table(1, schema);
 
-            KeyAttr keyAttr = new KeyAttr(12345, 67890, table.GetId());
+            PrimaryKey pk = new PrimaryKey(table.GetId(), 12345);
+            KeyAttr keyAttr = new KeyAttr(pk, 67890);
             byte[] val = {8, 8, 8, 8};
             LogEntry entry = new LogEntry(4, 8, keyAttr, val);
             entry.lsn = 5;
 
-            KeyAttr keyAttr2 = new KeyAttr(12345, 67890, table.GetId());
+            KeyAttr keyAttr2 = new KeyAttr(pk, 67890);
             byte[] val2 = {8, 8, 8, 8};
             LogEntry entry2 = new LogEntry(4, 8, keyAttr2, val2);
             entry2.lsn = 5;
@@ -64,7 +82,7 @@ namespace DB
         public void TestLogEntrySerialize(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Table table = new Table(1, schema);
-            KeyAttr keyAttr = new KeyAttr(12345, 67890, table.GetId());
+            KeyAttr keyAttr = new KeyAttr(new PrimaryKey(table.GetId(), 12345), 67890);
             byte[] val = {8, 8, 8, 8};
             LogEntry entry = new LogEntry(4, 8, keyAttr, val);
             entry.lsn = 5;
@@ -76,8 +94,8 @@ namespace DB
         public void TestLogEntrySerializePrepare(){
             (long,int)[] schema = {(12345,3), (56789, 4)};
             Table table = new Table(1, schema);
-            KeyAttr keyAttr = new KeyAttr(12345, 67890, table.GetId());
-            KeyAttr keyAttr2 = new KeyAttr(56789, 33333, table.GetId());
+            KeyAttr keyAttr = new KeyAttr(new PrimaryKey(table.GetId(), 12345), 67890);
+            KeyAttr keyAttr2 = new KeyAttr(new PrimaryKey(table.GetId(), 56789), 33333);
             byte[] val = {8, 8, 8};
             byte[] val2 = {5, 5, 5, 5};
             byte[] val3 = {4,4,4};

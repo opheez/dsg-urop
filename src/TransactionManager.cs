@@ -17,12 +17,14 @@ public class TransactionManager {
     internal List<TransactionContext> active = new List<TransactionContext>(); // list of active transaction contexts, protected by spinlock
     internal SpinLock sl = new SpinLock();
     private IWriteAheadLog? wal;
+    protected Dictionary<int, Table> tables;
     protected ILogger logger;
 
-    public TransactionManager(int numThreads, IWriteAheadLog? wal = null, ILogger logger = null){
+    public TransactionManager(int numThreads, Dictionary<int, Table> tables, IWriteAheadLog? wal = null, ILogger logger = null){
         this.wal = wal;
         this.logger = logger;
-        ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
+        this.tables = tables;
+        ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext(tables));
         committer = new Thread[numThreads];
         for (int i = 0; i < committer.Length; i++) {
             committer[i] = new Thread(() => {
@@ -88,7 +90,7 @@ public class TransactionManager {
         txnc = 0;
         tid = 0;
         tnumToCtx = new TransactionContext[pastTnumCircularBufferSize];
-        ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext());
+        ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext(tables));
     }
 
     public void Terminate(){
@@ -126,7 +128,7 @@ public class TransactionManager {
             //     Console.Write($"{x}, ");
             // }
             foreach (var item in ctx.GetReadset()){
-                TupleId tupleId = item.Item1;
+                PrimaryKey tupleId = item.Item1;
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
                 if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(tupleId)){
@@ -137,7 +139,7 @@ public class TransactionManager {
         
         foreach (TransactionContext pastTxn in finish_active){
             foreach (var item in pastTxn.GetWriteset()){
-                TupleId tupleId = item.Item1;
+                PrimaryKey tupleId = item.Item1;
                 if (ctx.InReadSet(tupleId) || ctx.InWriteSet(tupleId)){
                     // Console.WriteLine($"ABORT because conflict: {keyAttr}");
                     return false;
@@ -154,15 +156,15 @@ public class TransactionManager {
             wal.Begin(ctx.tid);            
         }
         foreach (var item in ctx.GetWriteset()){
-            TupleId tupleId = item.Item1;
+            PrimaryKey tupleId = item.Item1;
             int start = 0;
             foreach (TupleDesc td in item.Item2){
                 // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
                 if (this.wal != null) {
-                    wal.Write(ctx.tid, new KeyAttr(tupleId.Key, td.Attr, tupleId.Table.GetId()), item.Item3.AsSpan(start, td.Size).ToArray());
+                    wal.Write(ctx.tid, new KeyAttr(tupleId, td.Attr), item.Item3.AsSpan(start, td.Size).ToArray());
                 }
-                tupleId.Table.Write(new KeyAttr(tupleId.Key, td.Attr, tupleId.Table.GetId()), item.Item3.AsSpan(start, td.Size));
+                tables[tupleId.Table].Write(new KeyAttr(tupleId, td.Attr), item.Item3.AsSpan(start, td.Size));
                 start += td.Size;
             }
         }
@@ -219,7 +221,7 @@ public class TransactionManager {
     }
 
     virtual public void PrintDebug(string msg, TransactionContext ctx = null){
-        logger.LogInformation($"[TM TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[TM TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
     private long NewTransactionId(){
@@ -231,7 +233,7 @@ public class ShardedTransactionManager : TransactionManager {
     private RpcClient rpcClient;
     private IWriteAheadLog wal;
     private ConcurrentDictionary<long, List<(long, long)>> txnIdToOKDarqLsns = new ConcurrentDictionary<long, List<(long, long)>>(); // tid to num shards waiting on
-    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient, ILogger logger = null) : base(numThreads, wal, logger){
+    public ShardedTransactionManager(int numThreads, IWriteAheadLog wal, RpcClient rpcClient, Dictionary<int, ShardedTable> tables, ILogger logger = null) : base(numThreads, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), wal, logger){
         this.rpcClient = rpcClient;
         this.wal = wal;
     }
@@ -272,12 +274,12 @@ public class ShardedTransactionManager : TransactionManager {
             Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
             for (int i = 0; i < ctx.GetWriteset().Count; i++){
                 var item = ctx.GetWriteset()[i];
-                TupleId tupleId = item.Item1;
+                PrimaryKey tupleId = item.Item1;
                 TupleDesc[] tds = item.Item2;
-                long shardDest = rpcClient.HashKeyToDarqId(tupleId.Key);
+                long shardDest = rpcClient.HashKeyToDarqId(tupleId);
                 if (rpcClient.GetId() != shardDest){
                     for (int j = 0; j < tds.Length; j++){
-                        KeyAttr keyAttr = new KeyAttr(tupleId.Key, tds[j].Attr, tupleId.Table.GetId());
+                        KeyAttr keyAttr = new KeyAttr(tupleId, tds[j].Attr);
                         if (!shardToWriteset.ContainsKey(shardDest)){
                             shardToWriteset[shardDest] = new List<(KeyAttr, byte[])>();
                         }
@@ -313,7 +315,7 @@ public class ShardedTransactionManager : TransactionManager {
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-        logger.LogInformation($"[STM {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[STM {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
     
 }

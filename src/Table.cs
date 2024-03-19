@@ -23,7 +23,7 @@ public unsafe class Table : IDisposable{
     // TODO: bool can be a single bit
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
-    internal ConcurrentDictionary<long, byte[]> data;
+    internal ConcurrentDictionary<PrimaryKey, byte[]> data;
     protected ILogger logger;
     // public Dictionary index; 
 
@@ -46,13 +46,13 @@ public unsafe class Table : IDisposable{
             offset += (size == -1) ? IntPtr.Size * 2 : size;
         }
         this.rowSize = offset;
-        this.data = new ConcurrentDictionary<long, byte[]>();
+        this.data = new ConcurrentDictionary<PrimaryKey, byte[]>();
     }
     
     // will never return null, empty 
-    virtual public ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
+    virtual public ReadOnlySpan<byte> Read(PrimaryKey tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        PrintDebug($"Reading normal {tupleId.Key}", ctx);
+        PrintDebug($"Reading normal {tupleId}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
@@ -91,15 +91,15 @@ public unsafe class Table : IDisposable{
     }
 
     // Assumes attribute is valid 
-    protected internal ReadOnlySpan<byte> Read(TupleId tupleId){
-        if (!this.data.ContainsKey(tupleId.Key)){ // TODO: validate table
+    protected internal ReadOnlySpan<byte> Read(PrimaryKey tupleId){
+        if (!this.data.ContainsKey(tupleId)){ // TODO: validate table
             return new byte[this.rowSize];
         }
         // TODO: deal with varLen 
-        return this.data[tupleId.Key];
+        return this.data[tupleId];
     }
 
-    protected Pointer GetVarLenPtr(long key, int offset){
+    protected Pointer GetVarLenPtr(PrimaryKey key, int offset){
         byte[] addr = (new ReadOnlySpan<byte>(this.data[key], offset + IntPtr.Size, IntPtr.Size)).ToArray();
         byte[] size = (new ReadOnlySpan<byte>(this.data[key], offset, IntPtr.Size)).ToArray();
         IntPtr res = new IntPtr(BitConverter.ToInt64(addr)); //TODO convert based on nint size
@@ -113,11 +113,11 @@ public unsafe class Table : IDisposable{
     /// <param name="value"></param>
     /// <param name="ctx"></param>
     /// <returns></returns>
-    public TupleId Insert(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+    public PrimaryKey Insert(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
 
         long id = NewRecordId();
-        TupleId tupleId = new TupleId(id, this);
+        PrimaryKey tupleId = new PrimaryKey(this.id, id);
         ctx.AddWriteSet(tupleId, tupleDescs, value);
 
         return tupleId;
@@ -131,10 +131,10 @@ public unsafe class Table : IDisposable{
     /// <param name="ctx"></param>
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns></returns>
-    public void Insert(TupleId id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
-        PrintDebug($"Inserting {id.Key}", ctx);
-        if (this.data.ContainsKey(id.Key)){
-            throw new ArgumentException($"Key {id.Key} already exists in this table"); // TODO ensure this aborts transaction
+    public void Insert(PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+        PrintDebug($"Inserting {id}", ctx);
+        if (this.data.ContainsKey(id)){
+            throw new ArgumentException($"Key {id} already exists in this table"); // TODO ensure this aborts transaction
         }
         Validate(tupleDescs, value, true);
 
@@ -143,7 +143,7 @@ public unsafe class Table : IDisposable{
         return;
     }
 
-    public void Update(TupleId tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+    public void Update(PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
 
         ctx.AddWriteSet(tupleId, tupleDescs, value);
@@ -204,7 +204,7 @@ public unsafe class Table : IDisposable{
     }
 
     virtual public void PrintDebug(string msg, TransactionContext ctx = null){
-        logger.LogInformation($"[Table TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[Table TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
     public void PrintTable(){
@@ -253,18 +253,18 @@ public class ShardedTable : Table {
         this.rpcClient = rpcClient;
     }
 
-    public override ReadOnlySpan<byte> Read(TupleId tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
+    public override ReadOnlySpan<byte> Read(PrimaryKey tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        PrintDebug($"Reading {tupleId.Key}", ctx);
+        PrintDebug($"Reading {tupleId}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
-            if (rpcClient.IsLocalKey(tupleId.Key)) {
+            if (rpcClient.IsLocalKey(tupleId)) {
                 PrintDebug("actually reading own", ctx);
                 value = Read(tupleId);
             } else {
                 PrintDebug("actually reading rpc", ctx);
-                value = rpcClient.Read(tupleId.Key, ctx);
+                value = rpcClient.Read(tupleId, ctx);
             }
         }
 
@@ -288,7 +288,7 @@ public class ShardedTable : Table {
     }
 
     override public void PrintDebug(string msg, TransactionContext ctx = null){
-        logger.LogInformation($"[ST {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[ST {rpcClient.GetId()} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 }

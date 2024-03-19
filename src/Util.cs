@@ -92,17 +92,71 @@ namespace DB {
 
     // }
 
-    public struct TupleId{ //} : IEquatable<TupleId>{
+    public struct PrimaryKey{ //} : IEquatable<TupleId>{
 
-        public long Key;
-        public Table Table;
-        public TupleId(long key, Table t){
-            Key = key;
+        public readonly long[] Keys;
+        public readonly int Table;
+        public PrimaryKey(int t, params long[] keys){
+            Keys = keys;
             Table = t;
         }
 
+        public int Size => sizeof(long) * Keys.Length + sizeof(int) + sizeof(int);
+
+        public override bool Equals(object o){
+            if (o == null || GetType() != o.GetType()){
+                return false;
+            }
+            for (int i = 0; i < Keys.Length; i++){
+                if (Keys[i] != ((PrimaryKey)o).Keys[i]){
+                    return false;
+                }
+            }
+            return Table == ((PrimaryKey)o).Table;
+        }
+
+        public override int GetHashCode(){
+            int hash = 17;
+            foreach (long l in Keys){
+                hash = hash * 31 + l.GetHashCode();
+            }
+            return hash * 31 + Table;
+        }
+
         public override string ToString(){
-            return $"({Key})";
+            return $"PK ({string.Join(", ", Keys)}) Table {Table}";
+        }
+
+        public unsafe byte[] ToBytes(){
+            byte[] arr = new byte[Size];
+            
+            fixed (byte* b = arr) {
+                var head = b;
+                *(int*)head = Keys.Length;
+                head += sizeof(int);
+                for (int i = 0; i < Keys.Length; i++){
+                    *(long*)head = Keys[i];
+                    head += sizeof(long);
+                }
+                *(int*)head = Table;
+            }
+            return arr;
+        }
+
+        public static unsafe PrimaryKey FromBytes(byte[] data){
+            PrimaryKey result;
+            fixed (byte* b = data) {
+                var head = b;
+                int len = *(int*)head;
+                head += sizeof(int);
+                long[] keys = new long[len];
+                for (int i = 0; i < keys.Length; i++){
+                    keys[i] = *(long*)head;
+                    head += sizeof(long);
+                }
+                result = new PrimaryKey(*(int*)head, keys);
+            }
+            return result;
         }
 
         // public bool Equals(TupleId o){
@@ -140,61 +194,38 @@ namespace DB {
     }
 
     public struct KeyAttr {
-        public KeyAttr(long key, long attr, int tableId){
+        public KeyAttr(PrimaryKey key, long attr){
             Key = key;
             Attr = attr;
-            TableId = tableId;
         }
-        public long Key;
+        public PrimaryKey Key;
         public long Attr;
-        public int TableId;
-        public static int Size = sizeof(long) * 2 + sizeof(int);
+        public int Size => Key.Size + sizeof(long);
 
         public override string ToString(){
-            return $"({Key}, {Attr})";
+            return $"KA ({Key}, {Attr})";
         }
 
-        public byte[] ToBytes(){
+        public unsafe byte[] ToBytes(){
             byte[] arr = new byte[Size];
-
-            // Using MemoryMarshal to write the fixed-size fields to the byte array
-            Span<byte> span = arr.AsSpan();
-            MemoryMarshal.Write(span, ref Key);
-            MemoryMarshal.Write(span.Slice(sizeof(long)), ref Attr);
-            MemoryMarshal.Write(span.Slice(sizeof(long)*2), ref TableId);
-
+            fixed (byte* b = arr) {
+                var head = b;
+                Key.ToBytes().CopyTo(new Span<byte>(head, Key.Size));
+                head += Key.Size;
+                *(long*)head = Attr;
+            }
             return arr;
-            // using (MemoryStream m = new MemoryStream()) {
-            //     using (BinaryWriter writer = new BinaryWriter(m)) {
-            //         writer.Write(Key);
-            //         writer.Write(Attr);
-            //         writer.Write(Table.GetHashCode());
-            //     }
-            //     return m.ToArray();
-            // }
         }
 
-        public static KeyAttr FromBytes(byte[] data) {
+        public static unsafe KeyAttr FromBytes(byte[] data) {
             KeyAttr result = new KeyAttr();
 
-            Span<byte> span = data.AsSpan();
-            result.Key = MemoryMarshal.Read<long>(span);
-            result.Attr = MemoryMarshal.Read<long>(span.Slice(sizeof(long)));
-            result.TableId = MemoryMarshal.Read<int>(span.Slice(sizeof(long)*2));
-
-            // result.Key = BitConverter.ToInt64(data, 0);
-            // result.Attr = BitConverter.ToInt64(data, sizeof(long));
-            // int tableHash = BitConverter.ToInt32(data, sizeof(long)*2);
-            // result.Table = tables[tableHash];
-
-            // using (MemoryStream m = new MemoryStream(data)) {
-            //     using (BinaryReader reader = new BinaryReader(m)) {
-            //         result.Key = reader.ReadInt64();
-            //         result.Attr = reader.ReadInt64();
-            //         int tableHash = reader.ReadInt32();
-            //         result.Table = tables[tableHash];
-            //     }
-            // }
+            fixed (byte* b = data) {
+                var head = b;
+                result.Key = PrimaryKey.FromBytes(new Span<byte>(head, data.Length - sizeof(long)).ToArray());
+                head += result.Key.Size;
+                result.Attr = *(long*)head;
+            }
             return result;
         }
     }
@@ -203,12 +234,12 @@ namespace DB {
     {
         public bool Equals(KeyAttr x, KeyAttr y)
         {
-            return x.Key == y.Key && x.TableId == y.TableId;
+            return x.Key.Equals(y.Key);
         }
 
         public int GetHashCode(KeyAttr obj)
         {
-            return (int)obj.Key + obj.TableId;
+            return obj.GetHashCode();
         }
     }
 

@@ -9,22 +9,22 @@ namespace DB
         [TestMethod]
         [ExpectedException(typeof(ArgumentException))]
         public void TestInvalidReadsetAdd(){
-            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(0, new (long,int)[]{(1,3), (2,3)});
 
-            TransactionContext ctx = new TransactionContext();
+            TransactionContext ctx = new TransactionContext(new Dictionary<int, Table>(){ {0, tbl} });
             ctx.Init(0, 0);
-            TupleId tupleId = new TupleId(1, tbl);
+            PrimaryKey tupleId = new PrimaryKey(tbl.GetId(), 1);
             byte[] val = new byte[]{1,2,3};
             ctx.AddReadSet(tupleId, val);
         }
 
         [TestMethod]
         public void TestGetFromRset(){
-            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(0, new (long,int)[]{(1,3), (2,3)});
 
-            TransactionContext ctx = new TransactionContext();
+            TransactionContext ctx = new TransactionContext(new Dictionary<int, Table>(){ {0, tbl} });
             ctx.Init(0, 0);
-            TupleId tupleId = new TupleId(1, tbl);
+            PrimaryKey tupleId = new PrimaryKey(tbl.GetId(), 1);
             byte[] val1 = new byte[]{1,2,3,4,5,6};
             ctx.AddReadSet(tupleId, val1);
             ReadOnlySpan<byte> res1 = ctx.GetFromReadset(tupleId);
@@ -32,7 +32,7 @@ namespace DB
             byte[] val2 = new byte[]{1,2,3,9,8,7};
             ctx.AddReadSet(tupleId, val2);
             // should have no effect
-            ctx.AddReadSet(new TupleId(2, tbl), new byte[]{5,5,5,5,5,5});
+            ctx.AddReadSet(new PrimaryKey(tbl.GetId(), 2), new byte[]{5,5,5,5,5,5});
             ReadOnlySpan<byte> res2 = ctx.GetFromReadset(tupleId);
 
             Assert.IsTrue(MemoryExtensions.SequenceEqual(res1, val1));
@@ -42,11 +42,11 @@ namespace DB
 
         [TestMethod]
         public void TestGetFromWset(){
-            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3), (3,3)});
+            Table tbl = new Table(0, new (long,int)[]{(1,3), (2,3), (3,3)});
 
-            TransactionContext ctx = new TransactionContext();
+            TransactionContext ctx = new TransactionContext(new Dictionary<int, Table>(){ {0, tbl} });
             ctx.Init(0, 0);
-            TupleId tupleId = new TupleId(1, tbl);
+            PrimaryKey tupleId = new PrimaryKey(tbl.GetId(), 1);
             TupleDesc[] td = new TupleDesc[]{new TupleDesc(1, 3, 0), new TupleDesc(2, 3, 3)};
             byte[] val1 = new byte[]{1,2,3,4,5,6};
             ctx.AddWriteSet(tupleId, td, val1);
@@ -72,16 +72,16 @@ namespace DB
 
         [TestMethod]
         public void TestGetFromContextNull(){
-            Table tbl = new Table(1, new (long,int)[]{(1,3), (2,3)});
+            Table tbl = new Table(0, new (long,int)[]{(1,3), (2,3)});
 
-            TransactionContext ctx = new TransactionContext();
+            TransactionContext ctx = new TransactionContext(new Dictionary<int, Table>(){ {0, tbl} });
             ctx.Init(0, 0);
-            TupleId tupleId = new TupleId(1, tbl);
+            PrimaryKey tupleId = new PrimaryKey(tbl.GetId(), 1);
             TupleDesc[] td = new TupleDesc[]{new TupleDesc(2, 3, 3)};
             byte[] val1 = new byte[]{4,5,6};
             ctx.AddWriteSet(tupleId, td, val1);
-            ReadOnlySpan<byte> res1 = ctx.GetFromReadset(new TupleId(1, tbl));
-            (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(new TupleId(2, tbl));
+            ReadOnlySpan<byte> res1 = ctx.GetFromReadset(tupleId);
+            (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(new PrimaryKey(tbl.GetId(), 2));
 
             Assert.IsTrue(res1 == null);
             Assert.IsTrue(res2.Item1 == null);

@@ -52,7 +52,7 @@ public struct LogEntry{
 
     public unsafe byte[] ToBytes(){
         int totalSize = MinSize + (vals != null ? sizeof(int) : 0);
-        if (vals != null) for (int i = 0; i < vals.Length; i++) totalSize += vals[i].Length + sizeof(int) + KeyAttr.Size;
+        if (vals != null) for (int i = 0; i < vals.Length; i++) totalSize += vals[i].Length + sizeof(int) + keyAttrs[i].Size;
 
         byte[] arr = new byte[totalSize];
 
@@ -71,8 +71,10 @@ public struct LogEntry{
                 *(int*)head = keyAttrs.Length;
                 head += sizeof(int);
                 for (int i = 0; i < keyAttrs.Length; i++){
-                    keyAttrs[i].ToBytes().CopyTo(new Span<byte>(head, KeyAttr.Size));
-                    head += KeyAttr.Size;
+                    *(int*)head = keyAttrs[i].Size;
+                    head += sizeof(int);
+                    keyAttrs[i].ToBytes().CopyTo(new Span<byte>(head, keyAttrs[i].Size));
+                    head += keyAttrs[i].Size;
                     *(int*)head = vals[i].Length;
                     head += sizeof(int);
                     vals[i].CopyTo(new Span<byte>(head, vals[i].Length));
@@ -106,13 +108,15 @@ public struct LogEntry{
                 result.keyAttrs = new KeyAttr[len];
                 result.vals = new byte[len][];
                 for (int i = 0; i < len; i++){
-                    result.keyAttrs[i] = KeyAttr.FromBytes(new Span<byte>(head, KeyAttr.Size).ToArray());
-                    head += KeyAttr.Size;
-                    int valLen = *(int*)head;
+                    int keySize = *(int*)head;
                     head += sizeof(int);
-                    result.vals[i] = new byte[valLen];
-                    new Span<byte>(head, valLen).CopyTo(result.vals[i]);
-                    head += valLen;
+                    result.keyAttrs[i] = KeyAttr.FromBytes(new Span<byte>(head, keySize).ToArray());
+                    head += keySize;
+                    int valSize = *(int*)head;
+                    head += sizeof(int);
+                    result.vals[i] = new byte[valSize];
+                    new Span<byte>(head, valSize).CopyTo(result.vals[i]);
+                    head += valSize;
                 }
             }
         }

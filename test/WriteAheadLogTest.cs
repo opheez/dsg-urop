@@ -17,7 +17,7 @@ namespace DB
         [ExpectedException(typeof(KeyNotFoundException))]
         public void TestWriteFirst(){
             DarqWal darqWal = new DarqWal(new DarqId(0));
-            darqWal.Write(1, new KeyAttr(1, 1, 1), new byte[] { 1 });
+            darqWal.Write(1, new KeyAttr(new PrimaryKey(1, 1), 1), new byte[] { 1 });
         }
 
         [TestMethod]

@@ -181,7 +181,7 @@ public class DarqWal : IWriteAheadLog {
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-        logger.LogInformation($"[WAL {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[WAL {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
 }

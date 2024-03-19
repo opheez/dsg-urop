@@ -18,10 +18,11 @@ public class RpcClient {
     public long GetId(){
         return me;
     }
-    public ReadOnlySpan<byte> Read(long key, TransactionContext ctx){
+    public ReadOnlySpan<byte> Read(PrimaryKey key, TransactionContext ctx){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        var reply = client.Read(new ReadRequest { Key = key, Tid = ctx.tid, Me = me});
+        var reply = client.Read(new ReadRequest { Keys = {key.Keys}, Table = key.Table, Tid = ctx.tid, Me = me});
+        
         return reply.Value.ToByteArray();
     }
 
@@ -30,18 +31,18 @@ public class RpcClient {
     /// </summary>
     /// <param name="key"></param>
     /// <returns>Null if key maps to itself, appropriate channel otherwise</returns>
-    private GrpcChannel? GetServerChannel(long key){
+    private GrpcChannel? GetServerChannel(PrimaryKey key){
         var id = HashKeyToDarqId(key);
         if (id == me) return null;
         return clusterMap[id];
     }
 
     // TODO: arbitrary for now, define some rules for how to map keys to servers
-    public long HashKeyToDarqId(long key){
-        return key % clusterMap.Count;
+    public long HashKeyToDarqId(PrimaryKey key){
+        return key.Keys[0];
     }
 
-    public bool IsLocalKey(long key){
+    public bool IsLocalKey(PrimaryKey key){
         return HashKeyToDarqId(key) == me;
     }
 

@@ -91,7 +91,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         long internalTid = GetOrRegisterTid(request.Me, request.Tid);
         Table table = tables[request.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
-        TupleId tupleId = new TupleId(request.Key, table);
+        PrimaryKey tupleId = new PrimaryKey(request.Table, request.Keys.ToArray());
         TupleDesc[] tupleDescs = table.GetSchema();
         ReadReply reply = new ReadReply{ Value = ByteString.CopyFrom(table.Read(tupleId, tupleDescs, ctx))};
         return Task.FromResult(reply);
@@ -244,9 +244,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                         for (int i = 0; i < entry.keyAttrs.Length; i++)
                         {
                             KeyAttr keyAttr = entry.keyAttrs[i];
-                            Table table = tables[keyAttr.TableId];
+                            Table table = tables[keyAttr.Key.Table];
                             (int, int) metadata = table.GetAttrMetadata(keyAttr.Attr);
-                            ctx.AddWriteSet(new TupleId(keyAttr.Key, table), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
+                            ctx.AddWriteSet(new PrimaryKey(table.GetId(), keyAttr.Key.Keys), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
                         PrintDebug($"Validated at node {me}: {success}; now sending OK to {sender}");
@@ -301,7 +301,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-        logger.LogInformation($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 

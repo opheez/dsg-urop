@@ -45,7 +45,7 @@ public struct BenchmarkConfig {
 public abstract class TableBenchmark
 {
     protected internal BenchmarkConfig cfg;   
-    protected internal long[] keys;
+    protected internal PrimaryKey[] keys;
     protected internal byte[][] values;
     protected internal BitArray isWrite;
     // TODO: in the future support multiple tables, make this list
@@ -60,7 +60,7 @@ public abstract class TableBenchmark
         td = new TupleDesc[cfg.attrCount];
         workers = new Thread[cfg.threadCount];
 
-        keys = new long[cfg.datasetSize];
+        keys = new PrimaryKey[cfg.datasetSize];
         values = new byte[cfg.datasetSize][];
         isWrite = new BitArray(cfg.datasetSize);
     }
@@ -79,8 +79,8 @@ public abstract class TableBenchmark
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                TupleId tupleId = tbl.Insert(td, values[loc], t);
-                keys[loc] = tupleId.Key;
+                PrimaryKey tupleId = tbl.Insert(td, values[loc], t);
+                keys[loc] = tupleId;
             }
             var success = txnManager.Commit(t);
             if (!success){
@@ -138,7 +138,7 @@ public abstract class TableBenchmark
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++){
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                long key = keys[loc];
+                PrimaryKey key = keys[loc];
                 // uncomment to make workload only insert one attribute instead of all
                 // long attr = schema[loc%cfg.attrCount].Item1;
                 // TupleDesc[] td = new TupleDesc[]{new TupleDesc(attr, tbl.metadata[attr].Item1)};
@@ -148,9 +148,9 @@ public abstract class TableBenchmark
                     int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
                     // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
                     byte[] val = values[newValueIndex];
-                    tbl.Update(new TupleId(key, tbl), td, val, t);
+                    tbl.Update(key, td, val, t);
                 } else {
-                    tbl.Read(new TupleId(key, tbl), td, t);
+                    tbl.Read(key, td, t);
                 }
             }
             var success = txnManager.Commit(t);
@@ -212,14 +212,15 @@ public abstract class TableBenchmark
     // public void RunTransactions(ref Dictionary<int, Table> tables){
     virtual public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, wal);
-            txnManager.Run();
             (long, int)[] schema = new (long, int)[cfg.attrCount];
             for (int j = 0; j < td.Length; j++){
                 schema[j] = (td[j].Attr, td[j].Size);
             }
-            using (Table tbl = new Table(1, schema)) {
-                // tables.Add(tbl.GetHashCode(), tbl);
+            using (Table tbl = new Table(0, schema)) {
+                Dictionary<int, Table> tables = new Dictionary<int, Table>();
+                tables.Add(tbl.GetId(), tbl);
+                TransactionManager txnManager = new TransactionManager(cfg.nCommitterThreads, tables, wal);
+                txnManager.Run();
                 var insertSw = Stopwatch.StartNew();
                 int insertAborts = InsertMultiThreadedTransactions(tbl, txnManager); // setup
                 insertSw.Stop();
@@ -230,8 +231,8 @@ public abstract class TableBenchmark
                 opSw.Stop();
                 long opMs = opSw.ElapsedMilliseconds;
                 stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+                txnManager.Terminate();
             }
-            txnManager.Terminate();
         }
         stats?.ShowAllStats();
         stats?.SaveStatsToFile();
