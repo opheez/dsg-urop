@@ -122,6 +122,7 @@ public enum StockField{
     S_DATA
 }
 
+// value fields fit smallest data type possible for ids, despite all being converted to long
 public static class TpccSchema {
     // public const 
     public static (long, int, Type)[] WAREHOUSE_SCHEMA = new (long, int, Type)[]{
@@ -151,9 +152,9 @@ public static class TpccSchema {
     };
 
     public static (long, int, Type)[] CUSTOMER_SCHEMA = new (long, int, Type)[]{
-        ((long)CustomerField.C_ID, 4, typeof(int)),
-        ((long)CustomerField.C_D_ID, 1, typeof(byte)),
-        ((long)CustomerField.C_W_ID, 8, typeof(long)),
+        // ((long)CustomerField.C_ID, 4, typeof(int)),
+        // ((long)CustomerField.C_D_ID, 1, typeof(byte)),
+        // ((long)CustomerField.C_W_ID, 8, typeof(long)),
         ((long)CustomerField.C_FIRST, 16, typeof(string)),
         ((long)CustomerField.C_MIDDLE, 2, typeof(string)),
         ((long)CustomerField.C_LAST, 16, typeof(string)),
@@ -180,7 +181,7 @@ public static class TpccSchema {
         // ((long)HistoryField.H_C_W_ID, 8, typeof(long)),
         // ((long)HistoryField.H_D_ID, 1, typeof(byte)),
         // ((long)HistoryField.H_W_ID, 8, typeof(long)),
-        ((long)HistoryField.H_DATE, 8, typeof(DateTime)),
+        // ((long)HistoryField.H_DATE, 8, typeof(DateTime)),
         ((long)HistoryField.H_AMOUNT, 4, typeof(float)),
         ((long)HistoryField.H_DATA, 24, typeof(string))
     };
@@ -195,7 +196,7 @@ public static class TpccSchema {
         // ((long)OrderField.O_ID, 4, typeof(int)),
         // ((long)OrderField.O_D_ID, 1, typeof(byte)),
         // ((long)OrderField.O_W_ID, 8, typeof(long)),
-        // ((long)OrderField.O_C_ID, 4, typeof(int)),
+        ((long)OrderField.O_C_ID, 4, typeof(int)),
         ((long)OrderField.O_ENTRY_D, 8, typeof(DateTime)),
         ((long)OrderField.O_CARRIER_ID, 1, typeof(byte)),
         ((long)OrderField.O_OL_CNT, 4, typeof(int)),
@@ -206,9 +207,9 @@ public static class TpccSchema {
         // ((long)OrderLineField.OL_O_ID, 4, typeof(int)),
         // ((long)OrderLineField.OL_D_ID, 1, typeof(byte)),
         // ((long)OrderLineField.OL_W_ID, 8, typeof(long)),
-        ((long)OrderLineField.OL_NUMBER, 1, typeof(byte)),
+        // ((long)OrderLineField.OL_NUMBER, 4, typeof(int)),
         ((long)OrderLineField.OL_I_ID, 4, typeof(int)),
-        ((long)OrderLineField.OL_SUPPLY_W_ID, 8, typeof(long)),
+        ((long)OrderLineField.OL_SUPPLY_W_ID, 4, typeof(int)),
         ((long)OrderLineField.OL_DELIVERY_D, 8, typeof(DateTime)),
         ((long)OrderLineField.OL_QUANTITY, 4, typeof(int)),
         ((long)OrderLineField.OL_AMOUNT, 4, typeof(float)),
@@ -217,7 +218,7 @@ public static class TpccSchema {
 
     public static (long, int, Type)[] ITEM_SCHEMA = new (long, int, Type)[]{
         // ((long)ItemField.I_ID, 4, typeof(int)),
-        // ((long)ItemField.I_IM_ID, 4, typeof(int)),
+        ((long)ItemField.I_IM_ID, 4, typeof(int)),
         ((long)ItemField.I_NAME, 24, typeof(string)),
         ((long)ItemField.I_PRICE, 4, typeof(float)),
         ((long)ItemField.I_DATA, 50, typeof(string))
