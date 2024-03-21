@@ -5,6 +5,11 @@ using SharpNeat.Utility;
 public struct TpccConfig {
     public int NumWh;
     public int NumDistrict;
+
+    public TpccConfig(int numWh = 2, int numDistrict = 10){
+        NumWh = numWh;
+        NumDistrict = numDistrict;
+    }
 }
 
 /// <summary>

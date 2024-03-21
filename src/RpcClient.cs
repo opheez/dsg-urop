@@ -39,7 +39,9 @@ public class RpcClient {
 
     // TODO: arbitrary for now, define some rules for how to map keys to servers
     public long HashKeyToDarqId(PrimaryKey key){
+        // uncomment for YCSB
         return key.Keys[0] % clusterMap.Count;
+        // uncomment for TPCC
         // return key.Keys[0];
     }
 

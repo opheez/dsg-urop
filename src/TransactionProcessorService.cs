@@ -99,15 +99,23 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
-        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
-            ratio: 0.2,
-            attrCount: 10,
-            threadCount: 12,
-            iterationCount: 1
+        // uncomment for YCSB
+        // BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+        //     ratio: 0.2,
+        //     attrCount: 10,
+        //     threadCount: 12,
+        //     iterationCount: 1
+        // );
+        // // only uses single table
+        // TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
+        // b.RunTransactions();
+
+        // uncomment for TPCC
+        TpccConfig tpccConfig = new TpccConfig(
+            numWh: 2
         );
-        // only uses single table
-        TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
-        b.RunTransactions();
+        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)me, tpccConfig, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), txnManager);
+        tpccBenchmark.Run();
 
         // Table table = tables[0];
         // txnManager.Run();

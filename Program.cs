@@ -162,52 +162,52 @@ unsafe class Program {
             services => {
                 Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
 
-                // uncomment for YCSB
-                var schema = new (long, int)[]{(12345,8)};
-                tables[0] = new ShardedTable(0, schema, services.GetRequiredService<RpcClient>(), services.GetRequiredService<ILogger<ShardedTable>>());
+                // // uncomment for YCSB
+                // var schema = new (long, int)[]{(12345,8)};
+                // tables[0] = new ShardedTable(0, schema, services.GetRequiredService<RpcClient>(), services.GetRequiredService<ILogger<ShardedTable>>());
 
                 // uncomment for TPC-C
-                // foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
-                //     (long, int, Type)[] schema = new (long, int, Type)[0];
-                //     switch (tEnum) {
-                //         case TableType.Warehouse:
-                //             schema = TpccSchema.WAREHOUSE_SCHEMA;
-                //             break;
-                //         case TableType.District:
-                //             schema = TpccSchema.DISTRICT_SCHEMA;
-                //             break;
-                //         case TableType.Customer:
-                //             schema = TpccSchema.CUSTOMER_SCHEMA;
-                //             break;
-                //         case TableType.History:
-                //             schema = TpccSchema.HISTORY_SCHEMA;
-                //             break;  
-                //         case TableType.Item:
-                //             schema = TpccSchema.ITEM_SCHEMA;
-                //             break;
-                //         case TableType.NewOrder:
-                //             schema = TpccSchema.NEW_ORDER_SCHEMA;
-                //             break;
-                //         case TableType.Order:
-                //             schema = TpccSchema.ORDER_SCHEMA;
-                //             break;
-                //         case TableType.OrderLine:
-                //             schema = TpccSchema.ORDER_LINE_SCHEMA;
-                //             break;
-                //         case TableType.Stock:
-                //             schema = TpccSchema.STOCK_SCHEMA;
-                //             break;
-                //         default:
-                //             throw new Exception("Invalid table type");
-                //     }
-                //     int i = (int)tEnum;
-                //     tables[i] = new ShardedTable(
-                //         i,
-                //         schema.Select(x => (x.Item1, x.Item2)).ToArray(),
-                //         services.GetRequiredService<RpcClient>(),
-                //         services.GetRequiredService<ILogger<ShardedTable>>()
-                //     );
-                // }
+                foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
+                    (long, int, Type)[] schema = new (long, int, Type)[0];
+                    switch (tEnum) {
+                        case TableType.Warehouse:
+                            schema = TpccSchema.WAREHOUSE_SCHEMA;
+                            break;
+                        case TableType.District:
+                            schema = TpccSchema.DISTRICT_SCHEMA;
+                            break;
+                        case TableType.Customer:
+                            schema = TpccSchema.CUSTOMER_SCHEMA;
+                            break;
+                        case TableType.History:
+                            schema = TpccSchema.HISTORY_SCHEMA;
+                            break;  
+                        case TableType.Item:
+                            schema = TpccSchema.ITEM_SCHEMA;
+                            break;
+                        case TableType.NewOrder:
+                            schema = TpccSchema.NEW_ORDER_SCHEMA;
+                            break;
+                        case TableType.Order:
+                            schema = TpccSchema.ORDER_SCHEMA;
+                            break;
+                        case TableType.OrderLine:
+                            schema = TpccSchema.ORDER_LINE_SCHEMA;
+                            break;
+                        case TableType.Stock:
+                            schema = TpccSchema.STOCK_SCHEMA;
+                            break;
+                        default:
+                            throw new Exception("Invalid table type");
+                    }
+                    int i = (int)tEnum;
+                    tables[i] = new ShardedTable(
+                        i,
+                        schema.Select(x => (x.Item1, x.Item2)).ToArray(),
+                        services.GetRequiredService<RpcClient>(),
+                        services.GetRequiredService<ILogger<ShardedTable>>()
+                    );
+                }
                 
                 return tables;
             }
