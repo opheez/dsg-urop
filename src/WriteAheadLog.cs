@@ -35,14 +35,14 @@ public class DarqWal : IWriteAheadLog {
 
     protected long currLsn = 0;
     protected IDarqProcessorClientCapabilities capabilities;
-    protected DarqId me;
+    protected DarqId partitionId;
     protected SimpleObjectPool<StepRequest> requestPool;
     internal ConcurrentDictionary<long, long> txnTbl = new ConcurrentDictionary<long, long>(); // ongoing transactions mapped to most recent lsn
     // requestBuilders should last for a Begin,Write,Finish cycle or TODO and should NEVER overlap 
     protected ConcurrentDictionary<long, StepRequestBuilder> requestBuilders = new ConcurrentDictionary<long, StepRequestBuilder>();
     protected ILogger logger;
-    public DarqWal(DarqId me, ILogger logger = null){
-        this.me = me;
+    public DarqWal(DarqId partitionId, ILogger logger = null){
+        this.partitionId = partitionId;
         this.logger = logger;
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
@@ -181,7 +181,7 @@ public class DarqWal : IWriteAheadLog {
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-        if (logger != null) logger.LogInformation($"[WAL {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[WAL {partitionId} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 
 }

@@ -18,7 +18,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     private ConcurrentDictionary<(long, long), long> externalToInternalTxnId = new ConcurrentDictionary<(long, long), long>();
     private ConcurrentDictionary<long, TransactionContext> txnIdToTxnCtx = new ConcurrentDictionary<long, TransactionContext>();
     private DarqWal wal;
-    private long me;
+    private long partitionId;
     // from darqProcessor
     private Darq backend;
     private readonly DarqBackgroundTask _backgroundTask;
@@ -42,7 +42,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     Dictionary<DarqId, GrpcChannel> clusterMap;
     protected ILogger logger;
     public DarqTransactionProcessorService(
-        long me,
+        long partitionId,
         Dictionary<int, ShardedTable> tables,
         ShardedTransactionManager txnManager,
         DarqWal wal,
@@ -54,7 +54,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         this.tables = tables;
         this.logger = logger;
         this.txnManager = txnManager;
-        this.me = me;
+        this.partitionId = partitionId;
         this.wal = wal;
         this.clusterMap = clusterMap;
 
@@ -88,7 +88,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
         PrintDebug($"Reading from rpc service");
-        long internalTid = GetOrRegisterTid(request.Me, request.Tid);
+        long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
         Table table = tables[request.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
         PrimaryKey tupleId = new PrimaryKey(request.Table, request.Keys.ToArray());
@@ -114,7 +114,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         TpccConfig tpccConfig = new TpccConfig(
             numWh: 2
         );
-        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)me, tpccConfig, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), txnManager);
+        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), txnManager);
         tpccBenchmark.Run();
 
         // Table table = tables[0];
@@ -142,14 +142,14 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     // typically used for Prepare() and Commit() 
     public override async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
     {
-        // PrintDebug($"Writing to WAL from {request.Me}");
+        // PrintDebug($"Writing to WAL from {request.PartitionId}");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray());
 
         if (entry.type == LogType.Prepare || entry.type == LogType.Commit)
         {
-            long internalTid = GetOrRegisterTid(request.Me, request.Tid);
+            long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
             entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
-            entry.prevLsn = request.Me; // TODO: hacky place to put sender id
+            entry.prevLsn = request.PartitionId; // TODO: hacky place to put sender id
             PrintDebug($"Stepping prepare/commit {entry.lsn}");
         } else {
             PrintDebug($"Stepping ok/ack {entry.tid}");
@@ -165,15 +165,15 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return new WalReply{Success = true};
     }
 
-    private long GetOrRegisterTid(long me, long tid) {
-        PrintDebug($"Getting or registering tid: ({me}, {tid})");
-        if (externalToInternalTxnId.ContainsKey((me, tid))) 
-            return externalToInternalTxnId[(me, tid)];
+    private long GetOrRegisterTid(long partitionId, long tid) {
+        PrintDebug($"Getting or registering tid: ({partitionId}, {tid})");
+        if (externalToInternalTxnId.ContainsKey((partitionId, tid))) 
+            return externalToInternalTxnId[(partitionId, tid)];
 
         var ctx = txnManager.Begin();
         long internalTid = ctx.tid;
         PrintDebug("Registering new tid: " + internalTid);
-        externalToInternalTxnId[(me, tid)] = internalTid;
+        externalToInternalTxnId[(partitionId, tid)] = internalTid;
         txnIdToTxnCtx[internalTid] = ctx;
         return internalTid;
     }
@@ -258,9 +258,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                             ctx.AddWriteSet(new PrimaryKey(table.GetId(), keyAttr.Key.Keys), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
-                        PrintDebug($"Validated at node {me}: {success}; now sending OK to {sender}");
+                        PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");
                         if (success) {
-                            LogEntry okEntry = new LogEntry(me, entry.tid, LogType.Ok);
+                            LogEntry okEntry = new LogEntry(partitionId, entry.tid, LogType.Ok);
                             requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
                         }
                         break;
@@ -274,8 +274,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                         
                         txnManager.Write(txnIdToTxnCtx[internalTid], (tid, type) => wal.Finish(tid, type));
 
-                        PrintDebug($"Committed at node {me}; now sending ACK to {sender}");
-                        LogEntry ackEntry = new LogEntry(me, entry.tid, LogType.Ack);
+                        PrintDebug($"Committed at node {partitionId}; now sending ACK to {sender}");
+                        LogEntry ackEntry = new LogEntry(partitionId, entry.tid, LogType.Ack);
                         requestBuilder.AddOutMessage(new DarqId(sender), ackEntry.ToBytes());
                         break;
                     }
@@ -310,7 +310,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
 
     void PrintDebug(string msg, TransactionContext ctx = null){
-        if (logger != null) logger.LogInformation($"[TPS {me} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+        if (logger != null) logger.LogInformation($"[TPS {partitionId} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
     }
 }
 
@@ -338,7 +338,7 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
         {
             Message = ByteString.CopyFrom(message),
             Tid = entry.tid,
-            Me = producerId,
+            PartitionId = producerId,
             Lsn = lsn,
         };
         Task.Run(async () =>

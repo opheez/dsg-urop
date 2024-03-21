@@ -112,7 +112,7 @@ unsafe class Program {
 
     }
 
-    public static void LaunchService(int me) {
+    public static void LaunchService(int partitionId) {
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Error).AddConsole());
         // create channel to each server
@@ -126,7 +126,7 @@ unsafe class Program {
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions =>
         {
-            serverOptions.Listen(IPAddress.Loopback, 5000 + me,
+            serverOptions.Listen(IPAddress.Loopback, 5000 + partitionId,
                 listenOptions => { listenOptions.Protocols = HttpProtocols.Http2; });
         });
         // DARQ injection
@@ -138,9 +138,9 @@ unsafe class Program {
         });
         builder.Services.AddSingleton(new DarqSettings
         {
-            LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data-{me}.log", deleteOnClose: true),
-            LogCommitDir = $"C:\\Users\\Administrator\\Desktop\\{me}",
-            Me = new DarqId(me),
+            LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data-{partitionId}.log", deleteOnClose: true),
+            LogCommitDir = $"C:\\Users\\Administrator\\Desktop\\{partitionId}",
+            Me = new DarqId(partitionId),
             PageSize = 1L << 22,
             MemorySize = 1L << 28,
             SegmentSize = 1L << 30,
@@ -154,10 +154,10 @@ unsafe class Program {
         builder.Services.AddSingleton<Darq>();
         builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
         builder.Services.AddSingleton<DarqWal>(
-            services => new DarqWal(new DarqId(me), services.GetRequiredService<ILogger<DarqWal>>())
+            services => new DarqWal(new DarqId(partitionId), services.GetRequiredService<ILogger<DarqWal>>())
         );
 
-        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(me, clusterMap));
+        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(partitionId, clusterMap));
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(
             services => {
                 Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
@@ -168,7 +168,8 @@ unsafe class Program {
 
                 // uncomment for TPC-C
                 foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
-                    (long, int, Type)[] schema = new (long, int, Type)[0];
+                    if (tEnum == TableType.Item && partitionId != 0) continue;
+                    (long, int, Type)[] schema;
                     switch (tEnum) {
                         case TableType.Warehouse:
                             schema = TpccSchema.WAREHOUSE_SCHEMA;
@@ -222,7 +223,7 @@ unsafe class Program {
 
         builder.Services.AddSingleton<DarqTransactionProcessorService>(
             service => new DarqTransactionProcessorService(
-                me,
+                partitionId,
                 service.GetRequiredService<Dictionary<int, ShardedTable>>(),
                 service.GetRequiredService<ShardedTransactionManager>(),
                 service.GetRequiredService<DarqWal>(),

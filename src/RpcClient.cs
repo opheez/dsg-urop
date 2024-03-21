@@ -7,21 +7,21 @@ using FASTER.darq;
 
 namespace DB {
 public class RpcClient {
-    private long me;
+    private long partitionId;
     private Dictionary<long, GrpcChannel> clusterMap;
 
-    public RpcClient(long me, Dictionary<long, GrpcChannel> clusterMap){
-        this.me = me;
+    public RpcClient(long partitionId, Dictionary<long, GrpcChannel> clusterMap){
+        this.partitionId = partitionId;
         this.clusterMap = clusterMap;
     }
 
     public long GetId(){
-        return me;
+        return partitionId;
     }
     public ReadOnlySpan<byte> Read(PrimaryKey key, TransactionContext ctx){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        var reply = client.Read(new ReadRequest { Keys = {key.Keys}, Table = key.Table, Tid = ctx.tid, Me = me});
+        var reply = client.Read(new ReadRequest { Keys = {key.Keys}, Table = key.Table, Tid = ctx.tid, PartitionId = partitionId});
         
         return reply.Value.ToByteArray();
     }
@@ -33,7 +33,7 @@ public class RpcClient {
     /// <returns>Null if key maps to itself, appropriate channel otherwise</returns>
     private GrpcChannel? GetServerChannel(PrimaryKey key){
         var id = HashKeyToDarqId(key);
-        if (id == me) return null;
+        if (id == partitionId) return null;
         return clusterMap[id];
     }
 
@@ -46,7 +46,7 @@ public class RpcClient {
     }
 
     public bool IsLocalKey(PrimaryKey key){
-        return HashKeyToDarqId(key) == me;
+        return HashKeyToDarqId(key) == partitionId;
     }
 
     public int GetNumServers(){

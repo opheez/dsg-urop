@@ -17,7 +17,7 @@ message ReadRequest {
     repeated int64 keys = 1; // PrimaryKey
     int32 table = 2;
     int64 tid = 3; // tid of transaction context 
-    int64 me = 10;
+    int64 partitionId = 10;
 }
 
 message ReadReply {
@@ -36,7 +36,7 @@ message WalRequest {
     bytes message = 1;
     int64 tid = 2;
     int64 lsn = 3;
-    int64 me = 10;
+    int64 partitionId = 10;
 }
 
 message WalReply {
@@ -47,7 +47,7 @@ message WalReply {
 //     optional int64 key = 1; // KeyAttr
 //     repeated uint64 attr = 2; 
 //     bytes value = 3;
-//     int64 me = 10;
+//     int64 partitionId = 10;
 // }
 
 // message WriteReply {
@@ -56,7 +56,7 @@ message WalReply {
 // message PrepareRequest {
 //     int64 tid = 1;
     
-//     int54 me = 10;
+//     int54 partitionId = 10;
 // }
 
 // message PrepareReply {
