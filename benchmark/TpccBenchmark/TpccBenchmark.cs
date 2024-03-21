@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text;
 using DB;
 using SharpNeat.Utility;
@@ -130,6 +131,9 @@ public class TpccBenchmark {
         }
     }
     public void PopulateCustomerTable(Table table, TransactionContext ctx){
+        ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>();
+        // group rows by new index attribute 
+        Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
         for (int i = 1; i <= cfg.NumDistrict; i++)
         {
             for (int j = 1; j <= 3000; j++)
@@ -142,7 +146,8 @@ public class TpccBenchmark {
                 offset += 16;
                 new byte[]{(byte)'O', (byte)'E'}.CopyTo(span.Slice(offset)); // C_MIDDLE
                 offset += 2;
-                RandomByteString(8, 16).CopyTo(span.Slice(offset)); // C_LAST; TODO: implement correctly
+                byte[] lastName = RandomByteString(8, 16);
+                lastName.CopyTo(span.Slice(offset)); // C_LAST; TODO: implement correctly
                 offset += 16;
                 RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_1
                 offset += 20;
@@ -173,10 +178,30 @@ public class TpccBenchmark {
                 BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // C_DELIVERY_CNT
                 offset += 4;
                 RandomByteString(300, 500).CopyTo(span.Slice(offset)); // C_DATA
-                table.Insert(new PrimaryKey(table.GetId(), PartitionId, i, j), table.GetSchema(), data, ctx);
+                PrimaryKey pk = new PrimaryKey(table.GetId(), PartitionId, i, j);
+                table.Insert(pk, table.GetSchema(), data, ctx);
                 // PK: C_W_ID, C_D_ID, C_ID
+
+                byte[] key = BitConverter.GetBytes(PartitionId).Concat(BitConverter.GetBytes(i)).Concat(lastName).ToArray();
+                if (!groupByAttr.ContainsKey(key)){
+                    groupByAttr[key] = new List<(PrimaryKey, byte[])>();
+                }
+                groupByAttr[key].Add((pk, data));
+                
+
+            }
+
+            foreach (var entry in groupByAttr){
+                List<(PrimaryKey, byte[])> sameLastNames = entry.Value;
+                // sort by C_FIRST
+                sameLastNames.Sort((a, b) => {
+                    return Util.CompareArrays(a.Item2[0..16], b.Item2[0..16]);
+                });
+
+                secondaryIndex[entry.Key] = sameLastNames[(sameLastNames.Count - 1) / 2].Item1;
             }
         }
+        table.SetSecondaryIndex(secondaryIndex);
     }
     public void PopulateHistoryTable(Table table, TransactionContext ctx){
         for (int i = 1; i <= cfg.NumDistrict; i++)

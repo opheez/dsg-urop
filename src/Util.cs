@@ -269,6 +269,25 @@ namespace DB {
             }
             return len;
         }
+
+        public static int CompareArrays<T>(IEnumerable<T> first, IEnumerable<T> second) where T : IComparable<T>
+        {
+            using (var firstEnum = first.GetEnumerator())
+            using (var secondEnum = second.GetEnumerator())
+            {
+                while (firstEnum.MoveNext())
+                {
+                    if (!secondEnum.MoveNext())
+                        return 1;
+
+                    int cmp = firstEnum.Current.CompareTo(secondEnum.Current);
+                    if (cmp != 0)
+                        return cmp;
+                }
+
+                return secondEnum.MoveNext() ? -1 : 0;
+            }
+        }
     }
 
 }

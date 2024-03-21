@@ -24,6 +24,7 @@ public unsafe class Table : IDisposable{
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<PrimaryKey, byte[]> data;
+    protected ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex;
     protected ILogger logger;
     // public Dictionary index; 
 
@@ -169,6 +170,10 @@ public unsafe class Table : IDisposable{
         for (int i = 0; i < valueToWrite.Length; i++) {
             this.data[keyAttr.Key][offset+i] = valueToWrite[i];
         }
+    }
+
+    public void SetSecondaryIndex(ConcurrentDictionary<byte[], PrimaryKey> index){
+        secondaryIndex = index;
     }
 
     public void Dispose(){
