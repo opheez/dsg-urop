@@ -35,6 +35,102 @@ public class TpccBenchmark {
         this.txnManager = txnManager;
     }
 
+    private byte[] ExtractField(TableType tableType, TableField field, ReadOnlySpan<byte> row) {
+        (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
+        return row.Slice(offset, size).ToArray();
+    }
+
+    private void SetField(TableType tableType, TableField field, byte[] row, byte[] value) {
+        (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
+        value.CopyTo(row, offset);
+    }
+
+    private (byte[], TupleDesc[]) BuildUpdate(byte[] data, TupleDesc[] tds, TableType tableType, TableField field, byte[] value){
+        int size = tables[(int)tableType].GetAttrMetadata((long)field).Item1;
+        int offset = tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
+        return ((byte[])data.Concat(value), (TupleDesc[])tds.Append(new TupleDesc((int)field, size, offset)));
+    }
+
+
+    public void NewOrder(int w_id, int d_id, int c_id, int o_ol_cnt, int[] ol_i_ids, int[] ol_supply_w_id, int[] ol_quantity){
+        TransactionContext ctx = txnManager.Begin();
+        ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
+        PrimaryKey districtPk = new PrimaryKey((int)TableType.District, w_id, d_id);
+        ReadOnlySpan<byte> districtRow = tables[(int)TableType.District].Read(districtPk, tables[(int)TableType.District].GetSchema(), ctx);
+        ReadOnlySpan<byte> customerRow = tables[(int)TableType.Customer].Read(new PrimaryKey((int)TableType.Customer, w_id, d_id, c_id), tables[(int)TableType.Customer].GetSchema(), ctx);
+
+        byte[][] itemRows = new byte[o_ol_cnt][];
+        byte[][] stockRows = new byte[o_ol_cnt][];
+        bool allLocal = true;
+        for (int i = 0; i < o_ol_cnt; i++)
+        {
+            if (ol_i_ids[i] == 0) txnManager.Abort(ctx);
+            itemRows[i] = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx).ToArray();
+            stockRows[i] = tables[(int)TableType.Stock].Read(new PrimaryKey((int)TableType.Stock, ol_supply_w_id[i], ol_i_ids[i]), tables[(int)TableType.Stock].GetSchema(), ctx).ToArray();
+            if (ol_supply_w_id[i] != w_id) allLocal = false;
+        }
+
+        // update district with increment D_NEXT_O_ID
+        byte[] old_d_next_o_id_bytes = ExtractField(TableType.District, TableField.D_NEXT_O_ID, districtRow);
+        int new_d_next_i_id = BitConverter.ToInt32(old_d_next_o_id_bytes) + 1;
+        byte[] new_d_next_i_id_bytes = BitConverter.GetBytes(new_d_next_i_id);
+        tables[(int)TableType.District].Update(districtPk, new TupleDesc[]{new TupleDesc((int)TableField.D_NEXT_O_ID, 4, 0)}, new_d_next_i_id_bytes, ctx);
+
+        // insert into order and new order
+        PrimaryKey newOrderPk = new PrimaryKey((int)TableType.NewOrder, w_id, d_id, new_d_next_i_id);
+        PrimaryKey orderPk = new PrimaryKey((int)TableType.Order, w_id, d_id, new_d_next_i_id);
+        byte[] insertOrderData = new byte[tables[(int)TableType.Order].rowSize];
+        SetField(TableType.Order, TableField.O_C_ID, insertOrderData, BitConverter.GetBytes(c_id));
+        SetField(TableType.Order, TableField.O_ENTRY_D, insertOrderData, BitConverter.GetBytes(DateTime.Now.ToBinary()));
+        SetField(TableType.Order, TableField.O_CARRIER_ID, insertOrderData, BitConverter.GetBytes(0));
+        SetField(TableType.Order, TableField.O_OL_CNT, insertOrderData, BitConverter.GetBytes(o_ol_cnt));
+        SetField(TableType.Order, TableField.O_ALL_LOCAL, insertOrderData, BitConverter.GetBytes(allLocal));
+        tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
+        tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), new byte[0], ctx);
+
+        float total_amount = 0;
+        for (int i = 0; i < o_ol_cnt; i++)
+        {
+            // update stock
+            byte[] updateStockData = new byte[0];
+            TupleDesc[] updateStockTds = new TupleDesc[0];
+            float i_price = BitConverter.ToSingle(ExtractField(TableType.Item, TableField.I_PRICE, itemRows[i]));
+            int s_quantity = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_QUANTITY, stockRows[i]));
+            if (s_quantity >= ol_quantity[i] + 10) s_quantity -= ol_quantity[i];
+            else s_quantity += 91 - ol_quantity[i];
+            (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_QUANTITY, BitConverter.GetBytes(s_quantity));
+            int s_ytd = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_YTD, stockRows[i])) + ol_quantity[i];
+            (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_YTD, BitConverter.GetBytes(s_ytd));
+            int s_order_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_ORDER_CNT, stockRows[i])) + 1;
+            (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_ORDER_CNT, BitConverter.GetBytes(s_order_cnt));
+            if (ol_supply_w_id[i] != w_id)
+            {
+                int s_remote_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_REMOTE_CNT, stockRows[i])) + 1;
+                (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_REMOTE_CNT, BitConverter.GetBytes(s_remote_cnt));
+            }
+            tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, ol_supply_w_id[i], ol_i_ids[i]), updateStockTds, updateStockData, ctx);
+
+            // insert into order line
+            float ol_amount = i_price * ol_quantity[i];
+            byte[] updateOrderLineData = new byte[0];
+            SetField(TableType.OrderLine, TableField.OL_I_ID, updateOrderLineData, BitConverter.GetBytes(ol_i_ids[i]));
+            SetField(TableType.OrderLine, TableField.OL_SUPPLY_W_ID, updateOrderLineData, BitConverter.GetBytes(ol_supply_w_id[i]));
+            SetField(TableType.OrderLine, TableField.OL_DELIVERY_D, updateOrderLineData, BitConverter.GetBytes(0));
+            SetField(TableType.OrderLine, TableField.OL_QUANTITY, updateOrderLineData, BitConverter.GetBytes(ol_quantity[i]));
+            SetField(TableType.OrderLine, TableField.OL_AMOUNT, updateOrderLineData, BitConverter.GetBytes(ol_amount));
+            string distInfo = Encoding.ASCII.GetString(ExtractField(TableType.Stock, TableField.S_DIST_01 + d_id - 1, stockRows[i]));
+            SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, Encoding.ASCII.GetBytes(distInfo));
+            tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, w_id, d_id, new_d_next_i_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
+
+            // update total_amount
+            float c_discount = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_DISCOUNT, customerRow));
+            float w_tax = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_TAX, warehouseRow));
+            float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
+            total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
+        }
+        txnManager.Commit(ctx);
+    }
+
     public void Run(){
         foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
         {
@@ -268,7 +364,7 @@ public class TpccBenchmark {
             for (int j = 1; j <= 3000; j++)
             {
                 PrimaryKey pk = new PrimaryKey((int)TableType.Order, PartitionId, i, j);
-                byte[] val = tables[(int)TableType.Order].Read(pk).ToArray();
+                byte[] val = tables[(int)TableType.Order].Read(pk, tables[(int)TableType.Order].GetSchema(), ctx).ToArray();
                 int olCnt = BitConverter.ToInt32(val, 13);
                 DateTime oEntryD = DateTime.FromBinary(BitConverter.ToInt64(val, 4));
 

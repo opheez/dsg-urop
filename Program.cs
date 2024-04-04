@@ -169,7 +169,7 @@ unsafe class Program {
                 // uncomment for TPC-C
                 foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
                     if (tEnum == TableType.Item && partitionId != 0) continue;
-                    (long, int, Type)[] schema;
+                    Dictionary<TableField, (int, Type)> schema;
                     switch (tEnum) {
                         case TableType.Warehouse:
                             schema = TpccSchema.WAREHOUSE_SCHEMA;
@@ -204,7 +204,7 @@ unsafe class Program {
                     int i = (int)tEnum;
                     tables[i] = new ShardedTable(
                         i,
-                        schema.Select(x => (x.Item1, x.Item2)).ToArray(),
+                        schema.Select(x => ((long)x.Key, x.Value.Item1)).ToArray(),
                         services.GetRequiredService<RpcClient>(),
                         services.GetRequiredService<ILogger<ShardedTable>>()
                     );
