@@ -158,7 +158,7 @@ public static class TpccSchema {
         {TableField.C_ZIP, (9, typeof(string))},
         {TableField.C_PHONE, (16, typeof(string))},
         {TableField.C_SINCE, (8, typeof(DateTime))},
-        {TableField.C_CREDIT, (2, typeof(string))},
+        {TableField.C_CREDIT, (2, typeof(byte[]))},
         {TableField.C_CREDIT_LIM, (4, typeof(float))},
         {TableField.C_DISCOUNT, (4, typeof(float))},
         {TableField.C_BALANCE, (4, typeof(float))},

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography.Xml;
 using System.Text;
 using DB;
 using SharpNeat.Utility;
@@ -128,6 +129,67 @@ public class TpccBenchmark {
             float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
             total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
         }
+        txnManager.Commit(ctx);
+    }
+
+    public void Payment(int w_id, int d_id, int c_id, int c_d_id, int c_w_id, float h_amount, string c_last){
+        TransactionContext ctx = txnManager.Begin();
+        PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, w_id);
+        ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
+        PrimaryKey districtPk = new PrimaryKey((int)TableType.District, w_id, d_id);
+        ReadOnlySpan<byte> districtRow = tables[(int)TableType.District].Read(districtPk, tables[(int)TableType.District].GetSchema(), ctx);
+        if (c_id == 0) {
+            byte[] secondaryIndexKey = BitConverter.GetBytes(c_w_id).Concat(BitConverter.GetBytes(c_d_id)).Concat(Encoding.ASCII.GetBytes(c_last)).ToArray();
+            c_id = (int)tables[(int)TableType.Customer].PkFromSecondaryIndex(secondaryIndexKey).Keys[2];
+        }
+
+        PrimaryKey customerPk = new PrimaryKey((int)TableType.Customer, c_w_id, c_d_id, c_id);
+        ReadOnlySpan<byte> customerRow = tables[(int)TableType.Customer].Read(customerPk, tables[(int)TableType.Customer].GetSchema(), ctx);
+
+        // standard tpcc write to w_ytd
+        // update warehouse with increment W_YTD
+        float w_ytd = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_YTD, warehouseRow)) + h_amount;
+        byte[] updateWarehouseData = new byte[0];
+        TupleDesc[] updateWarehouseTds = new TupleDesc[0];
+        (updateWarehouseData, updateWarehouseTds) = BuildUpdate(updateWarehouseData, updateWarehouseTds, TableType.Warehouse, TableField.W_YTD, BitConverter.GetBytes(w_ytd));
+        tables[(int)TableType.Warehouse].Update(warehousePk, updateWarehouseTds, updateWarehouseData, ctx);
+
+        // update district with increment D_YTD
+        float d_ytd = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_YTD, districtRow)) + h_amount;
+        byte[] updateDistrictData = new byte[0];
+        TupleDesc[] updateDistrictTds = new TupleDesc[0];
+        (updateDistrictData, updateDistrictTds) = BuildUpdate(updateDistrictData, updateDistrictTds, TableType.District, TableField.D_YTD, BitConverter.GetBytes(d_ytd));
+        tables[(int)TableType.District].Update(districtPk, updateDistrictTds, updateDistrictData, ctx);
+
+        // update customer
+        byte[] updateCustomerData = new byte[0];
+        TupleDesc[] updateCustomerTds = new TupleDesc[0];
+        byte[] c_credit = ExtractField(TableType.Customer, TableField.C_CREDIT, customerRow);
+        if (Encoding.ASCII.GetString(c_credit) == "BC")
+        {
+            string c_data_old = Encoding.ASCII.GetString(ExtractField(TableType.Customer, TableField.C_DATA, customerRow));
+            // TODO: format h_amount to 2 dec
+
+            string c_data_new = c_id + " " + c_d_id + " " + c_w_id + " " + d_id + " " + w_id + " " + h_amount + " " + c_data_old;
+            c_data_new = c_data_new.Substring(0, Math.Min(c_data_new.Length, 500));
+            (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_DATA, Encoding.ASCII.GetBytes(c_data_new));
+        }
+        float c_balance = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_BALANCE, customerRow)) - h_amount;
+        (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_BALANCE, BitConverter.GetBytes(c_balance));
+        float c_ytd_payment = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_YTD_PAYMENT, customerRow)) + h_amount;
+        (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_YTD_PAYMENT, BitConverter.GetBytes(c_ytd_payment));
+        int c_payment_cnt = BitConverter.ToInt32(ExtractField(TableType.Customer, TableField.C_PAYMENT_CNT, customerRow)) + 1;
+        (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_PAYMENT_CNT, BitConverter.GetBytes(c_payment_cnt));
+        tables[(int)TableType.Customer].Update(customerPk, updateCustomerTds, updateCustomerData, ctx);
+
+        // insert into history
+        string h_data = Encoding.ASCII.GetString(ExtractField(TableType.Warehouse, TableField.W_NAME, warehouseRow)) + "    " + Encoding.ASCII.GetString(ExtractField(TableType.District, TableField.D_NAME, districtRow));
+        PrimaryKey historyPk = new PrimaryKey((int)TableType.History, w_id, d_id, c_w_id, c_d_id, c_id, DateTime.Now.ToBinary());
+        byte[] insertHistoryData = new byte[tables[(int)TableType.History].rowSize];
+        SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(h_amount));
+        SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
+        tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
+
         txnManager.Commit(ctx);
     }
 

@@ -79,6 +79,13 @@ public unsafe class Table : IDisposable{
         return project(result, tupleDescs);
     }
 
+    public PrimaryKey PkFromSecondaryIndex(byte[] key){
+        if (secondaryIndex == null){
+            throw new InvalidOperationException("Secondary index not set");
+        }
+        return secondaryIndex[key];
+    }
+
     protected ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
         // TODO: do this without allocating 
         int totalSize = tupleDescs[tupleDescs.Length - 1].Offset + tupleDescs[tupleDescs.Length - 1].Size;
