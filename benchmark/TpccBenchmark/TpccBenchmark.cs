@@ -8,12 +8,14 @@ using SharpNeat.Utility;
 public struct TpccConfig {
     public int NumWh;
     public int NumDistrict;
+    public int NumItem;
     public int NewOrderCrossPartitionProbability;
     public int PaymentCrossPartitionProbability;
 
-    public TpccConfig(int numWh = 2, int numDistrict = 10, int newOrderCrossPartitionProbability = 10, int paymentCrossPartitionProbability = 15){
+    public TpccConfig(int numWh = 2, int numDistrict = 10, int numItem = 100000, int newOrderCrossPartitionProbability = 10, int paymentCrossPartitionProbability = 15){
         NumWh = numWh;
         NumDistrict = numDistrict;
+        NumItem = numItem;
         NewOrderCrossPartitionProbability = newOrderCrossPartitionProbability;
         PaymentCrossPartitionProbability = paymentCrossPartitionProbability;
     }
@@ -159,6 +161,7 @@ public class TpccBenchmark : TableBenchmark {
     };
 
     private static byte[] ORIGINAL = Encoding.ASCII.GetBytes("ORIGINAL");
+    private static string ItemDataFilename = "itemData.bin";
 
     public int PartitionId;
     private TpccConfig tpcCfg;
@@ -437,6 +440,7 @@ public class TpccBenchmark : TableBenchmark {
 
     public void RunTransactions(){
         // init all tables
+        GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
         for (int partitionId = 0; partitionId < tpcCfg.NumWh; partitionId++) {
             foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
             {
@@ -483,7 +487,7 @@ public class TpccBenchmark : TableBenchmark {
                 PopulateOrderLineTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.Item:
-                PopulateItemTable(tables[(int)tableType], ctx, w_id);
+                PopulateItemTable(tables[(int)tableType], ctx, ItemDataFilename);
                 break;
             case TableType.Stock:
                 PopulateStockTable(tables[(int)tableType], ctx, w_id);
@@ -709,31 +713,51 @@ public class TpccBenchmark : TableBenchmark {
             }
         }
     }
-    public void PopulateItemTable(Table table, TransactionContext ctx, int w_id){
-        for (int i = 1; i <= 100000; i++)
-        {
-            byte[] data = new byte[table.rowSize];
-            Span<byte> span = new Span<byte>(data);
-            
-            int offset = 0;
-            BitConverter.GetBytes(Frnd.Next(1,10000)).CopyTo(span.Slice(offset)); // I_IM_ID
-            offset += 4;
-            RandomByteString(14, 24).CopyTo(span.Slice(offset)); // I_NAME
-            offset += 24;
-            BitConverter.GetBytes(Frnd.Next(1,100)).CopyTo(span.Slice(offset)); // I_PRICE
-            offset += 4;
-            byte[] i_data = RandomByteString(26, 50);
-            int strLen = Encoding.ASCII.GetString(i_data).IndexOf(' ');
-            if (Frnd.Next(1,10) == 1) {
-                int start = Frnd.Next(0, strLen - ORIGINAL.Length);
-                for (int j = 0; j < ORIGINAL.Length; j++) {
-                    i_data[start + j] = ORIGINAL[j];
+
+    private void GenerateItemData(Table table, string filename){
+        using (var writer = new BinaryWriter(File.Open(filename, FileMode.Create))) {
+            for (int i = 1; i <= tpcCfg.NumItem; i++)
+            {
+                byte[] data = new byte[table.rowSize];
+                Span<byte> span = new Span<byte>(data);
+                
+                int offset = 0;
+                BitConverter.GetBytes(Frnd.Next(1,10000)).CopyTo(span.Slice(offset)); // I_IM_ID
+                offset += 4;
+                RandomByteString(14, 24).CopyTo(span.Slice(offset)); // I_NAME
+                offset += 24;
+                BitConverter.GetBytes(Frnd.Next(1,100)).CopyTo(span.Slice(offset)); // I_PRICE
+                offset += 4;
+                byte[] i_data = RandomByteString(26, 50);
+                int strLen = Encoding.ASCII.GetString(i_data).IndexOf(' ');
+                if (Frnd.Next(1,10) == 1) {
+                    int start = Frnd.Next(0, strLen - ORIGINAL.Length);
+                    for (int j = 0; j < ORIGINAL.Length; j++) {
+                        i_data[start + j] = ORIGINAL[j];
+                    }
                 }
+                i_data.CopyTo(span.Slice(offset)); // I_DATA
+                // PK: I_ID
+                PrimaryKey pk = new PrimaryKey(table.GetId(), i);
+
+                byte[] pkBytes = pk.ToBytes();
+                writer.Write(pkBytes.Length);
+                writer.Write(pkBytes);
+                writer.Write(data);
             }
-            i_data.CopyTo(span.Slice(offset)); // I_DATA
-            table.Insert(new PrimaryKey(table.GetId(), i), table.GetSchema(), data, ctx);
-            // PK: I_ID
         }
+    }
+
+    public void PopulateItemTable(Table table, TransactionContext ctx, string filename){
+        using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
+            for (int i = 1; i <= tpcCfg.NumItem; i++)
+            {
+                int pkLen = reader.ReadInt32();
+                byte[] pkBytes = reader.ReadBytes(pkLen);
+                byte[] data = reader.ReadBytes(table.rowSize);
+                table.Insert(PrimaryKey.FromBytes(pkBytes), table.GetSchema(), data, ctx);
+            }
+        }        
     }
     public void PopulateStockTable(Table table, TransactionContext ctx, int w_id) {
         for (int i = 1; i <= 100000; i++)
