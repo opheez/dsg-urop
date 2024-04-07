@@ -42,7 +42,7 @@ public class RpcClient {
         // uncomment for YCSB
         return key.Keys[0] % clusterMap.Count;
         // uncomment for TPCC
-        // return key.Keys[0];
+        // return key.Keys[0] - 1;
     }
 
     public bool IsLocalKey(PrimaryKey key){

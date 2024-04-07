@@ -181,6 +181,7 @@ public class TpccBenchmark : TableBenchmark {
 
     private NewOrderQuery GenerateNewOrderQuery(int partitionId){
         int rbk = Frnd.Next(1, 100);
+        int w_id = partitionId + 1;
         int o_ol_cnt = Frnd.Next(5, 15);
         int[] ol_i_ids = new int[o_ol_cnt];
         int[] ol_supply_w_id = new int[o_ol_cnt];
@@ -202,20 +203,20 @@ public class TpccBenchmark : TableBenchmark {
                 ol_i_ids[j] = 0;
             }
 
-            ol_supply_w_id[j] = partitionId;
+            ol_supply_w_id[j] = w_id;
             if (j == 0) {
                 int x = Frnd.Next(1, 100);
                 if (x <= tpcCfg.NewOrderCrossPartitionProbability) {
-                    while (ol_supply_w_id[j] == partitionId) {
-                        ol_supply_w_id[j] = Frnd.Next(0, tpcCfg.NumWh);
+                    while (ol_supply_w_id[j] == w_id) {
+                        ol_supply_w_id[j] = Frnd.Next(1, tpcCfg.NumWh + 1);
                     }
                 }
             }
             ol_quantity[j] = Frnd.Next(1, 10);
         }
         return new NewOrderQuery(
-            partitionId,
-            Frnd.Next(1, tpcCfg.NumDistrict), 
+            w_id,
+            Frnd.Next(1, tpcCfg.NumDistrict + 1), 
             NonUniformRandom(1023, 1, 3000),
             o_ol_cnt,
             ol_i_ids,
@@ -225,15 +226,16 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     public PaymentQuery GeneratePaymentQuery(int partitionId) {
-        int d_id = Frnd.Next(1, tpcCfg.NumDistrict);
-        int c_w_id = partitionId;
+        int w_id = partitionId + 1;
+        int d_id = Frnd.Next(1, tpcCfg.NumDistrict + 1);
+        int c_w_id = w_id;
         int c_d_id;
         int x = Frnd.Next(1, 100);
         if (x <= tpcCfg.PaymentCrossPartitionProbability) {
-            while (c_w_id == partitionId) {
-                c_w_id = Frnd.Next(0, tpcCfg.NumWh);
+            while (c_w_id == w_id) {
+                c_w_id = Frnd.Next(1, tpcCfg.NumWh + 1);
             }
-            c_d_id = Frnd.Next(1, tpcCfg.NumDistrict);
+            c_d_id = Frnd.Next(1, tpcCfg.NumDistrict + 1);
         } else {
             c_d_id = d_id;
         }
@@ -248,9 +250,9 @@ public class TpccBenchmark : TableBenchmark {
             c_id = NonUniformRandom(1023, 1, 3000);
         }
         return new PaymentQuery(
-            partitionId,
+            w_id,
             d_id,
-            Frnd.Next(0, 3000),
+            c_id,
             c_d_id,
             c_w_id,
             Frnd.Next(1, 5000),
@@ -456,41 +458,42 @@ public class TpccBenchmark : TableBenchmark {
 
     public void PopulateTable(TableType tableType, Table table, int partitionId){
         TransactionContext ctx = txnManager.Begin();
+        int w_id = partitionId + 1;
         switch (tableType) 
         {
             case TableType.Warehouse:
-                PopulateWarehouseTable(tables[(int)tableType], ctx, partitionId);
+                PopulateWarehouseTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.District:
-                PopulateDistrictTable(tables[(int)tableType], ctx, partitionId);
+                PopulateDistrictTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.Customer:
-                PopulateCustomerTable(tables[(int)tableType], ctx, partitionId);
+                PopulateCustomerTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.History:
-                PopulateHistoryTable(tables[(int)tableType], ctx, partitionId);
+                PopulateHistoryTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.NewOrder:
-                PopulateNewOrderTable(tables[(int)tableType], ctx, partitionId);
+                PopulateNewOrderTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.Order:
-                PopulateOrderTable(tables[(int)tableType], ctx, partitionId);
+                PopulateOrderTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.OrderLine:
-                PopulateOrderLineTable(tables[(int)tableType], ctx, partitionId);
+                PopulateOrderLineTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.Item:
-                PopulateItemTable(tables[(int)tableType], ctx, partitionId);
+                PopulateItemTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.Stock:
-                PopulateStockTable(tables[(int)tableType], ctx, partitionId);
+                PopulateStockTable(tables[(int)tableType], ctx, w_id);
                 break;
             default:
                 throw new ArgumentException("Invalid table type");
         }
         txnManager.Commit(ctx);
     }
-    public void PopulateWarehouseTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateWarehouseTable(Table table, TransactionContext ctx, int w_id){
         // each partition has a single warehouse
         byte[] data = new byte[table.rowSize];
         Span<byte> span = new Span<byte>(data);
@@ -511,10 +514,10 @@ public class TpccBenchmark : TableBenchmark {
         BitConverter.GetBytes(0.1000).CopyTo(span.Slice(offset)); // W_TAX
         offset += 4;
         BitConverter.GetBytes(3000000.00).CopyTo(span.Slice(offset)); // W_YTD
-        table.Insert(new PrimaryKey(table.GetId(), partitionId), table.GetSchema(), data, ctx);
+        table.Insert(new PrimaryKey(table.GetId(), w_id), table.GetSchema(), data, ctx);
         // PK: W_ID
     }
-    public void PopulateDistrictTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateDistrictTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             byte[] data = new byte[table.rowSize];
@@ -538,11 +541,11 @@ public class TpccBenchmark : TableBenchmark {
             BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
             offset += 8;
             BitConverter.GetBytes(3001).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
-            table.Insert(new PrimaryKey(table.GetId(), partitionId, i), table.GetSchema(), data, ctx);
+            table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
             // PK: D_W_ID, D_ID
         }
     }
-    public void PopulateCustomerTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateCustomerTable(Table table, TransactionContext ctx, int w_id){
         ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>();
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
@@ -590,11 +593,11 @@ public class TpccBenchmark : TableBenchmark {
                 BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // C_DELIVERY_CNT
                 offset += 4;
                 RandomByteString(300, 500).CopyTo(span.Slice(offset)); // C_DATA
-                PrimaryKey pk = new PrimaryKey(table.GetId(), partitionId, i, j);
+                PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j);
                 table.Insert(pk, table.GetSchema(), data, ctx);
                 // PK: C_W_ID, C_D_ID, C_ID
 
-                byte[] key = BitConverter.GetBytes(partitionId).Concat(BitConverter.GetBytes(i)).Concat(lastName).ToArray();
+                byte[] key = BitConverter.GetBytes(w_id).Concat(BitConverter.GetBytes(i)).Concat(lastName).ToArray();
                 if (!groupByAttr.ContainsKey(key)){
                     groupByAttr[key] = new List<(PrimaryKey, byte[])>();
                 }
@@ -615,7 +618,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         table.SetSecondaryIndex(secondaryIndex);
     }
-    public void PopulateHistoryTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateHistoryTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             for (int j = 1; j <= 3000; j++)
@@ -627,23 +630,23 @@ public class TpccBenchmark : TableBenchmark {
                 BitConverter.GetBytes(10).CopyTo(span.Slice(offset)); // H_AMOUNT
                 offset += 4;
                 RandomByteString(12, 24).CopyTo(span.Slice(offset)); // H_DATA
-                table.Insert(new PrimaryKey(table.GetId(), partitionId, i, partitionId, i, j, DateTime.Now.ToBinary()), table.GetSchema(), data, ctx);
+                table.Insert(new PrimaryKey(table.GetId(), w_id, i, w_id, i, j, DateTime.Now.ToBinary()), table.GetSchema(), data, ctx);
                 // PK: H_W_ID, H_D_ID, H_C_W_ID, H_C_D_ID, H_C_ID, H_DATE
             }
         }
     }
-    public void PopulateNewOrderTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateNewOrderTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             for (int j = 2101; j <= 3000; j++)
             {
                 byte[] data = new byte[table.rowSize];
-                table.Insert(new PrimaryKey(table.GetId(), partitionId, i, j), table.GetSchema(), data, ctx);
+                table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
                 // PK: NO_W_ID, NO_D_ID, NO_O_ID
             }
         }
     }
-    public void PopulateOrderTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateOrderTable(Table table, TransactionContext ctx, int w_id){
         int[] cids = new int[3000];
         for (int i = 1; i <= 3000; i++) {
             cids[i-1] = i;
@@ -667,18 +670,18 @@ public class TpccBenchmark : TableBenchmark {
                 BitConverter.GetBytes(Frnd.Next(5,15)).CopyTo(span.Slice(offset)); // O_OL_CNT
                 offset += 4;
                 BitConverter.GetBytes(true).CopyTo(span.Slice(offset)); // O_ALL_LOCAL
-                table.Insert(new PrimaryKey(table.GetId(), partitionId, i, j), table.GetSchema(), data, ctx);
+                table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
                 // PK: O_W_ID, O_D_ID, O_ID
             }
         }
     }
 
-    public void PopulateOrderLineTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateOrderLineTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             for (int j = 1; j <= 3000; j++)
             {
-                PrimaryKey pk = new PrimaryKey((int)TableType.Order, partitionId, i, j);
+                PrimaryKey pk = new PrimaryKey((int)TableType.Order, w_id, i, j);
                 byte[] val = tables[(int)TableType.Order].Read(pk, tables[(int)TableType.Order].GetSchema(), ctx).ToArray();
                 int olCnt = BitConverter.ToInt32(val, 13);
                 DateTime oEntryD = DateTime.FromBinary(BitConverter.ToInt64(val, 4));
@@ -691,7 +694,7 @@ public class TpccBenchmark : TableBenchmark {
                     int offset = 0;
                     BitConverter.GetBytes(Frnd.Next(1,100000)).CopyTo(span.Slice(offset)); // OL_I_ID
                     offset += 4;
-                    BitConverter.GetBytes(partitionId).CopyTo(span.Slice(offset)); // OL_SUPPLY_W_ID
+                    BitConverter.GetBytes(w_id).CopyTo(span.Slice(offset)); // OL_SUPPLY_W_ID
                     offset += 8;
                     BitConverter.GetBytes(j < 2101 ? oEntryD.ToBinary() : 0).CopyTo(span.Slice(offset)); // OL_DELIVERY_D
                     offset += 8;
@@ -700,13 +703,13 @@ public class TpccBenchmark : TableBenchmark {
                     BitConverter.GetBytes(j < 2101 ? 0 : Frnd.Next(1, 999999) / 100).CopyTo(span.Slice(offset)); // OL_AMOUNT
                     offset += 4;
                     RandomByteString(24, 24).CopyTo(span.Slice(offset)); // OL_DIST_INFO
-                    table.Insert(new PrimaryKey(table.GetId(), partitionId, i, j, k), table.GetSchema(), data, ctx);
+                    table.Insert(new PrimaryKey(table.GetId(), w_id, i, j, k), table.GetSchema(), data, ctx);
                     // PK: OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER
                 }
             }
         }
     }
-    public void PopulateItemTable(Table table, TransactionContext ctx, int partitionId){
+    public void PopulateItemTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= 100000; i++)
         {
             byte[] data = new byte[table.rowSize];
@@ -732,7 +735,7 @@ public class TpccBenchmark : TableBenchmark {
             // PK: I_ID
         }
     }
-    public void PopulateStockTable(Table table, TransactionContext ctx, int partitionId) {
+    public void PopulateStockTable(Table table, TransactionContext ctx, int w_id) {
         for (int i = 1; i <= 100000; i++)
         {
 
@@ -777,7 +780,7 @@ public class TpccBenchmark : TableBenchmark {
                 }
             }
             s_data.CopyTo(span.Slice(offset)); // S_DATA
-            table.Insert(new PrimaryKey(table.GetId(), partitionId, i), table.GetSchema(), data, ctx);
+            table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
             // PK: S_W_ID, S_I_ID
         }
     }
