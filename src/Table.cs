@@ -124,7 +124,7 @@ public unsafe class Table : IDisposable{
     public PrimaryKey Insert(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
 
-        long id = NewRecordId();
+        long id = NewRecordId(); // TODO: make sure this new record id falls within range of this partition in shardedBenchmark
         PrimaryKey tupleId = new PrimaryKey(this.id, id);
         ctx.AddWriteSet(tupleId, tupleDescs, value);
 

@@ -168,7 +168,6 @@ unsafe class Program {
 
                 // uncomment for TPC-C
                 foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
-                    if (tEnum == TableType.Item && partitionId != 0) continue;
                     Dictionary<TableField, (int, Type)> schema;
                     switch (tEnum) {
                         case TableType.Warehouse:
