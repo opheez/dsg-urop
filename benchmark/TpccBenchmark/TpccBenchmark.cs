@@ -453,19 +453,19 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     override public void RunTransactions(){
-        // init all tables
-        GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
-        for (int partitionId = 0; partitionId < tpcCfg.NumWh; partitionId++) {
-            foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
-            {
-                PopulateTable(tableType, tables[(int)tableType], partitionId);
-            }
-        }
-        System.Console.WriteLine("done inserting");
 
         for (int i = 0; i < cfg.iterationCount; i++){
             txnManager.Reset();
             txnManager.Run();
+            // init all tables
+            GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
+            for (int partitionId = 0; partitionId < tpcCfg.NumWh; partitionId++) {
+                foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
+                {
+                    PopulateTable(tableType, tables[(int)tableType], partitionId);
+                }
+            }
+            System.Console.WriteLine("done inserting");
             // var opSw = Stopwatch.StartNew();
             int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
             // opSw.Stop();
