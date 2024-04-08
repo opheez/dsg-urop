@@ -539,7 +539,7 @@ public class TpccBenchmark : TableBenchmark {
                 PopulateOrderLineTable(tables[(int)tableType], ctx, w_id);
                 break;
             case TableType.Item:
-                PopulateItemTable(tables[(int)tableType], ctx, ItemDataFilename);
+                PopulateItemTable(tables[(int)tableType], ctx, w_id, ItemDataFilename);
                 break;
             case TableType.Stock:
                 PopulateStockTable(tables[(int)tableType], ctx, w_id);
@@ -801,14 +801,15 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
 
-    public void PopulateItemTable(Table table, TransactionContext ctx, string filename){
+    public void PopulateItemTable(Table table, TransactionContext ctx, int w_id, string filename){
         using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
             for (int i = 1; i <= tpcCfg.NumItem; i++)
             {
                 int pkLen = reader.ReadInt32();
                 byte[] pkBytes = reader.ReadBytes(pkLen);
                 byte[] data = reader.ReadBytes(table.rowSize);
-                table.Insert(PrimaryKey.FromBytes(pkBytes), table.GetSchema(), data, ctx);
+                PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
+                table.Insert(new PrimaryKey(pk.Table, w_id, pk.Keys[0]), table.GetSchema(), data, ctx);
             }
         }        
     }
