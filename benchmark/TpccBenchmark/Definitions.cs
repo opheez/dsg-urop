@@ -177,7 +177,7 @@ public static class TpccSchema {
         // {TableField.O_W_ID, (8, typeof(long))},
         {TableField.O_C_ID, (4, typeof(long))},
         {TableField.O_ENTRY_D, (8, typeof(DateTime))},
-        {TableField.O_CARRIER_ID, (1, typeof(byte))},
+        {TableField.O_CARRIER_ID, (4, typeof(byte))},
         {TableField.O_OL_CNT, (4, typeof(int))},
         {TableField.O_ALL_LOCAL, (4, typeof(int))},
         // {TableField.OL_O_ID, (4, typeof(int))},

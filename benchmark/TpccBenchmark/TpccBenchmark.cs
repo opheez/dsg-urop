@@ -261,7 +261,8 @@ public class TpccBenchmark : TableBenchmark {
         string c_last = "";
         int c_id;
         if (y <= 60) {
-            c_last = RandLastName();
+            c_last = RandLastName(0); // todo: temp, for testing small num
+            // c_last = RandLastName(NonUniformRandom(255, 0, 999));
             c_id = 0;
         } else {
             c_id = NonUniformRandom(1023, 1, 3000);
@@ -618,7 +619,7 @@ public class TpccBenchmark : TableBenchmark {
                 offset += 16;
                 new byte[]{(byte)'O', (byte)'E'}.CopyTo(span.Slice(offset)); // C_MIDDLE
                 offset += 2;
-                byte[] lastName = Encoding.ASCII.GetBytes(RandLastName());
+                byte[] lastName = Encoding.ASCII.GetBytes(RandLastName(j <= 1000 ? j - 1 : NonUniformRandom(255, 0, 999)));
                 lastName.CopyTo(span.Slice(offset)); // C_LAST
                 offset += 16;
                 RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_1
@@ -929,8 +930,7 @@ public class TpccBenchmark : TableBenchmark {
         return ((Frnd.Next(0, A) | Frnd.Next(min, max)) % (max - min + 1)) + min;
     }
 
-    private static string RandLastName(){
-        int n = NonUniformRandom(255, 0, 999);
+    private static string RandLastName(int n){
         return LastNames[n / 100] + LastNames[(n / 10) % 10] + LastNames[n % 10];
     }
 
