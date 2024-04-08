@@ -514,6 +514,7 @@ public class TpccBenchmark : TableBenchmark {
     public void PopulateTable(TableType tableType, Table table, int partitionId){
         TransactionContext ctx = txnManager.Begin();
         int w_id = partitionId + 1;
+        Console.WriteLine($"Start with populating {tableType}");
         switch (tableType) 
         {
             case TableType.Warehouse:
@@ -547,6 +548,7 @@ public class TpccBenchmark : TableBenchmark {
                 throw new ArgumentException("Invalid table type");
         }
         txnManager.Commit(ctx);
+        Console.WriteLine($"Done with populating {tableType}");
     }
     public void PopulateWarehouseTable(Table table, TransactionContext ctx, int w_id){
         // each partition has a single warehouse
@@ -594,7 +596,7 @@ public class TpccBenchmark : TableBenchmark {
             RandFloat(0, 2000, 10000).CopyTo(span.Slice(offset)); // D_TAX
             offset += 4;
             BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
-            offset += 8;
+            offset += 4;
             BitConverter.GetBytes(3001).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
             table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
             // PK: D_W_ID, D_ID
@@ -710,7 +712,7 @@ public class TpccBenchmark : TableBenchmark {
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             Util.Shuffle(Frnd, cids);
-            for (int j = 1; j <= 3000; j++)
+            for (int j = 1; j <= tpcCfg.NumOrder; j++)
             {
                 byte[] data = new byte[table.rowSize];
                 Span<byte> span = new Span<byte>(data);

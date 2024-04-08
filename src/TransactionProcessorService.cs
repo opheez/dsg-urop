@@ -115,9 +115,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             numWh: 2,
             numCustomer: 10,
             numDistrict: 10,
-            numItem: 1000,
+            numItem: 10,
             numOrder: 10,
-            numStock: 1000
+            numStock: 10
         );
         
         TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), txnManager);

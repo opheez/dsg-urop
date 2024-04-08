@@ -52,7 +52,7 @@ public struct LogEntry{
 
     public unsafe byte[] ToBytes(){
         int totalSize = MinSize + (vals != null ? sizeof(int) : 0);
-        if (vals != null) for (int i = 0; i < vals.Length; i++) totalSize += vals[i].Length + sizeof(int) + keyAttrs[i].Size;
+        if (vals != null) for (int i = 0; i < vals.Length; i++) totalSize += vals[i].Length + sizeof(int) * 2 + keyAttrs[i].Size;
 
         byte[] arr = new byte[totalSize];
 
