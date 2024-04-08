@@ -109,6 +109,7 @@ namespace DB {
             if (o == null || GetType() != o.GetType()){
                 return false;
             }
+            if (((PrimaryKey)o).Keys.Length != Keys.Length) return false;
             for (int i = 0; i < Keys.Length; i++){
                 if (Keys[i] != ((PrimaryKey)o).Keys[i]){
                     return false;

@@ -311,8 +311,8 @@ public class TpccBenchmark : TableBenchmark {
 
     private (byte[], TupleDesc[]) BuildUpdate(byte[] data, TupleDesc[] tds, TableType tableType, TableField field, byte[] value){
         int size = tables[(int)tableType].GetAttrMetadata((long)field).Item1;
-        int offset = tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
-        return ((byte[])data.Concat(value), (TupleDesc[])tds.Append(new TupleDesc((int)field, size, offset)));
+        int offset = tds.Length == 0 ? 0 : tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
+        return (data.Concat(value).ToArray(), tds.Append(new TupleDesc((int)field, size, offset)).ToArray());
     }
 
     public void NewOrder(NewOrderQuery query){
@@ -375,7 +375,7 @@ public class TpccBenchmark : TableBenchmark {
 
             // insert into order line
             float ol_amount = i_price * query.ol_quantity[i];
-            byte[] updateOrderLineData = new byte[0];
+            byte[] updateOrderLineData = new byte[tables[(int)TableType.OrderLine].rowSize];
             SetField(TableType.OrderLine, TableField.OL_I_ID, updateOrderLineData, BitConverter.GetBytes(query.ol_i_ids[i]));
             SetField(TableType.OrderLine, TableField.OL_SUPPLY_W_ID, updateOrderLineData, BitConverter.GetBytes(query.ol_supply_w_id[i]));
             SetField(TableType.OrderLine, TableField.OL_DELIVERY_D, updateOrderLineData, BitConverter.GetBytes(0));
@@ -741,7 +741,7 @@ public class TpccBenchmark : TableBenchmark {
             {
                 PrimaryKey pk = new PrimaryKey((int)TableType.Order, w_id, i, j);
                 byte[] val = tables[(int)TableType.Order].Read(pk, tables[(int)TableType.Order].GetSchema(), ctx).ToArray();
-                int olCnt = BitConverter.ToInt32(val, 13);
+                int olCnt = BitConverter.ToInt32(ExtractField(TableType.Order, TableField.O_OL_CNT, val));
                 DateTime oEntryD = DateTime.FromBinary(BitConverter.ToInt64(val, 4));
 
                 for (int k = 1; k <= olCnt; k++)
@@ -753,7 +753,7 @@ public class TpccBenchmark : TableBenchmark {
                     BitConverter.GetBytes(Frnd.Next(1,100000)).CopyTo(span.Slice(offset)); // OL_I_ID
                     offset += 4;
                     BitConverter.GetBytes(w_id).CopyTo(span.Slice(offset)); // OL_SUPPLY_W_ID
-                    offset += 8;
+                    offset += 4;
                     BitConverter.GetBytes(j < 2101 ? oEntryD.ToBinary() : 0).CopyTo(span.Slice(offset)); // OL_DELIVERY_D
                     offset += 8;
                     BitConverter.GetBytes(5).CopyTo(span.Slice(offset)); // OL_QUANTITY
