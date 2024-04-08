@@ -277,7 +277,7 @@ public class ShardedTransactionManager : TransactionManager {
                 PrimaryKey tupleId = item.Item1;
                 TupleDesc[] tds = item.Item2;
                 long shardDest = rpcClient.HashKeyToDarqId(tupleId);
-                if (rpcClient.GetId() != shardDest){
+                if (!rpcClient.IsLocalKey(tupleId)){
                     for (int j = 0; j < tds.Length; j++){
                         KeyAttr keyAttr = new KeyAttr(tupleId, tds[j].Attr);
                         if (!shardToWriteset.ContainsKey(shardDest)){
