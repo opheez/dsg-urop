@@ -513,45 +513,45 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     public void PopulateTable(TableType tableType, Table table, int partitionId){
-        TransactionContext ctx = txnManager.Begin();
+        
         int w_id = partitionId + 1;
         Console.WriteLine($"Start with populating {tableType}");
         switch (tableType) 
         {
             case TableType.Warehouse:
-                PopulateWarehouseTable(tables[(int)tableType], ctx, w_id);
+                PopulateWarehouseTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.District:
-                PopulateDistrictTable(tables[(int)tableType], ctx, w_id);
+                PopulateDistrictTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.Customer:
-                PopulateCustomerTable(tables[(int)tableType], ctx, w_id);
+                PopulateCustomerTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.History:
-                PopulateHistoryTable(tables[(int)tableType], ctx, w_id);
+                PopulateHistoryTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.NewOrder:
-                PopulateNewOrderTable(tables[(int)tableType], ctx, w_id);
+                PopulateNewOrderTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.Order:
-                PopulateOrderTable(tables[(int)tableType], ctx, w_id);
+                PopulateOrderTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.OrderLine:
-                PopulateOrderLineTable(tables[(int)tableType], ctx, w_id);
+                PopulateOrderLineTable(tables[(int)tableType], txnManager, w_id);
                 break;
             case TableType.Item:
-                PopulateItemTable(tables[(int)tableType], ctx, w_id, ItemDataFilename);
+                PopulateItemTable(tables[(int)tableType], txnManager, w_id, ItemDataFilename);
                 break;
             case TableType.Stock:
-                PopulateStockTable(tables[(int)tableType], ctx, w_id);
+                PopulateStockTable(tables[(int)tableType], txnManager, w_id);
                 break;
             default:
                 throw new ArgumentException("Invalid table type");
         }
-        txnManager.Commit(ctx);
         Console.WriteLine($"Done with populating {tableType}");
     }
-    public void PopulateWarehouseTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateWarehouseTable(Table table, TransactionManager txnManager, int w_id){
+        TransactionContext ctx = txnManager.Begin();
         // each partition has a single warehouse
         byte[] data = new byte[table.rowSize];
         Span<byte> span = new Span<byte>(data);
@@ -574,8 +574,10 @@ public class TpccBenchmark : TableBenchmark {
         BitConverter.GetBytes(3000000.00f).CopyTo(span.Slice(offset)); // W_YTD
         table.Insert(new PrimaryKey(table.GetId(), w_id), table.GetSchema(), data, ctx);
         // PK: W_ID
+        txnManager.Commit(ctx);
     }
-    public void PopulateDistrictTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateDistrictTable(Table table, TransactionManager txnManager, int w_id){
+        TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             byte[] data = new byte[table.rowSize];
@@ -602,13 +604,15 @@ public class TpccBenchmark : TableBenchmark {
             table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
             // PK: D_W_ID, D_ID
         }
+        txnManager.Commit(ctx);
     }
-    public void PopulateCustomerTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateCustomerTable(Table table, TransactionManager txnManager, int w_id){
         ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
+            TransactionContext ctx = txnManager.Begin();
             for (int j = 1; j <= tpcCfg.NumCustomer; j++)
             {
                 byte[] data = new byte[table.rowSize];
@@ -663,6 +667,7 @@ public class TpccBenchmark : TableBenchmark {
                 
 
             }
+            txnManager.Commit(ctx);
 
             foreach (var entry in groupByAttr){
                 List<(PrimaryKey, byte[])> sameLastNames = entry.Value;
@@ -676,7 +681,8 @@ public class TpccBenchmark : TableBenchmark {
         }
         table.SetSecondaryIndex(secondaryIndex);
     }
-    public void PopulateHistoryTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateHistoryTable(Table table, TransactionManager txnManager, int w_id){
+        TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             for (int j = 1; j <= tpcCfg.NumCustomer; j++)
@@ -692,8 +698,10 @@ public class TpccBenchmark : TableBenchmark {
                 // PK: H_W_ID, H_D_ID, H_C_W_ID, H_C_D_ID, H_C_ID, H_DATE
             }
         }
+        txnManager.Commit(ctx);
     }
-    public void PopulateNewOrderTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateNewOrderTable(Table table, TransactionManager txnManager, int w_id){
+        TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             for (int j = 2101; j <= tpcCfg.NumOrder; j++)
@@ -703,8 +711,10 @@ public class TpccBenchmark : TableBenchmark {
                 // PK: NO_W_ID, NO_D_ID, NO_O_ID
             }
         }
+        txnManager.Commit(ctx);
     }
-    public void PopulateOrderTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateOrderTable(Table table, TransactionManager txnManager, int w_id){
+        TransactionContext ctx = txnManager.Begin();
         int[] cids = new int[tpcCfg.NumOrder];
         for (int i = 1; i <= tpcCfg.NumOrder; i++) {
             cids[i-1] = i;
@@ -732,9 +742,11 @@ public class TpccBenchmark : TableBenchmark {
                 // PK: O_W_ID, O_D_ID, O_ID
             }
         }
+        txnManager.Commit(ctx);
     }
 
-    public void PopulateOrderLineTable(Table table, TransactionContext ctx, int w_id){
+    public void PopulateOrderLineTable(Table table, TransactionManager txnManager, int w_id){
+        TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
             for (int j = 1; j <= tpcCfg.NumOrder; j++)
@@ -766,6 +778,7 @@ public class TpccBenchmark : TableBenchmark {
                 }
             }
         }
+        txnManager.Commit(ctx);
     }
 
     private void GenerateItemData(Table table, string filename){
@@ -802,7 +815,8 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
 
-    public void PopulateItemTable(Table table, TransactionContext ctx, int w_id, string filename){
+    public void PopulateItemTable(Table table, TransactionManager txnManager, int w_id, string filename){
+        TransactionContext ctx = txnManager.Begin();
         using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
             for (int i = 1; i <= tpcCfg.NumItem; i++)
             {
@@ -812,9 +826,11 @@ public class TpccBenchmark : TableBenchmark {
                 PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
                 table.Insert(new PrimaryKey(pk.Table, w_id, pk.Keys[0]), table.GetSchema(), data, ctx);
             }
-        }        
+        }
+        txnManager.Commit(ctx);
     }
-    public void PopulateStockTable(Table table, TransactionContext ctx, int w_id) {
+    public void PopulateStockTable(Table table, TransactionManager txnManager, int w_id) {
+        TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumStock; i++)
         {
 
@@ -862,6 +878,7 @@ public class TpccBenchmark : TableBenchmark {
             table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
             // PK: S_W_ID, S_I_ID
         }
+        txnManager.Commit(ctx);
     }
     
     /// <summary>
