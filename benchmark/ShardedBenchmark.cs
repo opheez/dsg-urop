@@ -63,6 +63,5 @@ public class ShardedBenchmark : TableBenchmark
         stats?.ShowAllStats();
         stats?.SaveStatsToFile();
     }
-
 }
 }

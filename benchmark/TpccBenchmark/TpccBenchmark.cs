@@ -515,9 +515,9 @@ public class TpccBenchmark : TableBenchmark {
         offset += 2;
         RandZip().CopyTo(span.Slice(offset)); // W_ZIP
         offset += 9;
-        BitConverter.GetBytes(0.1000).CopyTo(span.Slice(offset)); // W_TAX
+        BitConverter.GetBytes(0.1000f).CopyTo(span.Slice(offset)); // W_TAX
         offset += 4;
-        BitConverter.GetBytes(3000000.00).CopyTo(span.Slice(offset)); // W_YTD
+        BitConverter.GetBytes(3000000.00f).CopyTo(span.Slice(offset)); // W_YTD
         table.Insert(new PrimaryKey(table.GetId(), w_id), table.GetSchema(), data, ctx);
         // PK: W_ID
     }
@@ -704,7 +704,7 @@ public class TpccBenchmark : TableBenchmark {
                     offset += 8;
                     BitConverter.GetBytes(5).CopyTo(span.Slice(offset)); // OL_QUANTITY
                     offset += 4;
-                    BitConverter.GetBytes(j < 2101 ? 0 : Frnd.Next(1, 999999) / 100).CopyTo(span.Slice(offset)); // OL_AMOUNT
+                    BitConverter.GetBytes(j < 2101 ? 0 : Frnd.Next(1, 999999) / 100f).CopyTo(span.Slice(offset)); // OL_AMOUNT
                     offset += 4;
                     RandomByteString(24, 24).CopyTo(span.Slice(offset)); // OL_DIST_INFO
                     table.Insert(new PrimaryKey(table.GetId(), w_id, i, j, k), table.GetSchema(), data, ctx);
@@ -860,7 +860,7 @@ public class TpccBenchmark : TableBenchmark {
     /// <param name="divisor">divisor</param>
     /// <returns>8 byte</returns>
     private static byte[] RandFloat(int min, int max, int divisor){
-        return BitConverter.GetBytes(Frnd.Next(min, max) / divisor);
+        return BitConverter.GetBytes((float)Frnd.Next(min, max) / divisor);
     }
 
     /// <summary>
