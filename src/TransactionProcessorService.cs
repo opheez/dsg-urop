@@ -112,7 +112,12 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
         // uncomment for TPCC
         TpccConfig tpccConfig = new TpccConfig(
-            numWh: 2
+            numWh: 2,
+            numCustomer: 10,
+            numDistrict: 10,
+            numItem: 1000,
+            numOrder: 10,
+            numStock: 1000
         );
         
         TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), txnManager);

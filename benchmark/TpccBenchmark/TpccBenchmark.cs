@@ -8,14 +8,28 @@ using SharpNeat.Utility;
 public struct TpccConfig {
     public int NumWh;
     public int NumDistrict;
+    public int NumCustomer;
+    public int NumOrder;
     public int NumItem;
+    public int NumStock;
     public int NewOrderCrossPartitionProbability;
     public int PaymentCrossPartitionProbability;
 
-    public TpccConfig(int numWh = 2, int numDistrict = 10, int numItem = 100000, int newOrderCrossPartitionProbability = 10, int paymentCrossPartitionProbability = 15){
+    public TpccConfig(
+        int numWh = 2,
+        int numDistrict = 10,
+        int numCustomer = 3000,
+        int numOrder = 3000,
+        int numItem = 100000, 
+        int numStock = 100000,
+        int newOrderCrossPartitionProbability = 10, 
+        int paymentCrossPartitionProbability = 15){
         NumWh = numWh;
         NumDistrict = numDistrict;
+        NumCustomer = numCustomer;
+        NumOrder = numOrder;
         NumItem = numItem;
+        NumStock = numStock;
         NewOrderCrossPartitionProbability = newOrderCrossPartitionProbability;
         PaymentCrossPartitionProbability = paymentCrossPartitionProbability;
     }
@@ -592,7 +606,7 @@ public class TpccBenchmark : TableBenchmark {
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
-            for (int j = 1; j <= 3000; j++)
+            for (int j = 1; j <= tpcCfg.NumCustomer; j++)
             {
                 byte[] data = new byte[table.rowSize];
                 Span<byte> span = new Span<byte>(data);
@@ -662,7 +676,7 @@ public class TpccBenchmark : TableBenchmark {
     public void PopulateHistoryTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
-            for (int j = 1; j <= 3000; j++)
+            for (int j = 1; j <= tpcCfg.NumCustomer; j++)
             {
                 byte[] data = new byte[table.rowSize];
                 Span<byte> span = new Span<byte>(data);
@@ -679,7 +693,7 @@ public class TpccBenchmark : TableBenchmark {
     public void PopulateNewOrderTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
-            for (int j = 2101; j <= 3000; j++)
+            for (int j = 2101; j <= tpcCfg.NumOrder; j++)
             {
                 byte[] data = new byte[table.rowSize];
                 table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
@@ -688,8 +702,8 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
     public void PopulateOrderTable(Table table, TransactionContext ctx, int w_id){
-        int[] cids = new int[3000];
-        for (int i = 1; i <= 3000; i++) {
+        int[] cids = new int[tpcCfg.NumOrder];
+        for (int i = 1; i <= tpcCfg.NumOrder; i++) {
             cids[i-1] = i;
         }
         
@@ -720,7 +734,7 @@ public class TpccBenchmark : TableBenchmark {
     public void PopulateOrderLineTable(Table table, TransactionContext ctx, int w_id){
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
-            for (int j = 1; j <= 3000; j++)
+            for (int j = 1; j <= tpcCfg.NumOrder; j++)
             {
                 PrimaryKey pk = new PrimaryKey((int)TableType.Order, w_id, i, j);
                 byte[] val = tables[(int)TableType.Order].Read(pk, tables[(int)TableType.Order].GetSchema(), ctx).ToArray();
@@ -797,7 +811,7 @@ public class TpccBenchmark : TableBenchmark {
         }        
     }
     public void PopulateStockTable(Table table, TransactionContext ctx, int w_id) {
-        for (int i = 1; i <= 100000; i++)
+        for (int i = 1; i <= tpcCfg.NumStock; i++)
         {
 
             byte[] data = new byte[table.rowSize];
