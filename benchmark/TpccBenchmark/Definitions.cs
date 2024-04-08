@@ -114,11 +114,12 @@ public static class TpccSchema {
         {TableType.History, new List<TableField>{TableField.H_AMOUNT, TableField.H_DATA}},
         {TableType.Order, new List<TableField>{TableField.O_C_ID, TableField.O_ENTRY_D, TableField.O_CARRIER_ID, TableField.O_OL_CNT, TableField.O_ALL_LOCAL}},
         {TableType.NewOrder, new List<TableField>()},
-        {TableType.Item, new List<TableField>{TableField.I_ID, TableField.I_IM_ID, TableField.I_NAME, TableField.I_PRICE, TableField.I_DATA}},
+        {TableType.Item, new List<TableField>{TableField.I_IM_ID, TableField.I_NAME, TableField.I_PRICE, TableField.I_DATA}},
         {TableType.OrderLine, new List<TableField>{TableField.OL_I_ID, TableField.OL_SUPPLY_W_ID, TableField.OL_DELIVERY_D, TableField.OL_QUANTITY, TableField.OL_AMOUNT, TableField.OL_DIST_INFO}},
         {TableType.Stock, new List<TableField>{TableField.S_QUANTITY, TableField.S_DIST_01, TableField.S_DIST_02, TableField.S_DIST_03, TableField.S_DIST_04, TableField.S_DIST_05, TableField.S_DIST_06, TableField.S_DIST_07, TableField.S_DIST_08, TableField.S_DIST_09, TableField.S_DIST_10, TableField.S_YTD, TableField.S_ORDER_CNT, TableField.S_REMOTE_CNT, TableField.S_DATA}}
     };
-    public static Dictionary<TableField, (int, Type)> WAREHOUSE_SCHEMA = new Dictionary<TableField, (int, Type)>{
+
+    public static Dictionary<TableField, (int, Type)> fieldsToSchema = new Dictionary<TableField, (int, Type)>{
         // {TableField.W_ID, (8, typeof(long))},
         {TableField.W_NAME, (10, typeof(string))},
         {TableField.W_STREET_1, (20, typeof(string))},
@@ -127,10 +128,7 @@ public static class TpccSchema {
         {TableField.W_STATE, (2, typeof(string))},
         {TableField.W_ZIP, (9, typeof(string))},
         {TableField.W_TAX, (4, typeof(float))},
-        {TableField.W_YTD, (4, typeof(float))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> DISTRICT_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        {TableField.W_YTD, (4, typeof(float))},
         // {TableField.D_ID, (1, typeof(byte))},
         // {TableField.D_W_ID, (8, typeof(long))},
         {TableField.D_NAME, (10, typeof(string))},
@@ -141,10 +139,7 @@ public static class TpccSchema {
         {TableField.D_ZIP, (9, typeof(string))},
         {TableField.D_TAX, (4, typeof(float))},
         {TableField.D_YTD, (4, typeof(float))},
-        {TableField.D_NEXT_O_ID, (4, typeof(int))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> CUSTOMER_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        {TableField.D_NEXT_O_ID, (4, typeof(int))},
         // {TableField.C_ID, (4, typeof(int))},
         // {TableField.C_D_ID, (1, typeof(byte))},
         // {TableField.C_W_ID, (8, typeof(long))},
@@ -165,10 +160,7 @@ public static class TpccSchema {
         {TableField.C_YTD_PAYMENT, (4, typeof(float))},
         {TableField.C_PAYMENT_CNT, (4, typeof(int))},
         {TableField.C_DELIVERY_CNT, (4, typeof(int))},
-        {TableField.C_DATA, (500, typeof(string))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> HISTORY_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        {TableField.C_DATA, (500, typeof(string))},
         // {TableField.H_C_ID, (4, typeof(int))},
         // {TableField.H_C_D_ID, (1, typeof(byte))},
         // {TableField.H_C_W_ID, (8, typeof(long))},
@@ -176,16 +168,10 @@ public static class TpccSchema {
         // {TableField.H_W_ID, (8, typeof(long))},
         // {TableField.H_DATE, (8, typeof(DateTime))},
         {TableField.H_AMOUNT, (4, typeof(float))},
-        {TableField.H_DATA, (24, typeof(string))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> NEW_ORDER_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        {TableField.H_DATA, (24, typeof(string))},
         // {TableField.NO_O_ID, (4, typeof(int))},
         // {TableField.NO_D_ID, (1, typeof(byte))},
-        // {TableField.NO_W_ID, (8, typeof(long))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> ORDER_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        // {TableField.NO_W_ID, (8, typeof(long))},
         // {TableField.O_ID, (4, typeof(int))},
         // {TableField.O_D_ID, (1, typeof(byte))},
         // {TableField.O_W_ID, (8, typeof(long))},
@@ -193,10 +179,7 @@ public static class TpccSchema {
         {TableField.O_ENTRY_D, (8, typeof(DateTime))},
         {TableField.O_CARRIER_ID, (1, typeof(byte))},
         {TableField.O_OL_CNT, (4, typeof(int))},
-        {TableField.O_ALL_LOCAL, (4, typeof(int))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> ORDER_LINE_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        {TableField.O_ALL_LOCAL, (4, typeof(int))},
         // {TableField.OL_O_ID, (4, typeof(int))},
         // {TableField.OL_D_ID, (1, typeof(byte))},
         // {TableField.OL_W_ID, (8, typeof(long))},
@@ -206,18 +189,12 @@ public static class TpccSchema {
         {TableField.OL_DELIVERY_D, (8, typeof(DateTime))},
         {TableField.OL_QUANTITY, (4, typeof(int))},
         {TableField.OL_AMOUNT, (4, typeof(float))},
-        {TableField.OL_DIST_INFO, (24, typeof(string))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> ITEM_SCHEMA = new Dictionary<TableField, (int, Type)>{
-        // {ItemField.I_ID, (4, typeof(int))},
+        {TableField.OL_DIST_INFO, (24, typeof(string))},
+        // {TableField.I_ID, (4, typeof(int))},
         {TableField.I_IM_ID, (4, typeof(int))},
         {TableField.I_NAME, (24, typeof(string))},
         {TableField.I_PRICE, (4, typeof(float))},
-        {TableField.I_DATA, (50, typeof(string))}
-    };
-
-    public static Dictionary<TableField, (int, Type)> STOCK_SCHEMA = new Dictionary<TableField, (int, Type)>{
+        {TableField.I_DATA, (50, typeof(string))},
         // {TableField.S_ID, (4, typeof(int))},
         // {TableField.S_W_ID, (8, typeof(long))},
         {TableField.S_QUANTITY, (4, typeof(int))},
@@ -237,6 +214,15 @@ public static class TpccSchema {
         {TableField.S_DATA, (50, typeof(string))}
     };
 
+    public static (long, int)[] WAREHOUSE_SCHEMA = tablesToFields[TableType.Warehouse].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] DISTRICT_SCHEMA = tablesToFields[TableType.District].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] CUSTOMER_SCHEMA = tablesToFields[TableType.Customer].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] HISTORY_SCHEMA = tablesToFields[TableType.History].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] ORDER_SCHEMA = tablesToFields[TableType.Order].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] NEW_ORDER_SCHEMA = tablesToFields[TableType.NewOrder].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] ITEM_SCHEMA = tablesToFields[TableType.Item].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] ORDER_LINE_SCHEMA = tablesToFields[TableType.OrderLine].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    public static (long, int)[] STOCK_SCHEMA = tablesToFields[TableType.Stock].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
 }
 
 }
