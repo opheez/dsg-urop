@@ -604,7 +604,7 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
     public void PopulateCustomerTable(Table table, TransactionContext ctx, int w_id){
-        ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>();
+        ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
