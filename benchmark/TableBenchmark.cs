@@ -132,7 +132,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    protected internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
+    virtual protected internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
         int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
@@ -173,7 +173,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    protected internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
+    virtual protected internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
         for (int thread = 0; thread < cfg.threadCount; thread++) {

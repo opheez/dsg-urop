@@ -438,7 +438,7 @@ public class TpccBenchmark : TableBenchmark {
         txnManager.Commit(ctx);
     }
 
-    public void RunTransactions(){
+    override public void RunTransactions(){
         // init all tables
         GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
         for (int partitionId = 0; partitionId < tpcCfg.NumWh; partitionId++) {
@@ -447,17 +447,54 @@ public class TpccBenchmark : TableBenchmark {
                 PopulateTable(tableType, tables[(int)tableType], partitionId);
             }
         }
+        System.Console.WriteLine("done inserting");
 
-
-        for (int i = 0; i < queries.Length; i++){
-            if (queries[i] is NewOrderQuery){
-                NewOrder((NewOrderQuery)queries[i]);
-            } else {
-                Payment((PaymentQuery)queries[i]);
-            }
+        for (int i = 0; i < cfg.iterationCount; i++){
+            txnManager.Reset();
+            txnManager.Run();
+            // var opSw = Stopwatch.StartNew();
+            int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
+            // opSw.Stop();
+            // long opMs = opSw.ElapsedMilliseconds;
+            // stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+            txnManager.Terminate();
         }
 
+        // stats?.ShowAllStats();
+        // stats?.SaveStatsToFile();
 
+
+    }
+
+    protected internal int WorkloadSingleThreadedTransactions(TransactionManager txnManager, int thread_idx, double ratio)
+    {
+        int abortCount = 0; // TODO
+        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
+            int loc = i + (cfg.perThreadDataCount * thread_idx);
+            if (queries[loc] is NewOrderQuery){
+                NewOrder((NewOrderQuery)queries[loc]);
+            } else {
+                Payment((PaymentQuery)queries[loc]);
+            }
+        }
+        return abortCount;
+    }
+
+    protected internal int WorkloadMultiThreadedTransactions(TransactionManager txnManager, double ratio)
+    {
+        int totalAborts = 0;
+        for (int thread = 0; thread < cfg.threadCount; thread++) {
+            int t = thread;
+            workers[thread] = new Thread(() => {
+                int aborts = WorkloadSingleThreadedTransactions(txnManager, t, ratio);
+                Interlocked.Add(ref totalAborts, aborts);
+            });
+            workers[thread].Start();
+        }
+        for (int thread = 0; thread < cfg.threadCount; thread++) {
+            workers[thread].Join();
+        }
+        return totalAborts;
     }
 
     public void PopulateTable(TableType tableType, Table table, int partitionId){
