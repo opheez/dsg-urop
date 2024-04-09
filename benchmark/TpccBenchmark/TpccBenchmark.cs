@@ -681,7 +681,7 @@ public class TpccBenchmark : TableBenchmark {
                 secondaryIndex[entry.Key] = sameLastNames[(sameLastNames.Count - 1) / 2].Item1;
             }
         }
-        table.SetSecondaryIndex(secondaryIndex, secondaryKey => new PrimaryKey((int)TableType.Customer, BitConverter.ToInt32(secondaryKey[0..sizeof(int)])));
+        table.SetSecondaryIndex(secondaryIndex, TpccSchema.customerBuildTempPk);
     }
     public void PopulateHistoryTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();

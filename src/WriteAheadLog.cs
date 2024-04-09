@@ -89,7 +89,8 @@ public class DarqWal : IWriteAheadLog {
     /// <param name="entry"></param>
     /// <returns>lsn of finish log</returns>
     public long Finish(long tid, LogType type){
-        StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
+        // on abort, requestBuilder may not have been created
+        StepRequestBuilder requestBuilder = requestBuilders.GetOrAdd(tid, _ => new StepRequestBuilder(requestPool.Checkout()));
 
         LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
         entry.lsn = GetNewLsn();

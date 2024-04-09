@@ -223,6 +223,8 @@ public static class TpccSchema {
     public static (long, int)[] ITEM_SCHEMA = tablesToFields[TableType.Item].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
     public static (long, int)[] ORDER_LINE_SCHEMA = tablesToFields[TableType.OrderLine].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
     public static (long, int)[] STOCK_SCHEMA = tablesToFields[TableType.Stock].Select(f => ((long)f, fieldsToSchema[f].Item1)).ToArray();
+    
+    public static Func<byte[], PrimaryKey> customerBuildTempPk = secondaryKey => new PrimaryKey((int)TableType.Customer, BitConverter.ToInt32(secondaryKey[0..sizeof(int)]));
 }
 
 }

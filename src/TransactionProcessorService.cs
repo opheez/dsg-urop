@@ -111,13 +111,13 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     public override Task<SetSecondaryReply> SetSecondary(SetSecondaryRequest request, ServerCallContext context)
     {
         PrintDebug($"Setting secondary from rpc service");
-        Table table = tables[request.Table];
-        ConcurrentDictionary<byte[], PrimaryKey> index = new();
+        ShardedTable table = tables[request.Table];
+        ConcurrentDictionary<byte[], PrimaryKey> index = new(new ByteArrayComparer());
         for (int i = 0; i < request.Keys.Count; i++)
         {
             index[request.Keys[i].ToByteArray()] = new PrimaryKey(request.Values[i].Table, request.Values[i].Keys.ToArray());
         }
-        table.SetSecondaryIndex(index);
+        table.SetSecondaryIndex(index, TpccSchema.customerBuildTempPk);
         SetSecondaryReply reply = new SetSecondaryReply{ Success = true};
         return Task.FromResult(reply);
     }
@@ -286,7 +286,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                             KeyAttr keyAttr = entry.keyAttrs[i];
                             Table table = tables[keyAttr.Key.Table];
                             (int, int) metadata = table.GetAttrMetadata(keyAttr.Attr);
-                            ctx.AddWriteSet(new PrimaryKey(table.GetId(), keyAttr.Key.Keys), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, metadata.Item2)}, entry.vals[i]);
+                            ctx.AddWriteSet(new PrimaryKey(table.GetId(), keyAttr.Key.Keys), new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, 0)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
                         PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");
