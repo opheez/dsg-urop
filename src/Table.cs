@@ -24,9 +24,11 @@ public unsafe class Table : IDisposable{
     internal long[] metadataOrder;
     internal Dictionary<long, (int, int)> metadata; // (size, offset), size=-1 if varLen
     internal ConcurrentDictionary<PrimaryKey, byte[]> data;
+
+    // Secondary index
     protected ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex;
+
     protected ILogger logger;
-    // public Dictionary index; 
 
     public Table(int id, (long, int)[] schema, ILogger logger = null){
         this.id = id;
@@ -79,11 +81,12 @@ public unsafe class Table : IDisposable{
         return project(result, tupleDescs);
     }
 
-    public PrimaryKey PkFromSecondaryIndex(byte[] key){
+    virtual public (byte[], PrimaryKey) ReadSecondary(byte[] key, TupleDesc[] tupleDescs, TransactionContext ctx){
         if (secondaryIndex == null){
             throw new InvalidOperationException("Secondary index not set");
         }
-        return secondaryIndex[key];
+        PrimaryKey pk = secondaryIndex[key];
+        return (Read(pk, tupleDescs, ctx).ToArray(), pk);
     }
 
     protected ReadOnlySpan<byte> project(ReadOnlySpan<byte> value, TupleDesc[] tupleDescs){
@@ -261,6 +264,8 @@ public unsafe class Table : IDisposable{
 
 public class ShardedTable : Table {
     private RpcClient rpcClient;
+    // extracts relevant values from secondary key to primary key for correct shard
+    protected Func<byte[], PrimaryKey> buildTempPk;
     public ShardedTable(int id, (long, int)[] schema, RpcClient rpcClient, ILogger logger = null) : base(id, schema, logger) {
         this.rpcClient = rpcClient;
     }
@@ -297,6 +302,52 @@ public class ShardedTable : Table {
         // project out the attributes
         ctx.AddReadSet(tupleId, result);
         return project(result, tupleDescs);
+    }
+
+    override public (byte[], PrimaryKey) ReadSecondary(byte[] key, TupleDesc[] tupleDescs, TransactionContext ctx){
+        if (secondaryIndex == null){
+            throw new InvalidOperationException("Secondary index not set");
+        }
+        ReadOnlySpan<byte> value;
+        PrimaryKey pk;
+        PrimaryKey tempPk = buildTempPk(key);
+        if (rpcClient.IsLocalKey(tempPk)){
+            pk = secondaryIndex[key];
+            value = Read(pk, tupleDescs, ctx).ToArray();
+        } else {
+            (value, pk) = rpcClient.ReadSecondary(tempPk, key, ctx);
+        }
+
+        ReadOnlySpan<byte> result;
+        // apply writeset
+        (TupleDesc[], byte[]) changes = ctx.GetFromWriteset(pk);
+        if (changes.Item2 != null) {
+            Span<byte> updatedValue = value.ToArray();
+            foreach (TupleDesc td in changes.Item1) {
+                int offset = this.metadata[td.Attr].Item2;
+                changes.Item2.AsSpan(td.Offset, td.Size).CopyTo(updatedValue.Slice(offset));
+            }
+            result = updatedValue;
+        } else {
+            result = value;
+        }
+        // TODO: deal with varLen
+        // project out the attributes
+        ctx.AddReadSet(pk, result);
+        return (project(result, tupleDescs).ToArray(), pk);
+    }
+
+    public void SetSecondaryIndex(ConcurrentDictionary<byte[], PrimaryKey> index, Func<byte[], PrimaryKey> buildTempPk){
+        this.buildTempPk = buildTempPk;
+        foreach (var entry in index){
+            PrimaryKey tempPk = buildTempPk(entry.Key);
+            if (rpcClient.IsLocalKey(tempPk)){
+                secondaryIndex = index;
+            } else {
+                rpcClient.SetSecondaryIndex(tempPk, index);
+            }
+            break;
+        }
     }
 
     override public void PrintDebug(string msg, TransactionContext ctx = null){

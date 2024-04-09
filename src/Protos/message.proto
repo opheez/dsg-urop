@@ -6,6 +6,8 @@ service TransactionProcessor {
     rpc Read (ReadRequest) returns (ReadReply);
     rpc EnqueueWorkload (EnqueueWorkloadRequest) returns (EnqueueWorkloadReply);
     rpc WriteWalEntry (WalRequest) returns (WalReply);
+    rpc ReadSecondary (ReadSecondaryRequest) returns (ReadSecondaryReply);
+    rpc SetSecondary (SetSecondaryRequest) returns (SetSecondaryReply);
     // rpc Update (WriteRequest) returns (WriteReply);
     // rpc Insert (WriteRequest) returns (WriteReply);
     // rpc Begin (BeginRequest) returns (BeginReply);
@@ -13,15 +15,41 @@ service TransactionProcessor {
     // rpc Prepare (PrepareRequest) returns (PrepareReply);
 }
 
-message ReadRequest {
-    repeated int64 keys = 1; // PrimaryKey
+message PbPrimaryKey {
+    repeated int64 keys = 1;
     int32 table = 2;
+}
+
+message ReadRequest {
+    PbPrimaryKey key = 1;
     int64 tid = 3; // tid of transaction context 
     int64 partitionId = 10;
 }
 
 message ReadReply {
     bytes value = 1;
+}
+
+message ReadSecondaryRequest {
+    bytes key = 1;
+    int32 table = 2;
+    int64 tid = 3; // tid of transaction context 
+    int64 partitionId = 10;
+}
+
+message ReadSecondaryReply {
+    bytes value = 1;
+    PbPrimaryKey key = 2;
+}
+
+message SetSecondaryRequest {
+    repeated bytes keys = 1;
+    repeated PbPrimaryKey values = 2;
+    int32 table = 3;
+}
+
+message SetSecondaryReply {
+    bool success = 1;
 }
 
 message EnqueueWorkloadRequest {
@@ -42,23 +70,3 @@ message WalRequest {
 message WalReply {
     bool success = 1;
 }
-
-// message WriteRequest {
-//     optional int64 key = 1; // KeyAttr
-//     repeated uint64 attr = 2; 
-//     bytes value = 3;
-//     int64 partitionId = 10;
-// }
-
-// message WriteReply {
-//     bool success = 1;
-// }
-// message PrepareRequest {
-//     int64 tid = 1;
-    
-//     int54 partitionId = 10;
-// }
-
-// message PrepareReply {
-//     bool valid = 1;
-// }

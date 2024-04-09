@@ -179,11 +179,11 @@ public class TpccBenchmark : TableBenchmark {
 
     public int PartitionId;
     private TpccConfig tpcCfg;
-    private Dictionary<int, Table> tables;
-    private TransactionManager txnManager;
+    private Dictionary<int, ShardedTable> tables;
+    private ShardedTransactionManager txnManager;
     Query[] queries;
 
-    public TpccBenchmark(int partitionId, TpccConfig tpcCfg, BenchmarkConfig cfg, Dictionary<int, Table> tables, TransactionManager txnManager) : base(cfg){
+    public TpccBenchmark(int partitionId, TpccConfig tpcCfg, BenchmarkConfig cfg, Dictionary<int, ShardedTable> tables, ShardedTransactionManager txnManager) : base(cfg){
         System.Console.WriteLine("Init");
         PartitionId = partitionId;
         this.tpcCfg = tpcCfg;
@@ -400,13 +400,15 @@ public class TpccBenchmark : TableBenchmark {
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
         ReadOnlySpan<byte> districtRow = tables[(int)TableType.District].Read(districtPk, tables[(int)TableType.District].GetSchema(), ctx);
+        PrimaryKey customerPk;
+        ReadOnlySpan<byte> customerRow;
         if (query.c_id == 0) {
             byte[] secondaryIndexKey = BitConverter.GetBytes(query.c_w_id).Concat(BitConverter.GetBytes(query.c_d_id)).Concat(Encoding.ASCII.GetBytes(query.c_last)).ToArray();
-            query.c_id = (int)tables[(int)TableType.Customer].PkFromSecondaryIndex(secondaryIndexKey).Keys[2];
+            (customerRow, customerPk) = tables[(int)TableType.Customer].ReadSecondary(secondaryIndexKey, tables[(int)TableType.Customer].GetSchema(), ctx);
+        } else {
+            customerPk = new PrimaryKey((int)TableType.Customer, query.c_w_id, query.c_d_id, query.c_id);
+            customerRow = tables[(int)TableType.Customer].Read(customerPk, tables[(int)TableType.Customer].GetSchema(), ctx);
         }
-
-        PrimaryKey customerPk = new PrimaryKey((int)TableType.Customer, query.c_w_id, query.c_d_id, query.c_id);
-        ReadOnlySpan<byte> customerRow = tables[(int)TableType.Customer].Read(customerPk, tables[(int)TableType.Customer].GetSchema(), ctx);
 
         // standard tpcc write to w_ytd
         // update warehouse with increment W_YTD
@@ -468,7 +470,7 @@ public class TpccBenchmark : TableBenchmark {
             }
             System.Console.WriteLine("done inserting");
             // var opSw = Stopwatch.StartNew();
-            int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
+            // int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
             // opSw.Stop();
             // long opMs = opSw.ElapsedMilliseconds;
             // stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
@@ -481,7 +483,7 @@ public class TpccBenchmark : TableBenchmark {
 
     }
 
-    protected internal int WorkloadSingleThreadedTransactions(TransactionManager txnManager, int thread_idx, double ratio)
+    protected internal int WorkloadSingleThreadedTransactions(ShardedTransactionManager txnManager, int thread_idx, double ratio)
     {
         int abortCount = 0; // TODO
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
@@ -495,7 +497,7 @@ public class TpccBenchmark : TableBenchmark {
         return abortCount;
     }
 
-    protected internal int WorkloadMultiThreadedTransactions(TransactionManager txnManager, double ratio)
+    protected internal int WorkloadMultiThreadedTransactions(ShardedTransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
         for (int thread = 0; thread < cfg.threadCount; thread++) {
@@ -512,7 +514,7 @@ public class TpccBenchmark : TableBenchmark {
         return totalAborts;
     }
 
-    public void PopulateTable(TableType tableType, Table table, int partitionId){
+    public void PopulateTable(TableType tableType, ShardedTable table, int partitionId){
         
         int w_id = partitionId + 1;
         Console.WriteLine($"Start with populating {tableType}");
@@ -550,7 +552,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         Console.WriteLine($"Done with populating {tableType}");
     }
-    public void PopulateWarehouseTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateWarehouseTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
         // each partition has a single warehouse
         byte[] data = new byte[table.rowSize];
@@ -576,7 +578,7 @@ public class TpccBenchmark : TableBenchmark {
         // PK: W_ID
         txnManager.Commit(ctx);
     }
-    public void PopulateDistrictTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateDistrictTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
@@ -606,7 +608,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         txnManager.Commit(ctx);
     }
-    public void PopulateCustomerTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateCustomerTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
@@ -679,9 +681,9 @@ public class TpccBenchmark : TableBenchmark {
                 secondaryIndex[entry.Key] = sameLastNames[(sameLastNames.Count - 1) / 2].Item1;
             }
         }
-        table.SetSecondaryIndex(secondaryIndex);
+        table.SetSecondaryIndex(secondaryIndex, secondaryKey => new PrimaryKey((int)TableType.Customer, BitConverter.ToInt32(secondaryKey[0..sizeof(int)])));
     }
-    public void PopulateHistoryTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateHistoryTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
@@ -700,7 +702,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         txnManager.Commit(ctx);
     }
-    public void PopulateNewOrderTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateNewOrderTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
@@ -713,7 +715,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         txnManager.Commit(ctx);
     }
-    public void PopulateOrderTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateOrderTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
         int[] cids = new int[tpcCfg.NumOrder];
         for (int i = 1; i <= tpcCfg.NumOrder; i++) {
@@ -745,7 +747,7 @@ public class TpccBenchmark : TableBenchmark {
         txnManager.Commit(ctx);
     }
 
-    public void PopulateOrderLineTable(Table table, TransactionManager txnManager, int w_id){
+    public void PopulateOrderLineTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumDistrict; i++)
         {
@@ -781,7 +783,7 @@ public class TpccBenchmark : TableBenchmark {
         txnManager.Commit(ctx);
     }
 
-    private void GenerateItemData(Table table, string filename){
+    private void GenerateItemData(ShardedTable table, string filename){
         using (var writer = new BinaryWriter(File.Open(filename, FileMode.Create))) {
             for (int i = 1; i <= tpcCfg.NumItem; i++)
             {
@@ -815,7 +817,7 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
 
-    public void PopulateItemTable(Table table, TransactionManager txnManager, int w_id, string filename){
+    public void PopulateItemTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id, string filename){
         TransactionContext ctx = txnManager.Begin();
         using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
             for (int i = 1; i <= tpcCfg.NumItem; i++)
@@ -829,7 +831,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         txnManager.Commit(ctx);
     }
-    public void PopulateStockTable(Table table, TransactionManager txnManager, int w_id) {
+    public void PopulateStockTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id) {
         TransactionContext ctx = txnManager.Begin();
         for (int i = 1; i <= tpcCfg.NumStock; i++)
         {
@@ -879,6 +881,13 @@ public class TpccBenchmark : TableBenchmark {
             // PK: S_W_ID, S_I_ID
         }
         txnManager.Commit(ctx);
+    }
+
+    private void PrintByteArray(byte[] arr){
+        foreach (byte b in arr){
+            Console.Write(b + " ");
+        }
+        Console.WriteLine();
     }
     
     /// <summary>

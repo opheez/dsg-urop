@@ -3,6 +3,7 @@ using Google.Protobuf;
 using FASTER.client;
 using FASTER.libdpr;
 using FASTER.darq;
+using System.Collections.Concurrent;
 
 
 namespace DB {
@@ -21,9 +22,48 @@ public class RpcClient {
     public ReadOnlySpan<byte> Read(PrimaryKey key, TransactionContext ctx){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        var reply = client.Read(new ReadRequest { Keys = {key.Keys}, Table = key.Table, Tid = ctx.tid, PartitionId = partitionId});
+        PbPrimaryKey pk = new PbPrimaryKey { Keys = {key.Keys}, Table = key.Table};
+
+        var reply = client.Read(new ReadRequest { Key = pk, Tid = ctx.tid, PartitionId = partitionId});
         
         return reply.Value.ToByteArray();
+    }
+
+    public (byte[], PrimaryKey) ReadSecondary(PrimaryKey tempPk, byte[] key, TransactionContext ctx){
+        var channel = GetServerChannel(tempPk);
+        var client = new TransactionProcessor.TransactionProcessorClient(channel);
+
+        var reply = client.ReadSecondary(
+            new ReadSecondaryRequest { 
+                Key = ByteString.CopyFrom(key),
+                Table = tempPk.Table,
+                Tid = ctx.tid,
+                PartitionId = partitionId
+            }
+        );
+        return (reply.Value.ToByteArray(), new PrimaryKey(tempPk.Table, reply.Key.Keys.ToArray()));
+    }
+
+    public void SetSecondaryIndex(PrimaryKey tempPk, ConcurrentDictionary<byte[], PrimaryKey> index){
+        var channel = GetServerChannel(tempPk);
+        var client = new TransactionProcessor.TransactionProcessorClient(channel);
+
+        ByteString[] secondaryKeys = new ByteString[index.Count];
+        PbPrimaryKey[] primaryKeys = new PbPrimaryKey[index.Count];
+        int i = 0;
+        foreach (var kv in index){
+            secondaryKeys[i] = ByteString.CopyFrom(kv.Key);
+            primaryKeys[i] = new PbPrimaryKey { Keys = {kv.Value.Keys}, Table = kv.Value.Table};
+            i++;
+        }
+
+        client.SetSecondary(
+            new SetSecondaryRequest {
+                Keys = {secondaryKeys},
+                Values = {primaryKeys},
+                Table = tempPk.Table
+            }
+        );
     }
 
     /// <summary>

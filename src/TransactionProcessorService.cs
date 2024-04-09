@@ -89,11 +89,36 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     {
         PrintDebug($"Reading from rpc service");
         long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
-        Table table = tables[request.Table];
+        Table table = tables[request.Key.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
-        PrimaryKey tupleId = new PrimaryKey(request.Table, request.Keys.ToArray());
+        PrimaryKey tupleId = new PrimaryKey(request.Key.Table, request.Key.Keys.ToArray());
         TupleDesc[] tupleDescs = table.GetSchema();
         ReadReply reply = new ReadReply{ Value = ByteString.CopyFrom(table.Read(tupleId, tupleDescs, ctx))};
+        return Task.FromResult(reply);
+    }
+
+    public override Task<ReadSecondaryReply> ReadSecondary(ReadSecondaryRequest request, ServerCallContext context)
+    {
+        PrintDebug($"Reading secondary from rpc service");
+        long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
+        Table table = tables[request.Table];
+        TransactionContext ctx = txnIdToTxnCtx[internalTid];
+        var (value, pk) = table.ReadSecondary(request.Key.ToArray(), table.GetSchema(), ctx);
+        ReadSecondaryReply reply = new ReadSecondaryReply{ Value = ByteString.CopyFrom(value), Key = new PbPrimaryKey{ Keys = {pk.Keys}, Table = pk.Table}};
+        return Task.FromResult(reply);
+    }
+
+    public override Task<SetSecondaryReply> SetSecondary(SetSecondaryRequest request, ServerCallContext context)
+    {
+        PrintDebug($"Setting secondary from rpc service");
+        Table table = tables[request.Table];
+        ConcurrentDictionary<byte[], PrimaryKey> index = new();
+        for (int i = 0; i < request.Keys.Count; i++)
+        {
+            index[request.Keys[i].ToByteArray()] = new PrimaryKey(request.Values[i].Table, request.Values[i].Keys.ToArray());
+        }
+        table.SetSecondaryIndex(index);
+        SetSecondaryReply reply = new SetSecondaryReply{ Success = true};
         return Task.FromResult(reply);
     }
 
@@ -120,7 +145,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             numStock: 10
         );
         
-        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables.ToDictionary(kv => kv.Key, kv => (Table)kv.Value), txnManager);
+        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
         tpccBenchmark.RunTransactions();
 
         // Table table = tables[0];
