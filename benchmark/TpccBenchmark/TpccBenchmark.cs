@@ -335,13 +335,14 @@ public class TpccBenchmark : TableBenchmark {
 
         // update district with increment D_NEXT_O_ID
         byte[] old_d_next_o_id_bytes = ExtractField(TableType.District, TableField.D_NEXT_O_ID, districtRow);
-        int new_d_next_i_id = BitConverter.ToInt32(old_d_next_o_id_bytes) + 1;
-        byte[] new_d_next_i_id_bytes = BitConverter.GetBytes(new_d_next_i_id);
-        tables[(int)TableType.District].Update(districtPk, new TupleDesc[]{new TupleDesc((int)TableField.D_NEXT_O_ID, 4, 0)}, new_d_next_i_id_bytes, ctx);
+        int old_d_next_o_id = BitConverter.ToInt32(old_d_next_o_id_bytes);
+        int new_d_next_o_id = old_d_next_o_id + 1;
+        byte[] new_d_next_o_id_bytes = BitConverter.GetBytes(new_d_next_o_id);
+        tables[(int)TableType.District].Update(districtPk, new TupleDesc[]{new TupleDesc((int)TableField.D_NEXT_O_ID, 4, 0)}, new_d_next_o_id_bytes, ctx);
 
         // insert into order and new order
-        PrimaryKey newOrderPk = new PrimaryKey((int)TableType.NewOrder, query.w_id, query.d_id, new_d_next_i_id);
-        PrimaryKey orderPk = new PrimaryKey((int)TableType.Order, query.w_id, query.d_id, new_d_next_i_id);
+        PrimaryKey newOrderPk = new PrimaryKey((int)TableType.NewOrder, query.w_id, query.d_id, old_d_next_o_id);
+        PrimaryKey orderPk = new PrimaryKey((int)TableType.Order, query.w_id, query.d_id, old_d_next_o_id);
         byte[] insertOrderData = new byte[tables[(int)TableType.Order].rowSize];
         SetField(TableType.Order, TableField.O_C_ID, insertOrderData, BitConverter.GetBytes(query.c_id));
         SetField(TableType.Order, TableField.O_ENTRY_D, insertOrderData, BitConverter.GetBytes(DateTime.Now.ToBinary()));
@@ -383,7 +384,7 @@ public class TpccBenchmark : TableBenchmark {
             SetField(TableType.OrderLine, TableField.OL_AMOUNT, updateOrderLineData, BitConverter.GetBytes(ol_amount));
             string distInfo = Encoding.ASCII.GetString(ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRows[i]));
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, Encoding.ASCII.GetBytes(distInfo));
-            tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_i_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
+            tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
 
             // update total_amount
             float c_discount = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_DISCOUNT, customerRow));
@@ -602,7 +603,7 @@ public class TpccBenchmark : TableBenchmark {
             offset += 4;
             BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
             offset += 4;
-            BitConverter.GetBytes(3001).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
+            BitConverter.GetBytes(tpcCfg.NumOrder + 1).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
             table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
             // PK: D_W_ID, D_ID
         }
