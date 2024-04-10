@@ -25,7 +25,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     private readonly DarqBackgroundWorkerPool workerPool;
     private readonly ManualResetEventSlim terminationStart, terminationComplete;
     private Thread refreshThread, processingThread;
-    private ColocatedDarqProcessorClient<RwLatchVersionScheme> processorClient;
+    private ColocatedDarqProcessorClient processorClient;
 
     private IDarqProcessorClientCapabilities capabilities;
 
@@ -63,7 +63,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         terminationStart = new ManualResetEventSlim();
         terminationComplete = new ManualResetEventSlim();
         this.workerPool = workerPool;
-        backend.ConnectToCluster();
+        backend.ConnectToCluster(out _);
         
         _backgroundTask.BeginProcessing();
 
@@ -75,7 +75,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         });
         refreshThread.Start();
 
-        processorClient = new ColocatedDarqProcessorClient<RwLatchVersionScheme>(backend);
+        processorClient = new ColocatedDarqProcessorClient(backend);
         processingThread = new Thread(() =>
         {
             processorClient.StartProcessing(this);
