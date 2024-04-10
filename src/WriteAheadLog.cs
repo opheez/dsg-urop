@@ -92,8 +92,9 @@ public class DarqWal : IWriteAheadLog {
         // on abort, requestBuilder may not have been created
         StepRequestBuilder requestBuilder = requestBuilders.GetOrAdd(tid, _ => new StepRequestBuilder(requestPool.Checkout()));
 
-        LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
-        entry.lsn = GetNewLsn();
+        long lsn = GetNewLsn();
+        LogEntry entry = new LogEntry(txnTbl.GetValueOrDefault(tid, lsn), tid, type);
+        entry.lsn = lsn;
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
 
         StepAndReturnRequestBuilder(requestBuilder);

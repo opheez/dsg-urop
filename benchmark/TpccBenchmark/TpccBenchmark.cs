@@ -470,7 +470,7 @@ public class TpccBenchmark : TableBenchmark {
             }
             System.Console.WriteLine("done inserting");
             // var opSw = Stopwatch.StartNew();
-            // int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
+            int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
             // opSw.Stop();
             // long opMs = opSw.ElapsedMilliseconds;
             // stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
