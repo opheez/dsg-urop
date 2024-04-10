@@ -130,23 +130,29 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             threadCount: 12,
             iterationCount: 1
         );
-        // uncomment for YCSB
-        // // only uses single table
-        // TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
-        // b.RunTransactions();
+        switch (request.Workload) {
+            case "ycsb":
+                // only uses single table
+                TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
+                b.RunTransactions();
+                break;
+            case "tpcc":
+                TpccConfig tpccConfig = new TpccConfig(
+                    numWh: 2,
+                    numCustomer: 10,
+                    numDistrict: 10,
+                    numItem: 10,
+                    numOrder: 10,
+                    numStock: 10
+                );
+                
+                TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
+                tpccBenchmark.RunTransactions();
+                break;
+            default:
+                throw new NotImplementedException();
+        }
 
-        // uncomment for TPCC
-        TpccConfig tpccConfig = new TpccConfig(
-            numWh: 2,
-            numCustomer: 10,
-            numDistrict: 10,
-            numItem: 10,
-            numOrder: 10,
-            numStock: 10
-        );
-        
-        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
-        tpccBenchmark.RunTransactions();
 
         // Table table = tables[0];
         // txnManager.Run();

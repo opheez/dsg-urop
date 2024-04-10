@@ -7,9 +7,9 @@ using System.Collections.Concurrent;
 
 
 namespace DB {
-public class RpcClient {
-    private long partitionId;
-    private Dictionary<long, GrpcChannel> clusterMap;
+public abstract class RpcClient {
+    protected long partitionId;
+    protected Dictionary<long, GrpcChannel> clusterMap;
 
     public RpcClient(long partitionId, Dictionary<long, GrpcChannel> clusterMap){
         this.partitionId = partitionId;
@@ -77,14 +77,7 @@ public class RpcClient {
         return clusterMap[id];
     }
 
-    // TODO: arbitrary for now, define some rules for how to map keys to servers
-    public long HashKeyToDarqId(PrimaryKey key){
-        // uncomment for YCSB
-        // return key.Keys[0] % clusterMap.Count;
-        // uncomment for TPCC
-        if (key.Table == (int)TableType.Item) return partitionId;
-        return key.Keys[0] - 1;
-    }
+    abstract public long HashKeyToDarqId(PrimaryKey key);
 
     public bool IsLocalKey(PrimaryKey key){
         if (key.Table == (int)TableType.Item) return true;
@@ -95,4 +88,30 @@ public class RpcClient {
         return clusterMap.Count();
     }
 }
+
+public class TpccRpcClient : RpcClient
+{
+    public TpccRpcClient(long partitionId, Dictionary<long, GrpcChannel> clusterMap) : base(partitionId, clusterMap)
+    {
+    }
+
+    public override long HashKeyToDarqId(PrimaryKey key){
+        if (key.Table == (int)TableType.Item) return partitionId;
+        return (key.Keys[0] - 1) / 12;
+    }
+}
+
+public class YcsbRpcClient : RpcClient
+{
+    public YcsbRpcClient(long partitionId, Dictionary<long, GrpcChannel> clusterMap) : base(partitionId, clusterMap)
+    {
+    }
+
+    public override long HashKeyToDarqId(PrimaryKey key){
+        // TODO: arbitrary for now, define some rules for how to map keys to servers
+        return key.Keys[0] % clusterMap.Count;
+    }
+
+}
+
 }

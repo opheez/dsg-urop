@@ -157,7 +157,7 @@ unsafe class Program {
             services => new DarqWal(new DarqId(partitionId), services.GetRequiredService<ILogger<DarqWal>>())
         );
 
-        builder.Services.AddSingleton<RpcClient>(_ => new RpcClient(partitionId, clusterMap));
+        builder.Services.AddSingleton<RpcClient, TpccRpcClient>(_ => new TpccRpcClient(partitionId, clusterMap));
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(
             services => {
                 Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
