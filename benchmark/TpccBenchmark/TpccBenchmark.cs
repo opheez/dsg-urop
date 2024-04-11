@@ -499,6 +499,13 @@ public class TpccBenchmark : TableBenchmark {
             // init all tables
             GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
             for (int partitionId = 0; partitionId < tpcCfg.NumWh; partitionId++) {
+                // GenerateCustomerData(partitionId + 1);
+                // GenerateDistrictData(partitionId + 1);
+                // GenerateHistoryData(partitionId + 1);
+                // GenerateOrderData(partitionId + 1);
+                // GenerateNewOrderData(partitionId + 1);
+                // GenerateOrderLineData(partitionId + 1);
+                // GenerateStockData(partitionId + 1);
                 foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
                 {
                     PopulateTable(tableType, tables[(int)tableType], partitionId);
@@ -862,7 +869,7 @@ public class TpccBenchmark : TableBenchmark {
             }
         }
     }
-    public void GenerateNewOrderTable(int w_id){
+    public void GenerateNewOrderData(int w_id){
         Table table = tables[(int)TableType.NewOrder];
         using (var writer = new BinaryWriter(File.Open(NewOrderDataFilename + $"_{w_id}", FileMode.Create))) {
             writer.Write(tpcCfg.NumDistrict * tpcCfg.NumOrder);
@@ -906,7 +913,7 @@ public class TpccBenchmark : TableBenchmark {
                     BitConverter.GetBytes(j < 2101 ? Frnd.Next(1,10) : 0).CopyTo(span.Slice(offset)); // O_CARRIER_ID
                     offset += 4;
                     int ol_cnt = Frnd.Next(5,15);
-                    ol_cnts[i][j] = ol_cnt;
+                    ol_cnts[i-1][j-1] = ol_cnt;
                     BitConverter.GetBytes(ol_cnt).CopyTo(span.Slice(offset)); // O_OL_CNT
                     offset += 4;
                     BitConverter.GetBytes(true).CopyTo(span.Slice(offset)); // O_ALL_LOCAL
@@ -933,8 +940,8 @@ public class TpccBenchmark : TableBenchmark {
             {
                 for (int j = 1; j <= tpcCfg.NumOrder; j++)
                 {
-                    int olCnt = ol_cnts[i][j];
-                    long oEntryD = entry_ds[i][j];
+                    int olCnt = ol_cnts[i-1][j-1];
+                    long oEntryD = entry_ds[i-1][j-1];
 
                     for (int k = 1; k <= olCnt; k++)
                     {
