@@ -349,8 +349,10 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.Order, TableField.O_CARRIER_ID, insertOrderData, BitConverter.GetBytes(0));
         SetField(TableType.Order, TableField.O_OL_CNT, insertOrderData, BitConverter.GetBytes(query.o_ol_cnt));
         SetField(TableType.Order, TableField.O_ALL_LOCAL, insertOrderData, BitConverter.GetBytes(allLocal));
-        tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
-        tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), new byte[0], ctx);
+        bool success = tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
+        if (!success) txnManager.Abort(ctx);
+        success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), new byte[0], ctx);
+        if (!success) txnManager.Abort(ctx);
 
         float total_amount = 0;
         for (int i = 0; i < query.o_ol_cnt; i++)
@@ -384,7 +386,8 @@ public class TpccBenchmark : TableBenchmark {
             SetField(TableType.OrderLine, TableField.OL_AMOUNT, updateOrderLineData, BitConverter.GetBytes(ol_amount));
             string distInfo = Encoding.ASCII.GetString(ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRows[i]));
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, Encoding.ASCII.GetBytes(distInfo));
-            tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
+            success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
+            if (!success) txnManager.Abort(ctx);
 
             // update total_amount
             float c_discount = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_DISCOUNT, customerRow));
@@ -451,7 +454,8 @@ public class TpccBenchmark : TableBenchmark {
         byte[] insertHistoryData = new byte[tables[(int)TableType.History].rowSize];
         SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(query.h_amount));
         SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
-        tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
+        bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
+        if (!success) txnManager.Abort(ctx);
 
         txnManager.Commit(ctx);
     }
@@ -575,7 +579,8 @@ public class TpccBenchmark : TableBenchmark {
         BitConverter.GetBytes(0.1000f).CopyTo(span.Slice(offset)); // W_TAX
         offset += 4;
         BitConverter.GetBytes(3000000.00f).CopyTo(span.Slice(offset)); // W_YTD
-        table.Insert(new PrimaryKey(table.GetId(), w_id), table.GetSchema(), data, ctx);
+        bool success = table.Insert(new PrimaryKey(table.GetId(), w_id), table.GetSchema(), data, ctx);
+        if (!success) throw new Exception("Failed to insert warehouse");
         // PK: W_ID
         txnManager.Commit(ctx);
     }
@@ -604,7 +609,9 @@ public class TpccBenchmark : TableBenchmark {
             BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
             offset += 4;
             BitConverter.GetBytes(tpcCfg.NumOrder + 1).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
-            table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
+            bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
+            if (!success) throw new Exception("Failed to insert district");
+
             // PK: D_W_ID, D_ID
         }
         txnManager.Commit(ctx);
@@ -659,7 +666,8 @@ public class TpccBenchmark : TableBenchmark {
                 offset += 4;
                 RandomByteString(300, 500).CopyTo(span.Slice(offset)); // C_DATA
                 PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j);
-                table.Insert(pk, table.GetSchema(), data, ctx);
+                bool success = table.Insert(pk, table.GetSchema(), data, ctx);
+                if (!success) throw new Exception("Failed to insert customer");
                 // PK: C_W_ID, C_D_ID, C_ID
 
                 byte[] key = BitConverter.GetBytes(w_id).Concat(BitConverter.GetBytes(i)).Concat(lastName).ToArray();
@@ -697,7 +705,8 @@ public class TpccBenchmark : TableBenchmark {
                 BitConverter.GetBytes(10).CopyTo(span.Slice(offset)); // H_AMOUNT
                 offset += 4;
                 RandomByteString(12, 24).CopyTo(span.Slice(offset)); // H_DATA
-                table.Insert(new PrimaryKey(table.GetId(), w_id, i, w_id, i, j, DateTime.Now.ToBinary()), table.GetSchema(), data, ctx);
+                bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, w_id, i, j, DateTime.Now.ToBinary()), table.GetSchema(), data, ctx);
+                if (!success) throw new Exception("Failed to insert history");
                 // PK: H_W_ID, H_D_ID, H_C_W_ID, H_C_D_ID, H_C_ID, H_DATE
             }
         }
@@ -710,7 +719,8 @@ public class TpccBenchmark : TableBenchmark {
             for (int j = 2101; j <= tpcCfg.NumOrder; j++)
             {
                 byte[] data = new byte[table.rowSize];
-                table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
+                bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
+                if (!success) throw new Exception("Failed to insert new order");
                 // PK: NO_W_ID, NO_D_ID, NO_O_ID
             }
         }
@@ -741,7 +751,8 @@ public class TpccBenchmark : TableBenchmark {
                 BitConverter.GetBytes(Frnd.Next(5,15)).CopyTo(span.Slice(offset)); // O_OL_CNT
                 offset += 4;
                 BitConverter.GetBytes(true).CopyTo(span.Slice(offset)); // O_ALL_LOCAL
-                table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
+                bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
+                if (!success) throw new Exception("Failed to insert order");
                 // PK: O_W_ID, O_D_ID, O_ID
             }
         }
@@ -776,7 +787,8 @@ public class TpccBenchmark : TableBenchmark {
                     BitConverter.GetBytes(j < 2101 ? 0 : Frnd.Next(1, 999999) / 100f).CopyTo(span.Slice(offset)); // OL_AMOUNT
                     offset += 4;
                     RandomByteString(24, 24).CopyTo(span.Slice(offset)); // OL_DIST_INFO
-                    table.Insert(new PrimaryKey(table.GetId(), w_id, i, j, k), table.GetSchema(), data, ctx);
+                    bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, j, k), table.GetSchema(), data, ctx);
+                    if (!success) throw new Exception("Failed to insert order line");
                     // PK: OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER
                 }
             }
@@ -827,7 +839,8 @@ public class TpccBenchmark : TableBenchmark {
                 byte[] pkBytes = reader.ReadBytes(pkLen);
                 byte[] data = reader.ReadBytes(table.rowSize);
                 PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
-                table.Insert(new PrimaryKey(pk.Table, w_id, pk.Keys[0]), table.GetSchema(), data, ctx);
+                bool success = table.Insert(new PrimaryKey(pk.Table, w_id, pk.Keys[0]), table.GetSchema(), data, ctx);
+                if (!success) throw new Exception("Failed to insert item");
             }
         }
         txnManager.Commit(ctx);
@@ -878,7 +891,8 @@ public class TpccBenchmark : TableBenchmark {
                 }
             }
             s_data.CopyTo(span.Slice(offset)); // S_DATA
-            table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
+            bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
+            if (!success) throw new Exception("Failed to insert stock");
             // PK: S_W_ID, S_I_ID
         }
         txnManager.Commit(ctx);

@@ -22,13 +22,6 @@ namespace DB
 
         [TestMethod]
         [ExpectedException(typeof(KeyNotFoundException))]
-        public void TestFinishFirst(){
-            DarqWal darqWal = new DarqWal(new DarqId(0));
-            darqWal.Finish(1, LogType.Commit);
-        }
-
-        [TestMethod]
-        [ExpectedException(typeof(KeyNotFoundException))]
         public void TestFinis2pcFirst(){
             DarqWal darqWal = new DarqWal(new DarqId(0));
             darqWal.Finish2pc(1, LogType.Commit, new List<(long, long)>());

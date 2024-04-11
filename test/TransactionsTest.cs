@@ -75,9 +75,8 @@ namespace DB
             TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("");
             PrimaryKey id = table.Insert(td, name, t);
-            table.Insert(id, td, name, t);
-            var success = txnManager.Commit(t);
-            txnManager.Terminate();
+            bool success = table.Insert(id, td, name, t);
+            Assert.IsFalse(success, "Inserting existing key should fail");
         }
 
         [TestMethod]
@@ -341,13 +340,14 @@ namespace DB
 
             TransactionContext t2 = txnManager.Begin();
             byte[] val2 = BitConverter.GetBytes(5);
-            table.Insert(id1, td, val2, t2);
+            bool insertSuccess = table.Insert(id1, td, val2, t2);
 
             txnManager.active.Add(t); // manually "commit" t and ensure it is still ongoing
             var success2 = txnManager.Commit(t2);
 
             txnManager.Terminate();
             CollectionAssert.AreEqual(res1.ToArray(), val1);
+            Assert.IsTrue(insertSuccess, "Insert should succeed");
             Assert.IsFalse(success2, "Transaction 2 should abort");
         }
 

@@ -141,17 +141,17 @@ public unsafe class Table : IDisposable{
     /// <param name="value"></param>
     /// <param name="ctx"></param>
     /// <exception cref="ArgumentException">Key already exists</exception>
-    /// <returns></returns>
-    public void Insert(PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+    /// <returns>whether insert succeeded</returns>
+    public bool Insert(PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         PrintDebug($"Inserting {id}", ctx);
         if (this.data.ContainsKey(id)){
-            throw new ArgumentException($"Key {id} already exists in this table"); // TODO ensure this aborts transaction
+            return false;
         }
         Validate(tupleDescs, value, true);
 
         ctx.AddWriteSet(id, tupleDescs, value);
 
-        return;
+        return true;
     }
 
     public void Update(PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
