@@ -49,7 +49,7 @@ public abstract class TableBenchmark
     protected internal byte[][] values;
     protected internal BitArray isWrite;
     // TODO: in the future support multiple tables, make this list
-    protected internal TupleDesc[] td; // TODO: this is the same as schema
+    protected internal TupleDesc[] td; // TODO: remove, this is the same as schema 
     protected internal Thread[] workers;
     protected internal BenchmarkStatistics? stats;
     protected internal IWriteAheadLog? wal;
@@ -173,7 +173,7 @@ public abstract class TableBenchmark
     //     }
     // }
 
-    virtual protected internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
+    protected internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
         for (int thread = 0; thread < cfg.threadCount; thread++) {

@@ -3,6 +3,7 @@ using System.Runtime.Serialization.Formatters.Binary;
 using System.Security.Cryptography.Xml;
 using System.Text;
 using DB;
+using Microsoft.AspNetCore.Http.HttpResults;
 using SharpNeat.Utility;
 
 public struct TpccConfig {
@@ -176,6 +177,16 @@ public class TpccBenchmark : TableBenchmark {
 
     private static byte[] ORIGINAL = Encoding.ASCII.GetBytes("ORIGINAL");
     private static string ItemDataFilename = "itemData.bin";
+    private static string StockDataFilename = "stockData.bin";
+    private static string WarehouseDataFilename = "warehouseData.bin";
+    private static string DistrictDataFilename = "districtData.bin";
+    private static string CustomerDataFilename = "customerData.bin";
+    private static string HistoryDataFilename = "historyData.bin";
+    private static string NewOrderDataFilename = "newOrderData.bin";
+    private static string OrderDataFilename = "orderData.bin";
+    private static string OrderLineDataFilename = "orderLineData.bin";
+    private int[][] ol_cnts;
+    private long[][] entry_ds;
 
     public int PartitionId;
     private TpccConfig tpcCfg;
@@ -189,6 +200,14 @@ public class TpccBenchmark : TableBenchmark {
         this.tpcCfg = tpcCfg;
         this.tables = tables;
         this.txnManager = txnManager;
+        this.ol_cnts = new int[tpcCfg.NumDistrict][];
+        for (int i = 0; i < tpcCfg.NumDistrict; i++){
+            ol_cnts[i] = new int[tpcCfg.NumOrder];
+        }
+        this.entry_ds = new long[tpcCfg.NumDistrict][];
+        for (int i = 0; i < tpcCfg.NumDistrict; i++){
+            entry_ds[i] = new long[tpcCfg.NumOrder];
+        }
 
         int numNewOrders = GenerateQueryData(PartitionId, "");
 
@@ -502,6 +521,7 @@ public class TpccBenchmark : TableBenchmark {
         return abortCount;
     }
 
+    // TODO: better DRY 
     protected internal int WorkloadMultiThreadedTransactions(ShardedTransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
@@ -519,43 +539,118 @@ public class TpccBenchmark : TableBenchmark {
         return totalAborts;
     }
 
+    override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
+        int abortCount = 0;
+        int perThreadDataCount = keys.Count() / cfg.threadCount;
+        // have the last thread handle the remaining data
+        if (thread_idx == cfg.threadCount - 1) perThreadDataCount += keys.Count() % cfg.threadCount;
+        for (int i = 0; i < perThreadDataCount; i += cfg.perTransactionCount){
+            TransactionContext ctx = txnManager.Begin();
+            for (int j = 0; j < cfg.perTransactionCount; j++) {
+                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                if (loc >= keys.Count()) break;
+                bool insertSuccess = table.Insert(keys[loc], table.GetSchema(), values[loc], ctx);
+                if (!insertSuccess) throw new Exception($"Failed to insert record for table {table.GetId()}");
+            }
+            var success = txnManager.Commit(ctx);
+            if (!success){
+                abortCount++;
+            }
+        }
+        return abortCount;
+    }
     public void PopulateTable(TableType tableType, ShardedTable table, int partitionId){
         
         int w_id = partitionId + 1;
+        Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
+            {TableType.Warehouse, WarehouseDataFilename},
+            {TableType.District, DistrictDataFilename},
+            {TableType.Customer, CustomerDataFilename},
+            {TableType.Item, ItemDataFilename},
+            {TableType.Stock, StockDataFilename},
+            {TableType.Order, OrderDataFilename},
+            {TableType.NewOrder, NewOrderDataFilename},
+            {TableType.OrderLine, OrderLineDataFilename},
+            {TableType.History, HistoryDataFilename}
+        };
+
         Console.WriteLine($"Start with populating {tableType}");
         switch (tableType) 
         {
             case TableType.Warehouse:
                 PopulateWarehouseTable(tables[(int)tableType], txnManager, w_id);
                 break;
-            case TableType.District:
-                PopulateDistrictTable(tables[(int)tableType], txnManager, w_id);
-                break;
             case TableType.Customer:
                 PopulateCustomerTable(tables[(int)tableType], txnManager, w_id);
                 break;
-            case TableType.History:
-                PopulateHistoryTable(tables[(int)tableType], txnManager, w_id);
-                break;
-            case TableType.NewOrder:
-                PopulateNewOrderTable(tables[(int)tableType], txnManager, w_id);
-                break;
-            case TableType.Order:
-                PopulateOrderTable(tables[(int)tableType], txnManager, w_id);
-                break;
-            case TableType.OrderLine:
-                PopulateOrderLineTable(tables[(int)tableType], txnManager, w_id);
-                break;
             case TableType.Item:
-                PopulateItemTable(tables[(int)tableType], txnManager, w_id, ItemDataFilename);
+                PopulateItemTable(tables[(int)tableType], txnManager, w_id);
                 break;
+            case TableType.District:
+            case TableType.History:
+            case TableType.NewOrder:
+            case TableType.Order:
+            case TableType.OrderLine:
             case TableType.Stock:
-                PopulateStockTable(tables[(int)tableType], txnManager, w_id);
+                PopulateTable(tables[(int)tableType], txnManager, tableDataFiles[tableType]);
                 break;
             default:
                 throw new ArgumentException("Invalid table type");
         }
         Console.WriteLine($"Done with populating {tableType}");
+    }
+    public void PopulateTable(ShardedTable table, ShardedTransactionManager txnManager, string filename){
+        LoadData(table, filename);
+        InsertMultiThreadedTransactions(table, txnManager);
+    }
+    public void PopulateItemTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
+        using (var reader = new BinaryReader(File.Open(ItemDataFilename, FileMode.Open))) {
+            int numItems = reader.ReadInt32();
+            values = new byte[numItems][];
+            keys = new PrimaryKey[numItems];
+            for (int i = 0; i < numItems; i++)
+            {
+                int pkLen = reader.ReadInt32();
+                byte[] pkBytes = reader.ReadBytes(pkLen);
+                byte[] data = reader.ReadBytes(table.rowSize);
+                PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
+
+                keys[i] = new PrimaryKey(pk.Table, w_id, pk.Keys[0]);
+                values[i] = data;
+            }
+        }
+        InsertMultiThreadedTransactions(table, txnManager);
+    }
+    public void PopulateCustomerTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
+        using (var reader = new BinaryReader(File.Open(CustomerDataFilename + $"_{w_id}", FileMode.Open))) {
+            int numEntries = reader.ReadInt32();
+            keys = new PrimaryKey[numEntries];
+            values = new byte[numEntries][];
+
+            for (int i = 0; i < numEntries; i++)
+            {
+                int keyLen = reader.ReadInt32();
+                byte[] pkBytes = reader.ReadBytes(keyLen);
+                PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
+                byte[] data = reader.ReadBytes(table.rowSize);
+                
+                keys[i] = pk;
+                values[i] = data;
+            }
+            
+            ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
+            int secondaryIndexCount = reader.ReadInt32();
+            for (int i = 0; i < secondaryIndexCount; i++)
+            {
+                int keyLen = reader.ReadInt32();
+                byte[] key = reader.ReadBytes(keyLen);
+                int pkLen = reader.ReadInt32();
+                byte[] pk = reader.ReadBytes(pkLen);
+                secondaryIndex[key] = PrimaryKey.FromBytes(pk);           
+            }
+            table.SetSecondaryIndex(secondaryIndex, TpccSchema.customerBuildTempPk);
+        }
+        InsertMultiThreadedTransactions(table, txnManager);
     }
     public void PopulateWarehouseTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
         TransactionContext ctx = txnManager.Begin();
@@ -584,220 +679,284 @@ public class TpccBenchmark : TableBenchmark {
         // PK: W_ID
         txnManager.Commit(ctx);
     }
-    public void PopulateDistrictTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        TransactionContext ctx = txnManager.Begin();
-        for (int i = 1; i <= tpcCfg.NumDistrict; i++)
-        {
-            byte[] data = new byte[table.rowSize];
-            Span<byte> span = new Span<byte>(data);
-            
-            int offset = 0;
-            RandomByteString(6, 10).CopyTo(span.Slice(offset)); // D_NAME
-            offset += 10;
-            RandomByteString(10, 20).CopyTo(span.Slice(offset)); // D_STREET_1
-            offset += 20;
-            RandomByteString(10, 20).CopyTo(span.Slice(offset)); // D_STREET_2
-            offset += 20;
-            RandomByteString(10, 20).CopyTo(span.Slice(offset)); // D_CITY
-            offset += 20;
-            RandomByteString(2, 2).CopyTo(span.Slice(offset)); // D_STATE
-            offset += 2;
-            RandZip().CopyTo(span.Slice(offset)); // D_ZIP
-            offset += 9;
-            RandFloat(0, 2000, 10000).CopyTo(span.Slice(offset)); // D_TAX
-            offset += 4;
-            BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
-            offset += 4;
-            BitConverter.GetBytes(tpcCfg.NumOrder + 1).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
-            bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
-            if (!success) throw new Exception("Failed to insert district");
 
-            // PK: D_W_ID, D_ID
+    private void LoadData(Table table, string filename){
+        using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
+            int numItems = reader.ReadInt32();
+            keys = new PrimaryKey[numItems];
+            values = new byte[numItems][];
+            for (int i = 0; i < numItems; i++)
+            {
+                int pkLen = reader.ReadInt32();
+                byte[] pkBytes = reader.ReadBytes(pkLen);
+                byte[] data = reader.ReadBytes(table.rowSize);
+                PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
+
+                keys[i] = pk;
+                values[i] = data;
+            }
         }
-        txnManager.Commit(ctx);
     }
-    public void PopulateCustomerTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
+    public void GenerateDistrictData(int w_id){
+        using (var writer = new BinaryWriter(File.Open(DistrictDataFilename + $"_{w_id}", FileMode.Create))) {
+            writer.Write(tpcCfg.NumDistrict);
+            for (int i = 1; i <= tpcCfg.NumDistrict; i++)
+            {
+                byte[] data = new byte[tables[(int)TableType.District].rowSize];
+                Span<byte> span = new Span<byte>(data);
+                
+                int offset = 0;
+                RandomByteString(6, 10).CopyTo(span.Slice(offset)); // D_NAME
+                offset += 10;
+                RandomByteString(10, 20).CopyTo(span.Slice(offset)); // D_STREET_1
+                offset += 20;
+                RandomByteString(10, 20).CopyTo(span.Slice(offset)); // D_STREET_2
+                offset += 20;
+                RandomByteString(10, 20).CopyTo(span.Slice(offset)); // D_CITY
+                offset += 20;
+                RandomByteString(2, 2).CopyTo(span.Slice(offset)); // D_STATE
+                offset += 2;
+                RandZip().CopyTo(span.Slice(offset)); // D_ZIP
+                offset += 9;
+                RandFloat(0, 2000, 10000).CopyTo(span.Slice(offset)); // D_TAX
+                offset += 4;
+                BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
+                offset += 4;
+                BitConverter.GetBytes(tpcCfg.NumOrder + 1).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
+                PrimaryKey pk = new PrimaryKey((int)TableType.District, w_id, i);
+                // PK: D_W_ID, D_ID
+
+                byte[] pkBytes = pk.ToBytes();
+                writer.Write(pkBytes.Length);
+                writer.Write(pkBytes);
+                writer.Write(data);
+            }
+        }
+    }
+    public void GenerateCustomerData(int w_id){
         ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
-        for (int i = 1; i <= tpcCfg.NumDistrict; i++)
-        {
-            TransactionContext ctx = txnManager.Begin();
-            for (int j = 1; j <= tpcCfg.NumCustomer; j++)
+        using (var writer = new BinaryWriter(File.Open(CustomerDataFilename + $"_{w_id}", FileMode.Create))) {
+            writer.Write(tpcCfg.NumDistrict * tpcCfg.NumCustomer);
+            for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
-                byte[] data = new byte[table.rowSize];
-                Span<byte> span = new Span<byte>(data);
-                
-                int offset = 0;
-                RandomByteString(8, 16).CopyTo(span.Slice(offset)); // C_FIRST
-                offset += 16;
-                new byte[]{(byte)'O', (byte)'E'}.CopyTo(span.Slice(offset)); // C_MIDDLE
-                offset += 2;
-                byte[] lastName = Encoding.ASCII.GetBytes(RandLastName(j <= 1000 ? j - 1 : NonUniformRandom(255, 0, 999)));
-                lastName.CopyTo(span.Slice(offset)); // C_LAST
-                offset += 16;
-                RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_1
-                offset += 20;
-                RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_2
-                offset += 20;
-                RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_CITY
-                offset += 20;
-                RandomByteString(2, 2).CopyTo(span.Slice(offset)); // C_STATE
-                offset += 2;
-                RandZip().CopyTo(span.Slice(offset)); // C_ZIP
-                offset += 9;
-                RandomByteString(16, 16).CopyTo(span.Slice(offset)); // C_PHONE
-                offset += 16;
-                BitConverter.GetBytes(DateTime.Now.ToBinary()).CopyTo(span.Slice(offset)); // C_SINCE
-                offset += 8;
-                new byte[]{(byte)(Frnd.Next(0, 10) == 1 ? 'B' : 'G'), (byte)'C'}.CopyTo(span.Slice(offset)); // C_CREDIT
-                offset += 2;
-                BitConverter.GetBytes(50000).CopyTo(span.Slice(offset)); // C_CREDIT_LIM
-                offset += 4;
-                RandFloat(0, 5000, 10000).CopyTo(span.Slice(offset)); // C_DISCOUNT
-                offset += 4;
-                BitConverter.GetBytes(-10).CopyTo(span.Slice(offset)); // C_BALANCE
-                offset += 4;
-                BitConverter.GetBytes(10).CopyTo(span.Slice(offset)); // C_YTD_PAYMENT
-                offset += 4;
-                BitConverter.GetBytes(1).CopyTo(span.Slice(offset)); // C_PAYMENT_CNT
-                offset += 4;
-                BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // C_DELIVERY_CNT
-                offset += 4;
-                RandomByteString(300, 500).CopyTo(span.Slice(offset)); // C_DATA
-                PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j);
-                bool success = table.Insert(pk, table.GetSchema(), data, ctx);
-                if (!success) throw new Exception("Failed to insert customer");
-                // PK: C_W_ID, C_D_ID, C_ID
+                for (int j = 1; j <= tpcCfg.NumCustomer; j++)
+                {
+                    Table table = tables[(int)TableType.Customer];
+                    byte[] data = new byte[table.rowSize];
+                    Span<byte> span = new Span<byte>(data);
+                    
+                    int offset = 0;
+                    RandomByteString(8, 16).CopyTo(span.Slice(offset)); // C_FIRST
+                    offset += 16;
+                    new byte[]{(byte)'O', (byte)'E'}.CopyTo(span.Slice(offset)); // C_MIDDLE
+                    offset += 2;
+                    byte[] lastName = Encoding.ASCII.GetBytes(RandLastName(j <= 1000 ? j - 1 : NonUniformRandom(255, 0, 999)));
+                    lastName.CopyTo(span.Slice(offset)); // C_LAST
+                    offset += 16;
+                    RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_1
+                    offset += 20;
+                    RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_2
+                    offset += 20;
+                    RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_CITY
+                    offset += 20;
+                    RandomByteString(2, 2).CopyTo(span.Slice(offset)); // C_STATE
+                    offset += 2;
+                    RandZip().CopyTo(span.Slice(offset)); // C_ZIP
+                    offset += 9;
+                    RandomByteString(16, 16).CopyTo(span.Slice(offset)); // C_PHONE
+                    offset += 16;
+                    BitConverter.GetBytes(DateTime.Now.ToBinary()).CopyTo(span.Slice(offset)); // C_SINCE
+                    offset += 8;
+                    new byte[]{(byte)(Frnd.Next(0, 10) == 1 ? 'B' : 'G'), (byte)'C'}.CopyTo(span.Slice(offset)); // C_CREDIT
+                    offset += 2;
+                    BitConverter.GetBytes(50000).CopyTo(span.Slice(offset)); // C_CREDIT_LIM
+                    offset += 4;
+                    RandFloat(0, 5000, 10000).CopyTo(span.Slice(offset)); // C_DISCOUNT
+                    offset += 4;
+                    BitConverter.GetBytes(-10).CopyTo(span.Slice(offset)); // C_BALANCE
+                    offset += 4;
+                    BitConverter.GetBytes(10).CopyTo(span.Slice(offset)); // C_YTD_PAYMENT
+                    offset += 4;
+                    BitConverter.GetBytes(1).CopyTo(span.Slice(offset)); // C_PAYMENT_CNT
+                    offset += 4;
+                    BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // C_DELIVERY_CNT
+                    offset += 4;
+                    RandomByteString(300, 500).CopyTo(span.Slice(offset)); // C_DATA
+                    PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j);
+                    // PK: C_W_ID, C_D_ID, C_ID
+                    byte[] pkBytes = pk.ToBytes();
+                    writer.Write(pkBytes.Length);
+                    writer.Write(pkBytes);
+                    writer.Write(data);
 
-                byte[] key = BitConverter.GetBytes(w_id).Concat(BitConverter.GetBytes(i)).Concat(lastName).ToArray();
-                if (!groupByAttr.ContainsKey(key)){
-                    groupByAttr[key] = new List<(PrimaryKey, byte[])>();
+                    byte[] key = BitConverter.GetBytes(w_id).Concat(BitConverter.GetBytes(i)).Concat(lastName).ToArray();
+                    if (!groupByAttr.ContainsKey(key)){
+                        groupByAttr[key] = new List<(PrimaryKey, byte[])>();
+                    }
+                    groupByAttr[key].Add((pk, data));
+                    
+
                 }
-                groupByAttr[key].Add((pk, data));
-                
 
+                foreach (var entry in groupByAttr){
+                    List<(PrimaryKey, byte[])> sameLastNames = entry.Value;
+                    // sort by C_FIRST
+                    sameLastNames.Sort((a, b) => {
+                        return Util.CompareArrays(a.Item2[0..16], b.Item2[0..16]);
+                    });
+
+                    secondaryIndex[entry.Key] = sameLastNames[(sameLastNames.Count - 1) / 2].Item1;
+                }
             }
-            txnManager.Commit(ctx);
 
-            foreach (var entry in groupByAttr){
-                List<(PrimaryKey, byte[])> sameLastNames = entry.Value;
-                // sort by C_FIRST
-                sameLastNames.Sort((a, b) => {
-                    return Util.CompareArrays(a.Item2[0..16], b.Item2[0..16]);
-                });
-
-                secondaryIndex[entry.Key] = sameLastNames[(sameLastNames.Count - 1) / 2].Item1;
+            // write secondary index to file
+            writer.Write(secondaryIndex.Count);
+            foreach (var entry in secondaryIndex){
+                byte[] key = entry.Key;
+                byte[] pk = entry.Value.ToBytes();
+                writer.Write(key.Length);
+                writer.Write(key);
+                writer.Write(pk.Length);
+                writer.Write(pk);
             }
         }
-        table.SetSecondaryIndex(secondaryIndex, TpccSchema.customerBuildTempPk);
     }
-    public void PopulateHistoryTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        TransactionContext ctx = txnManager.Begin();
-        for (int i = 1; i <= tpcCfg.NumDistrict; i++)
-        {
-            for (int j = 1; j <= tpcCfg.NumCustomer; j++)
+    public void GenerateHistoryData(int w_id){
+        Table table = tables[(int)TableType.History];
+        using (var writer = new BinaryWriter(File.Open(HistoryDataFilename + $"_{w_id}", FileMode.Create))) {
+            writer.Write(tpcCfg.NumDistrict * tpcCfg.NumCustomer);
+            for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
-                byte[] data = new byte[table.rowSize];
-                Span<byte> span = new Span<byte>(data);
-                
-                int offset = 0;
-                BitConverter.GetBytes(10).CopyTo(span.Slice(offset)); // H_AMOUNT
-                offset += 4;
-                RandomByteString(12, 24).CopyTo(span.Slice(offset)); // H_DATA
-                bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, w_id, i, j, DateTime.Now.ToBinary()), table.GetSchema(), data, ctx);
-                if (!success) throw new Exception("Failed to insert history");
-                // PK: H_W_ID, H_D_ID, H_C_W_ID, H_C_D_ID, H_C_ID, H_DATE
-            }
-        }
-        txnManager.Commit(ctx);
-    }
-    public void PopulateNewOrderTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        TransactionContext ctx = txnManager.Begin();
-        for (int i = 1; i <= tpcCfg.NumDistrict; i++)
-        {
-            for (int j = 2101; j <= tpcCfg.NumOrder; j++)
-            {
-                byte[] data = new byte[table.rowSize];
-                bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
-                if (!success) throw new Exception("Failed to insert new order");
-                // PK: NO_W_ID, NO_D_ID, NO_O_ID
-            }
-        }
-        txnManager.Commit(ctx);
-    }
-    public void PopulateOrderTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        TransactionContext ctx = txnManager.Begin();
-        int[] cids = new int[tpcCfg.NumOrder];
-        for (int i = 1; i <= tpcCfg.NumOrder; i++) {
-            cids[i-1] = i;
-        }
-        
-        for (int i = 1; i <= tpcCfg.NumDistrict; i++)
-        {
-            Util.Shuffle(Frnd, cids);
-            for (int j = 1; j <= tpcCfg.NumOrder; j++)
-            {
-                byte[] data = new byte[table.rowSize];
-                Span<byte> span = new Span<byte>(data);
-                
-                int offset = 0;
-                BitConverter.GetBytes(cids[j-1]).CopyTo(span.Slice(offset)); // O_C_ID
-                offset += 4;
-                BitConverter.GetBytes(DateTime.Now.ToBinary()).CopyTo(span.Slice(offset)); // O_ENTRY_D
-                offset += 8;
-                BitConverter.GetBytes(j < 2101 ? Frnd.Next(1,10) : 0).CopyTo(span.Slice(offset)); // O_CARRIER_ID
-                offset += 4;
-                BitConverter.GetBytes(Frnd.Next(5,15)).CopyTo(span.Slice(offset)); // O_OL_CNT
-                offset += 4;
-                BitConverter.GetBytes(true).CopyTo(span.Slice(offset)); // O_ALL_LOCAL
-                bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, j), table.GetSchema(), data, ctx);
-                if (!success) throw new Exception("Failed to insert order");
-                // PK: O_W_ID, O_D_ID, O_ID
-            }
-        }
-        txnManager.Commit(ctx);
-    }
-
-    public void PopulateOrderLineTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        TransactionContext ctx = txnManager.Begin();
-        for (int i = 1; i <= tpcCfg.NumDistrict; i++)
-        {
-            for (int j = 1; j <= tpcCfg.NumOrder; j++)
-            {
-                PrimaryKey pk = new PrimaryKey((int)TableType.Order, w_id, i, j);
-                byte[] val = tables[(int)TableType.Order].Read(pk, tables[(int)TableType.Order].GetSchema(), ctx).ToArray();
-                int olCnt = BitConverter.ToInt32(ExtractField(TableType.Order, TableField.O_OL_CNT, val));
-                DateTime oEntryD = DateTime.FromBinary(BitConverter.ToInt64(val, 4));
-
-                for (int k = 1; k <= olCnt; k++)
+                for (int j = 1; j <= tpcCfg.NumCustomer; j++)
                 {
                     byte[] data = new byte[table.rowSize];
                     Span<byte> span = new Span<byte>(data);
                     
                     int offset = 0;
-                    BitConverter.GetBytes(Frnd.Next(1,100000)).CopyTo(span.Slice(offset)); // OL_I_ID
+                    BitConverter.GetBytes(10).CopyTo(span.Slice(offset)); // H_AMOUNT
                     offset += 4;
-                    BitConverter.GetBytes(w_id).CopyTo(span.Slice(offset)); // OL_SUPPLY_W_ID
-                    offset += 4;
-                    BitConverter.GetBytes(j < 2101 ? oEntryD.ToBinary() : 0).CopyTo(span.Slice(offset)); // OL_DELIVERY_D
-                    offset += 8;
-                    BitConverter.GetBytes(5).CopyTo(span.Slice(offset)); // OL_QUANTITY
-                    offset += 4;
-                    BitConverter.GetBytes(j < 2101 ? 0 : Frnd.Next(1, 999999) / 100f).CopyTo(span.Slice(offset)); // OL_AMOUNT
-                    offset += 4;
-                    RandomByteString(24, 24).CopyTo(span.Slice(offset)); // OL_DIST_INFO
-                    bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i, j, k), table.GetSchema(), data, ctx);
-                    if (!success) throw new Exception("Failed to insert order line");
-                    // PK: OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER
+                    RandomByteString(12, 24).CopyTo(span.Slice(offset)); // H_DATA
+                    PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, w_id, i, j, DateTime.Now.ToBinary());
+                    // PK: H_W_ID, H_D_ID, H_C_W_ID, H_C_D_ID, H_C_ID, H_DATE
+
+                    byte[] pkBytes = pk.ToBytes();
+                    writer.Write(pkBytes.Length);
+                    writer.Write(pkBytes);
+                    writer.Write(data);
                 }
             }
         }
-        txnManager.Commit(ctx);
+    }
+    public void GenerateNewOrderTable(int w_id){
+        Table table = tables[(int)TableType.NewOrder];
+        using (var writer = new BinaryWriter(File.Open(NewOrderDataFilename + $"_{w_id}", FileMode.Create))) {
+            writer.Write(tpcCfg.NumDistrict * tpcCfg.NumOrder);
+            for (int i = 1; i <= tpcCfg.NumDistrict; i++)
+            {
+                for (int j = 2101; j <= tpcCfg.NumOrder; j++)
+                {
+                    byte[] data = new byte[table.rowSize];
+                    PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j);
+                    // PK: NO_W_ID, NO_D_ID, NO_O_ID
+                    byte[] pkBytes = pk.ToBytes();
+                    writer.Write(pkBytes.Length);
+                    writer.Write(pkBytes);
+                    writer.Write(data);
+                }
+            }
+        }
+    }
+    public void GenerateOrderData(int w_id){
+        int[] cids = new int[tpcCfg.NumOrder];
+        for (int i = 1; i <= tpcCfg.NumOrder; i++) {
+            cids[i-1] = i;
+        }
+        
+        Table table = tables[(int)TableType.Order];
+        using (var writer = new BinaryWriter(File.Open(OrderDataFilename + $"_{w_id}", FileMode.Create))) {
+            writer.Write(tpcCfg.NumDistrict * tpcCfg.NumOrder);
+            for (int i = 1; i <= tpcCfg.NumDistrict; i++)
+            {
+                Util.Shuffle(Frnd, cids);
+                for (int j = 1; j <= tpcCfg.NumOrder; j++)
+                {
+                    byte[] data = new byte[table.rowSize];
+                    Span<byte> span = new Span<byte>(data);
+                    
+                    int offset = 0;
+                    BitConverter.GetBytes(cids[j-1]).CopyTo(span.Slice(offset)); // O_C_ID
+                    offset += 4;
+                    BitConverter.GetBytes(DateTime.Now.ToBinary()).CopyTo(span.Slice(offset)); // O_ENTRY_D
+                    offset += 8;
+                    BitConverter.GetBytes(j < 2101 ? Frnd.Next(1,10) : 0).CopyTo(span.Slice(offset)); // O_CARRIER_ID
+                    offset += 4;
+                    int ol_cnt = Frnd.Next(5,15);
+                    ol_cnts[i][j] = ol_cnt;
+                    BitConverter.GetBytes(ol_cnt).CopyTo(span.Slice(offset)); // O_OL_CNT
+                    offset += 4;
+                    BitConverter.GetBytes(true).CopyTo(span.Slice(offset)); // O_ALL_LOCAL
+                    PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j);
+                    // PK: O_W_ID, O_D_ID, O_ID
+
+                    byte[] pkBytes = pk.ToBytes();
+                    writer.Write(pkBytes.Length);
+                    writer.Write(pkBytes);
+                    writer.Write(data);
+                }
+            }
+        }
+    }
+
+    // assumes that order data has been generated
+    public void GenerateOrderLineData(int w_id){
+        Table table = tables[(int)TableType.OrderLine];
+        using (var writer = new BinaryWriter(File.Open(OrderLineDataFilename + $"_{w_id}", FileMode.Create))) {
+            int count = ol_cnts.Sum(x => x.Sum(y => y));
+            writer.Write(count);
+
+            for (int i = 1; i <= tpcCfg.NumDistrict; i++)
+            {
+                for (int j = 1; j <= tpcCfg.NumOrder; j++)
+                {
+                    int olCnt = ol_cnts[i][j];
+                    long oEntryD = entry_ds[i][j];
+
+                    for (int k = 1; k <= olCnt; k++)
+                    {
+                        byte[] data = new byte[table.rowSize];
+                        Span<byte> span = new Span<byte>(data);
+                        
+                        int offset = 0;
+                        BitConverter.GetBytes(Frnd.Next(1,100000)).CopyTo(span.Slice(offset)); // OL_I_ID
+                        offset += 4;
+                        BitConverter.GetBytes(w_id).CopyTo(span.Slice(offset)); // OL_SUPPLY_W_ID
+                        offset += 4;
+                        BitConverter.GetBytes(j < 2101 ? oEntryD : 0).CopyTo(span.Slice(offset)); // OL_DELIVERY_D
+                        offset += 8;
+                        BitConverter.GetBytes(5).CopyTo(span.Slice(offset)); // OL_QUANTITY
+                        offset += 4;
+                        BitConverter.GetBytes(j < 2101 ? 0 : Frnd.Next(1, 999999) / 100f).CopyTo(span.Slice(offset)); // OL_AMOUNT
+                        offset += 4;
+                        RandomByteString(24, 24).CopyTo(span.Slice(offset)); // OL_DIST_INFO
+
+                        PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i, j, k);
+                        // PK: OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER
+
+                        byte[] pkBytes = pk.ToBytes();
+                        writer.Write(pkBytes.Length);
+                        writer.Write(pkBytes);
+                        writer.Write(data);
+                    }
+                }
+            }
+        }
     }
 
     private void GenerateItemData(ShardedTable table, string filename){
         using (var writer = new BinaryWriter(File.Open(filename, FileMode.Create))) {
+            writer.Write(tpcCfg.NumItem);
             for (int i = 1; i <= tpcCfg.NumItem; i++)
             {
                 byte[] data = new byte[table.rowSize];
@@ -830,72 +989,62 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
 
-    public void PopulateItemTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id, string filename){
-        TransactionContext ctx = txnManager.Begin();
-        using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
-            for (int i = 1; i <= tpcCfg.NumItem; i++)
+    public void GenerateStockData(int w_id) {
+        Table table = tables[(int)TableType.Stock];
+        using (var writer = new BinaryWriter(File.Open(StockDataFilename + $"_{w_id}", FileMode.Create))) {
+            writer.Write(tpcCfg.NumStock);
+            for (int i = 1; i <= tpcCfg.NumStock; i++)
             {
-                int pkLen = reader.ReadInt32();
-                byte[] pkBytes = reader.ReadBytes(pkLen);
-                byte[] data = reader.ReadBytes(table.rowSize);
-                PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
-                bool success = table.Insert(new PrimaryKey(pk.Table, w_id, pk.Keys[0]), table.GetSchema(), data, ctx);
-                if (!success) throw new Exception("Failed to insert item");
-            }
-        }
-        txnManager.Commit(ctx);
-    }
-    public void PopulateStockTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id) {
-        TransactionContext ctx = txnManager.Begin();
-        for (int i = 1; i <= tpcCfg.NumStock; i++)
-        {
-
-            byte[] data = new byte[table.rowSize];
-            Span<byte> span = new Span<byte>(data);
-            
-            int offset = 0;
-            BitConverter.GetBytes(Frnd.Next(10,100)).CopyTo(span.Slice(offset)); // S_QUANTITY
-            offset += 4;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_01
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_02
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_03
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_04
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_05
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_06
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_07
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_08
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_09
-            offset += 24;
-            RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_10
-            offset += 24;
-            BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // S_YTD
-            offset += 4;
-            BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // S_ORDER_CNT
-            offset += 4;
-            BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // S_REMOTE_CNT
-            offset += 4;
-            byte[] s_data = RandomByteString(26, 50);
-            int strLen = Encoding.ASCII.GetString(s_data).IndexOf(' ');
-            if (Frnd.Next(1,10) == 1) {
-                int start = Frnd.Next(0, strLen - ORIGINAL.Length);
-                for (int j = 0; j < ORIGINAL.Length; j++) {
-                    s_data[start + j] = ORIGINAL[j];
+                byte[] data = new byte[table.rowSize];
+                Span<byte> span = new Span<byte>(data);
+                
+                int offset = 0;
+                BitConverter.GetBytes(Frnd.Next(10,100)).CopyTo(span.Slice(offset)); // S_QUANTITY
+                offset += 4;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_01
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_02
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_03
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_04
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_05
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_06
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_07
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_08
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_09
+                offset += 24;
+                RandomByteString(24, 24).CopyTo(span.Slice(offset)); // S_DIST_10
+                offset += 24;
+                BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // S_YTD
+                offset += 4;
+                BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // S_ORDER_CNT
+                offset += 4;
+                BitConverter.GetBytes(0).CopyTo(span.Slice(offset)); // S_REMOTE_CNT
+                offset += 4;
+                byte[] s_data = RandomByteString(26, 50);
+                int strLen = Encoding.ASCII.GetString(s_data).IndexOf(' ');
+                if (Frnd.Next(1,10) == 1) {
+                    int start = Frnd.Next(0, strLen - ORIGINAL.Length);
+                    for (int j = 0; j < ORIGINAL.Length; j++) {
+                        s_data[start + j] = ORIGINAL[j];
+                    }
                 }
+                s_data.CopyTo(span.Slice(offset)); // S_DATA
+                PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i);
+                // PK: S_W_ID, S_I_ID
+
+                byte[] pkBytes = pk.ToBytes();
+                writer.Write(pkBytes.Length);
+                writer.Write(pkBytes);
+                writer.Write(data);
             }
-            s_data.CopyTo(span.Slice(offset)); // S_DATA
-            bool success = table.Insert(new PrimaryKey(table.GetId(), w_id, i), table.GetSchema(), data, ctx);
-            if (!success) throw new Exception("Failed to insert stock");
-            // PK: S_W_ID, S_I_ID
         }
-        txnManager.Commit(ctx);
     }
 
     private void PrintByteArray(byte[] arr){
