@@ -334,7 +334,7 @@ public class TpccBenchmark : TableBenchmark {
         return (data.Concat(value).ToArray(), tds.Append(new TupleDesc((int)field, size, offset)).ToArray());
     }
 
-    public void NewOrder(NewOrderQuery query){
+    public bool NewOrder(NewOrderQuery query){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -346,7 +346,10 @@ public class TpccBenchmark : TableBenchmark {
         bool allLocal = true;
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
-            if (query.ol_i_ids[i] == 0) txnManager.Abort(ctx);
+            if (query.ol_i_ids[i] == 0) {
+                txnManager.Abort(ctx);
+                return false;
+            }
             itemRows[i] = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, query.ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx).ToArray();
             stockRows[i] = tables[(int)TableType.Stock].Read(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), tables[(int)TableType.Stock].GetSchema(), ctx).ToArray();
             if (query.ol_supply_w_id[i] != query.w_id) allLocal = false;
@@ -369,10 +372,15 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.Order, TableField.O_OL_CNT, insertOrderData, BitConverter.GetBytes(query.o_ol_cnt));
         SetField(TableType.Order, TableField.O_ALL_LOCAL, insertOrderData, BitConverter.GetBytes(allLocal));
         bool success = tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
-        if (!success) txnManager.Abort(ctx);
+        if (!success) {
+            txnManager.Abort(ctx);
+            return false;
+        }
         success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), new byte[0], ctx);
-        if (!success) txnManager.Abort(ctx);
-
+        if (!success) {
+            txnManager.Abort(ctx);
+            return false;
+        }
         float total_amount = 0;
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
@@ -406,18 +414,20 @@ public class TpccBenchmark : TableBenchmark {
             string distInfo = Encoding.ASCII.GetString(ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRows[i]));
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, Encoding.ASCII.GetBytes(distInfo));
             success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
-            if (!success) txnManager.Abort(ctx);
-
+            if (!success) {
+                txnManager.Abort(ctx);
+                return false;
+            }
             // update total_amount
             float c_discount = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_DISCOUNT, customerRow));
             float w_tax = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_TAX, warehouseRow));
             float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
             total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
         }
-        txnManager.Commit(ctx);
+        return txnManager.Commit(ctx);
     }
 
-    public void Payment(PaymentQuery query){
+    public bool Payment(PaymentQuery query){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -474,9 +484,11 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(query.h_amount));
         SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
         bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
-        if (!success) txnManager.Abort(ctx);
-
-        txnManager.Commit(ctx);
+        if (!success) {
+            txnManager.Abort(ctx);
+            return false;
+        }
+        return txnManager.Commit(ctx);
     }
 
     override public void RunTransactions(){
@@ -495,6 +507,7 @@ public class TpccBenchmark : TableBenchmark {
             System.Console.WriteLine("done inserting");
             // var opSw = Stopwatch.StartNew();
             int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
+            Console.WriteLine($"abort count {txnAborts}");
             // opSw.Stop();
             // long opMs = opSw.ElapsedMilliseconds;
             // stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
@@ -509,13 +522,13 @@ public class TpccBenchmark : TableBenchmark {
 
     protected internal int WorkloadSingleThreadedTransactions(ShardedTransactionManager txnManager, int thread_idx, double ratio)
     {
-        int abortCount = 0; // TODO
+        int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
             if (queries[loc] is NewOrderQuery){
-                NewOrder((NewOrderQuery)queries[loc]);
+                if (!NewOrder((NewOrderQuery)queries[loc])) abortCount++;
             } else {
-                Payment((PaymentQuery)queries[loc]);
+                if (!Payment((PaymentQuery)queries[loc])) abortCount++;
             }
         }
         return abortCount;

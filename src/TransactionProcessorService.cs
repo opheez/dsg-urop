@@ -128,7 +128,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             ratio: 0.2,
             attrCount: 10,
             threadCount: 12,
-            iterationCount: 1
+            iterationCount: 1,
+            perThreadDataCount: 1000
         );
         switch (request.Workload) {
             case "ycsb":
@@ -138,12 +139,12 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 break;
             case "tpcc":
                 TpccConfig tpccConfig = new TpccConfig(
-                    numWh: 2,
-                    numCustomer: 10,
-                    numDistrict: 10,
-                    numItem: 10,
-                    numOrder: 10,
-                    numStock: 10
+                    numWh: 2
+                    // numCustomer: 10,
+                    // numDistrict: 10,
+                    // numItem: 10,
+                    // numOrder: 10,
+                    // numStock: 10
                 );
                 
                 TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
