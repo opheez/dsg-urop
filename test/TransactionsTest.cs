@@ -64,6 +64,21 @@ namespace DB
         }
 
         [TestMethod]
+        public void TestEmptyTable(){
+            (long,int)[] schema = {};
+            Table table = new Table(1, schema);
+            TransactionManager txnManager = new TransactionManager(nCommitterThreads, new Dictionary<int, Table>(){ {1, table} });
+            txnManager.Run();
+
+            TransactionContext t = txnManager.Begin();
+            TupleDesc[] td = {};
+            byte[] name = Encoding.ASCII.GetBytes("");
+            table.Insert(td, name, t);
+            var success = txnManager.Commit(t);
+            txnManager.Terminate();
+        }
+
+        [TestMethod]
         [ExpectedException(typeof(ArgumentException))]
         public void TestInsertExistingKey(){
             (long,int)[] schema = {(12345,10)};
