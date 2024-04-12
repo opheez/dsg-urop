@@ -148,7 +148,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             partitionsPerMachine: request.PartitionsPerMachine
         );
         TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccCfg, cfg, tables, txnManager);
+        txnManager.Run();
         tpccBenchmark.PopulateTables();
+        txnManager.Terminate();
         PopulateTablesReply reply = new PopulateTablesReply{ Success = true};
         return Task.FromResult(reply);
     }
@@ -171,7 +173,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             case "tpcc":
                 TpccConfig tpccConfig = new TpccConfig(
                     numWh: 2,
-                    partitionsPerMachine: 1
+                    partitionsPerMachine: 1,
+                    newOrderCrossPartitionProbability: 80,
+                    paymentCrossPartitionProbability: 80
                     // numCustomer: 10,
                     // numDistrict: 10,
                     // numItem: 10,

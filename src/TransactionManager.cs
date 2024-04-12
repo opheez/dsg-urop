@@ -63,7 +63,6 @@ public class TransactionManager {
         while (!Util.IsTerminalStatus(ctx.status)){
             Thread.Yield();
         }
-        PrintDebug("TERMINAL STATUS !!", ctx);
         if (ctx.status == TransactionStatus.Aborted){
             return false;
         } else if (ctx.status == TransactionStatus.Committed) {
@@ -188,7 +187,7 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
-        PrintDebug("Write phase done", ctx);
+        // PrintDebug("Write phase done", ctx);
     }
 
     public void Abort(TransactionContext ctx){
@@ -267,7 +266,6 @@ public class ShardedTransactionManager : TransactionManager {
         ctx.status = TransactionStatus.Pending;
         // validate own, need a map to track which has responded 
         bool valid = Validate(ctx);
-        PrintDebug($"Validate own ctx: {valid}");
 
         if (valid) {
             // split writeset into shards

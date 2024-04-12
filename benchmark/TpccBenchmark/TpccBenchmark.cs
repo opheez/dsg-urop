@@ -502,7 +502,7 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Reset();
             txnManager.Run();
 
-            rpcClient.PopulateTables(cfg, tpcCfg); // populate tables in other machines
+            new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
             PopulateTables();
             // var opSw = Stopwatch.StartNew();
             int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
@@ -610,7 +610,10 @@ public class TpccBenchmark : TableBenchmark {
         int abortCount = 0;
         int perThreadDataCount = keys.Count() / cfg.threadCount;
         // have the last thread handle the remaining data
-        if (thread_idx == cfg.threadCount - 1) perThreadDataCount += keys.Count() % cfg.threadCount;
+        if (thread_idx == cfg.threadCount - 1) {
+            if (perThreadDataCount == 0) thread_idx = 0;
+            perThreadDataCount += keys.Count() % cfg.threadCount;
+        }
         Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount}");
         for (int i = 0; i < perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext ctx = txnManager.Begin();

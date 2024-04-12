@@ -277,10 +277,8 @@ public class ShardedTable : Table {
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
             if (rpcClient.IsLocalKey(tupleId)) {
-                PrintDebug("actually reading own", ctx);
                 value = Read(tupleId);
             } else {
-                PrintDebug("actually reading rpc", ctx);
                 value = rpcClient.Read(tupleId, ctx);
             }
         }
