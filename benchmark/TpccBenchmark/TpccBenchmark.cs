@@ -540,6 +540,7 @@ public class TpccBenchmark : TableBenchmark {
         // GenerateItemData();
         for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
             int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
+            // GenerateWarehouseData(partitionId + 1);
             // GenerateCustomerData(partitionId + 1);
             // GenerateDistrictData(partitionId + 1);
             // GenerateHistoryData(partitionId + 1);
@@ -552,15 +553,13 @@ public class TpccBenchmark : TableBenchmark {
                 Console.WriteLine($"Start with populating {tableType}");
                 switch (tableType) 
                 {
-                    case TableType.Warehouse:
-                        PopulateWarehouseTable(tables[(int)tableType], txnManager, w_id);
-                        break;
                     case TableType.Customer:
                         PopulateCustomerTable(tables[(int)tableType], txnManager, w_id);
                         break;
                     case TableType.Item:
                         PopulateItemTable(tables[(int)tableType], txnManager, w_id);
                         break;
+                    case TableType.Warehouse:
                     case TableType.District:
                     case TableType.History:
                     case TableType.NewOrder:
@@ -631,33 +630,6 @@ public class TpccBenchmark : TableBenchmark {
         }
         InsertMultiThreadedTransactions(table, txnManager);
     }
-    public void PopulateWarehouseTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        TransactionContext ctx = txnManager.Begin();
-        // each partition has a single warehouse
-        byte[] data = new byte[table.rowSize];
-        Span<byte> span = new Span<byte>(data);
-        
-        int offset = 0;
-        RandomByteString(6, 10).CopyTo(span); // W_NAME
-        offset += 10;
-        RandomByteString(10, 20).CopyTo(span.Slice(offset)); // W_STREET_1
-        offset += 20;
-        RandomByteString(10, 20).CopyTo(span.Slice(offset)); // W_STREET_2
-        offset += 20;
-        RandomByteString(10, 20).CopyTo(span.Slice(offset)); // W_CITY
-        offset += 20;
-        RandomByteString(2, 2).CopyTo(span.Slice(offset)); // W_STATE
-        offset += 2;
-        RandZip().CopyTo(span.Slice(offset)); // W_ZIP
-        offset += 9;
-        BitConverter.GetBytes(0.1000f).CopyTo(span.Slice(offset)); // W_TAX
-        offset += 4;
-        BitConverter.GetBytes(3000000.00f).CopyTo(span.Slice(offset)); // W_YTD
-        bool success = table.Insert(new PrimaryKey(table.GetId(), w_id), table.GetSchema(), data, ctx);
-        if (!success) throw new Exception("Failed to insert warehouse");
-        // PK: W_ID
-        txnManager.Commit(ctx);
-    }
 
     private void LoadData(Table table, string filename){
         using (var reader = new BinaryReader(File.Open(filename, FileMode.Open))) {
@@ -676,12 +648,45 @@ public class TpccBenchmark : TableBenchmark {
             }
         }
     }
+    public void GenerateWarehouseData(int w_id){
+        Table table = tables[(int)TableType.Warehouse];
+        using (var writer = new BinaryWriter(File.Open(String.Format(tableDataFiles[TableType.Warehouse], w_id), FileMode.Create))) {
+            writer.Write(1);
+            byte[] data = new byte[table.rowSize];
+            Span<byte> span = new Span<byte>(data);
+            
+            int offset = 0;
+            RandomByteString(6, 10).CopyTo(span); // W_NAME
+            offset += 10;
+            RandomByteString(10, 20).CopyTo(span.Slice(offset)); // W_STREET_1
+            offset += 20;
+            RandomByteString(10, 20).CopyTo(span.Slice(offset)); // W_STREET_2
+            offset += 20;
+            RandomByteString(10, 20).CopyTo(span.Slice(offset)); // W_CITY
+            offset += 20;
+            RandomByteString(2, 2).CopyTo(span.Slice(offset)); // W_STATE
+            offset += 2;
+            RandZip().CopyTo(span.Slice(offset)); // W_ZIP
+            offset += 9;
+            BitConverter.GetBytes(0.1000f).CopyTo(span.Slice(offset)); // W_TAX
+            offset += 4;
+            BitConverter.GetBytes(3000000.00f).CopyTo(span.Slice(offset)); // W_YTD
+            PrimaryKey pk = new PrimaryKey(table.GetId(), w_id);
+            // PK: W_ID
+
+            byte[] pkBytes = pk.ToBytes();
+            writer.Write(pkBytes.Length);
+            writer.Write(pkBytes);
+            writer.Write(data);
+        }
+    }
     public void GenerateDistrictData(int w_id){
+        Table table = tables[(int)TableType.District];
         using (var writer = new BinaryWriter(File.Open(String.Format(tableDataFiles[TableType.District], w_id), FileMode.Create))) {
             writer.Write(tpcCfg.NumDistrict);
             for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
-                byte[] data = new byte[tables[(int)TableType.District].rowSize];
+                byte[] data = new byte[table.rowSize];
                 Span<byte> span = new Span<byte>(data);
                 
                 int offset = 0;
@@ -702,7 +707,7 @@ public class TpccBenchmark : TableBenchmark {
                 BitConverter.GetBytes(30000).CopyTo(span.Slice(offset)); // D_YTD
                 offset += 4;
                 BitConverter.GetBytes(tpcCfg.NumOrder + 1).CopyTo(span.Slice(offset)); // D_NEXT_O_ID
-                PrimaryKey pk = new PrimaryKey((int)TableType.District, w_id, i);
+                PrimaryKey pk = new PrimaryKey(table.GetId(), w_id, i);
                 // PK: D_W_ID, D_ID
 
                 byte[] pkBytes = pk.ToBytes();
