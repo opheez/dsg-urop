@@ -1,14 +1,14 @@
 namespace DB {
 public enum TableType{
     Warehouse,
-    Stock,
     District,
     Customer,
     History,
     Order,
     NewOrder,
     Item,
-    OrderLine
+    OrderLine,
+    Stock
 }
 public enum TableField{
     W_ID,
