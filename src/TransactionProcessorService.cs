@@ -4,7 +4,6 @@ using FASTER.libdpr;
 using Google.Protobuf;
 using Grpc.Core;
 using FASTER.client;
-using FASTER.core;
 using System.Diagnostics;
 using Grpc.Net.Client;
 using darq;
@@ -31,13 +30,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     private SimpleObjectPool<StepRequest> stepRequestPool = new(() => new StepRequest());
     private int nextWorker = 0;
-
-    /// previously
-    // private IDarqProcessorClientCapabilities capabilities;
-    // private DarqId me;
     private StepRequest reusableRequest = new();
-
-    // TODO: condense table into tables
     Dictionary<int, ShardedTable> tables;
     Dictionary<DarqId, GrpcChannel> clusterMap;
     protected ILogger logger;

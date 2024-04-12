@@ -13,7 +13,7 @@ public struct BenchmarkConfig {
     public int perThreadDataCount; // enough to be larger than l3 cache
     public int iterationCount;
     public int datasetSize;
-    public int perTransactionCount; // TODO: ensure support for keys[] when this > 1
+    public int perTransactionCount;
     public int nCommitterThreads;
 
     public BenchmarkConfig(
@@ -65,13 +65,6 @@ public abstract class TableBenchmark
         isWrite = new BitArray(cfg.datasetSize);
     }
 
-    // internal void InsertSingleThreaded(Table tbl, int thread_idx){
-    //     for (int i = 0; i < cfg.perThreadDataCount; i++){
-    //         int loc = i + (cfg.perThreadDataCount * thread_idx);
-    //         tbl.Insert(new KeyAttr(keys[loc],attrs[loc%cfg.attrCount], tbl), values[loc]);
-    //     }
-    // }
-
     virtual protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
         int abortCount = 0;
         int c = 0;
@@ -92,18 +85,6 @@ public abstract class TableBenchmark
         return abortCount;
     }
 
-    // internal void InsertMultiThreaded(Table tbl)
-    // {
-    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
-    //         int t = thread;
-    //         workers[thread] = new Thread(() => InsertSingleThreaded(tbl, t));
-    //         workers[thread].Start();
-    //     }
-    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
-    //         workers[thread].Join();
-    //     }
-    // }
-
     protected internal int InsertMultiThreadedTransactions(Table tbl, TransactionManager txnManager)
     {
         int totalAborts = 0;
@@ -120,17 +101,6 @@ public abstract class TableBenchmark
         }
         return totalAborts;
     }
-
-    // internal void WorkloadSingleThreaded(Table tbl, int thread_idx, double ratio){
-    //     for (int i = 0; i < cfg.perThreadDataCount; i++){
-    //         int loc = i + (cfg.perThreadDataCount * thread_idx);
-    //         if (keys[loc] < Int64.MaxValue * ratio) {
-    //             tbl.Update(new KeyAttr(keys[loc+DatasetSize],attrs[loc%cfg.attrCount], tbl),values[loc]);
-    //         } else {
-    //             tbl.Read(new KeyAttr(keys[loc], attrs[loc%cfg.attrCount], tbl));
-    //         }
-    //     }
-    // }
 
     virtual protected internal int WorkloadSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx, double ratio){
         int abortCount = 0;
@@ -161,18 +131,6 @@ public abstract class TableBenchmark
         return abortCount;
     }
 
-    // internal void WorkloadMultiThreaded(Table tbl, double ratio)
-    // {
-    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
-    //         int t = thread;
-    //         workers[thread] = new Thread(() => WorkloadSingleThreaded(tbl, t, ratio));
-    //         workers[thread].Start();
-    //     }
-    //     for (int thread = 0; thread < cfg.threadCount; thread++) {
-    //         workers[thread].Join();
-    //     }
-    // }
-
     protected internal int WorkloadMultiThreadedTransactions(Table tbl, TransactionManager txnManager, double ratio)
     {
         int totalAborts = 0;
@@ -190,26 +148,6 @@ public abstract class TableBenchmark
         return totalAborts;
     }
 
-
-    // public void Run(){
-    //     for (int i = 0; i < IterationCount; i++){
-    //         using (Table tbl = new Table(schema)) {
-    //             var insertSw = Stopwatch.StartNew();
-    //             InsertMultiThreaded(tbl); // setup
-    //             insertSw.Stop();
-    //             long insertMs = insertSw.ElapsedMilliseconds;
-    //             var opSw = Stopwatch.StartNew();
-    //             WorkloadMultiThreaded(tbl, ratio);
-    //             opSw.Stop();
-    //             long opMs = opSw.ElapsedMilliseconds;
-    //             stats?.AddResult((insertMs, opMs));
-    //         }
-    //     }
-    //     stats?.ShowAllStats();
-    //     stats?.SaveStatsToFile();
-    // }
-
-    // public void RunTransactions(ref Dictionary<int, Table> tables){
     virtual public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
             (long, int)[] schema = new (long, int)[cfg.attrCount];

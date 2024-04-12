@@ -286,8 +286,8 @@ public class TpccBenchmark : TableBenchmark {
         string c_last = "";
         int c_id;
         if (y <= 60) {
-            c_last = RandLastName(0); // todo: temp, for testing small num
-            // c_last = RandLastName(NonUniformRandom(255, 0, 999));
+            // c_last = RandLastName(0); // or testing small num
+            c_last = RandLastName(NonUniformRandom(255, 0, 999));
             c_id = 0;
         } else {
             c_id = NonUniformRandom(1023, 1, 3000);
