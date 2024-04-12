@@ -15,6 +15,7 @@ public struct TpccConfig {
     public int NumStock;
     public int NewOrderCrossPartitionProbability;
     public int PaymentCrossPartitionProbability;
+    public int PartitionsPerMachine;
 
     public TpccConfig(
         int numWh = 2,
@@ -24,7 +25,9 @@ public struct TpccConfig {
         int numItem = 100000, 
         int numStock = 100000,
         int newOrderCrossPartitionProbability = 10, 
-        int paymentCrossPartitionProbability = 15){
+        int paymentCrossPartitionProbability = 15,
+        int partitionsPerMachine = 4
+        ){
         NumWh = numWh;
         NumDistrict = numDistrict;
         NumCustomer = numCustomer;
@@ -33,6 +36,7 @@ public struct TpccConfig {
         NumStock = numStock;
         NewOrderCrossPartitionProbability = newOrderCrossPartitionProbability;
         PaymentCrossPartitionProbability = paymentCrossPartitionProbability;
+        PartitionsPerMachine = partitionsPerMachine;
     }
 }
 
@@ -193,6 +197,7 @@ public class TpccBenchmark : TableBenchmark {
     private Dictionary<int, ShardedTable> tables;
     private ShardedTransactionManager txnManager;
     Query[] queries;
+    private RpcClient rpcClient;
 
     public TpccBenchmark(int partitionId, TpccConfig tpcCfg, BenchmarkConfig cfg, Dictionary<int, ShardedTable> tables, ShardedTransactionManager txnManager) : base(cfg){
         System.Console.WriteLine("Init");
@@ -200,6 +205,7 @@ public class TpccBenchmark : TableBenchmark {
         this.tpcCfg = tpcCfg;
         this.tables = tables;
         this.txnManager = txnManager;
+        this.rpcClient = txnManager.GetRpcClient();
         this.ol_cnts = new int[tpcCfg.NumDistrict][];
         for (int i = 0; i < tpcCfg.NumDistrict; i++){
             ol_cnts[i] = new int[tpcCfg.NumOrder];
@@ -217,7 +223,7 @@ public class TpccBenchmark : TableBenchmark {
 
     private NewOrderQuery GenerateNewOrderQuery(int partitionId){
         int rbk = Frnd.Next(1, 100);
-        int w_id = partitionId + 1;
+        int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerMachine) + 1, (partitionId * tpcCfg.PartitionsPerMachine) + 1 + tpcCfg.PartitionsPerMachine);
         int o_ol_cnt = Frnd.Next(5, 15);
         int[] ol_i_ids = new int[o_ol_cnt];
         int[] ol_supply_w_id = new int[o_ol_cnt];
@@ -262,7 +268,7 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     public PaymentQuery GeneratePaymentQuery(int partitionId) {
-        int w_id = partitionId + 1;
+        int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerMachine) + 1, (partitionId * tpcCfg.PartitionsPerMachine) + 1 + tpcCfg.PartitionsPerMachine);
         int d_id = Frnd.Next(1, tpcCfg.NumDistrict + 1);
         int c_w_id = w_id;
         int c_d_id;
@@ -492,26 +498,12 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     override public void RunTransactions(){
-
         for (int i = 0; i < cfg.iterationCount; i++){
             txnManager.Reset();
             txnManager.Run();
-            // init all tables
-            GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
-            for (int partitionId = 0; partitionId < tpcCfg.NumWh; partitionId++) {
-                // GenerateCustomerData(partitionId + 1);
-                // GenerateDistrictData(partitionId + 1);
-                // GenerateHistoryData(partitionId + 1);
-                // GenerateOrderData(partitionId + 1);
-                // GenerateNewOrderData(partitionId + 1);
-                // GenerateOrderLineData(partitionId + 1);
-                // GenerateStockData(partitionId + 1);
-                foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
-                {
-                    PopulateTable(tableType, tables[(int)tableType], partitionId);
-                }
-            }
-            System.Console.WriteLine("done inserting");
+
+            rpcClient.PopulateTables(cfg, tpcCfg); // populate tables in other machines
+            PopulateTables();
             // var opSw = Stopwatch.StartNew();
             int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
             Console.WriteLine($"abort count {txnAborts}");
@@ -525,6 +517,61 @@ public class TpccBenchmark : TableBenchmark {
         // stats?.SaveStatsToFile();
 
 
+    }
+
+    public void PopulateTables(){
+        Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
+            {TableType.Warehouse, WarehouseDataFilename},
+            {TableType.District, DistrictDataFilename},
+            {TableType.Customer, CustomerDataFilename},
+            {TableType.Item, ItemDataFilename},
+            {TableType.Stock, StockDataFilename},
+            {TableType.Order, OrderDataFilename},
+            {TableType.NewOrder, NewOrderDataFilename},
+            {TableType.OrderLine, OrderLineDataFilename},
+            {TableType.History, HistoryDataFilename}
+        };
+
+        // init all tables
+        // GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
+        for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
+            int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
+            // GenerateCustomerData(partitionId + 1);
+            // GenerateDistrictData(partitionId + 1);
+            // GenerateHistoryData(partitionId + 1);
+            // GenerateOrderData(partitionId + 1);
+            // GenerateNewOrderData(partitionId + 1);
+            // GenerateOrderLineData(partitionId + 1);
+            // GenerateStockData(partitionId + 1);
+            foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
+            {
+                Console.WriteLine($"Start with populating {tableType}");
+                switch (tableType) 
+                {
+                    case TableType.Warehouse:
+                        PopulateWarehouseTable(tables[(int)tableType], txnManager, w_id);
+                        break;
+                    case TableType.Customer:
+                        PopulateCustomerTable(tables[(int)tableType], txnManager, w_id);
+                        break;
+                    case TableType.Item:
+                        PopulateItemTable(tables[(int)tableType], txnManager, w_id);
+                        break;
+                    case TableType.District:
+                    case TableType.History:
+                    case TableType.NewOrder:
+                    case TableType.Order:
+                    case TableType.OrderLine:
+                    case TableType.Stock:
+                        PopulateTable(tables[(int)tableType], txnManager, tableDataFiles[tableType]);
+                        break;
+                    default:
+                        throw new ArgumentException("Invalid table type");
+                }
+                Console.WriteLine($"Done with populating {tableType}");
+            }
+        }
+        System.Console.WriteLine("done inserting");
     }
 
     protected internal int WorkloadSingleThreadedTransactions(ShardedTransactionManager txnManager, int thread_idx, double ratio)
@@ -579,46 +626,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         return abortCount;
     }
-    public void PopulateTable(TableType tableType, ShardedTable table, int partitionId){
-        
-        int w_id = partitionId + 1;
-        Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
-            {TableType.Warehouse, WarehouseDataFilename},
-            {TableType.District, DistrictDataFilename},
-            {TableType.Customer, CustomerDataFilename},
-            {TableType.Item, ItemDataFilename},
-            {TableType.Stock, StockDataFilename},
-            {TableType.Order, OrderDataFilename},
-            {TableType.NewOrder, NewOrderDataFilename},
-            {TableType.OrderLine, OrderLineDataFilename},
-            {TableType.History, HistoryDataFilename}
-        };
 
-        Console.WriteLine($"Start with populating {tableType}");
-        switch (tableType) 
-        {
-            case TableType.Warehouse:
-                PopulateWarehouseTable(tables[(int)tableType], txnManager, w_id);
-                break;
-            case TableType.Customer:
-                PopulateCustomerTable(tables[(int)tableType], txnManager, w_id);
-                break;
-            case TableType.Item:
-                PopulateItemTable(tables[(int)tableType], txnManager, w_id);
-                break;
-            case TableType.District:
-            case TableType.History:
-            case TableType.NewOrder:
-            case TableType.Order:
-            case TableType.OrderLine:
-            case TableType.Stock:
-                PopulateTable(tables[(int)tableType], txnManager, tableDataFiles[tableType]);
-                break;
-            default:
-                throw new ArgumentException("Invalid table type");
-        }
-        Console.WriteLine($"Done with populating {tableType}");
-    }
     public void PopulateTable(ShardedTable table, ShardedTransactionManager txnManager, string filename){
         LoadData(table, filename);
         InsertMultiThreadedTransactions(table, txnManager);

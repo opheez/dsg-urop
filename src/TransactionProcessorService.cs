@@ -122,6 +122,37 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return Task.FromResult(reply);
     }
 
+    public override Task<PopulateTablesReply> PopulateTables(PopulateTablesRequest request, ServerCallContext context)
+    {
+        PrintDebug($"Populating tables from rpc service");
+        BenchmarkConfig cfg = new BenchmarkConfig(
+            seed: request.Seed,
+            ratio: request.Ratio,
+            threadCount: request.ThreadCount,
+            attrCount: request.AttrCount,
+            perThreadDataCount: request.PerThreadDataCount,
+            iterationCount: request.IterationCount,
+            perTransactionCount: request.PerTransactionCount,
+            nCommitterThreads: request.NCommitterThreads
+        );
+
+        TpccConfig tpccCfg = new TpccConfig(
+            numWh: request.NumWh,
+            numDistrict: request.NumDistrict,
+            numCustomer: request.NumCustomer,
+            numItem: request.NumItem,
+            numOrder: request.NumOrder,
+            numStock: request.NumStock,
+            newOrderCrossPartitionProbability: request.NewOrderCrossPartitionProbability,
+            paymentCrossPartitionProbability: request.PaymentCrossPartitionProbability,
+            partitionsPerMachine: request.PartitionsPerMachine
+        );
+        TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccCfg, cfg, tables, txnManager);
+        tpccBenchmark.PopulateTables();
+        PopulateTablesReply reply = new PopulateTablesReply{ Success = true};
+        return Task.FromResult(reply);
+    }
+
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
         BenchmarkConfig ycsbCfg = new BenchmarkConfig(

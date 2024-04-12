@@ -44,6 +44,36 @@ public abstract class RpcClient {
         return (reply.Value.ToByteArray(), new PrimaryKey(tempPk.Table, reply.Key.Keys.ToArray()));
     }
 
+    public void PopulateTables(BenchmarkConfig cfg, TpccConfig tpccCfg){
+        foreach (var entry in clusterMap){
+            if (entry.Key == partitionId) continue;
+            var channel = entry.Value;
+            var client = new TransactionProcessor.TransactionProcessorClient(channel);
+            var reply = client.PopulateTables(
+                new PopulateTablesRequest {
+                    Seed = cfg.seed,
+                    Ratio = cfg.ratio,
+                    ThreadCount = cfg.threadCount,
+                    AttrCount = cfg.attrCount,
+                    PerThreadDataCount = cfg.perThreadDataCount,
+                    IterationCount = cfg.iterationCount,
+                    PerTransactionCount = cfg.perTransactionCount,
+                    NCommitterThreads = cfg.nCommitterThreads,
+                    NumWh = tpccCfg.NumWh,
+                    NumDistrict = tpccCfg.NumDistrict,
+                    NumCustomer = tpccCfg.NumCustomer,
+                    NumItem = tpccCfg.NumItem,
+                    NumOrder = tpccCfg.NumOrder,
+                    NumStock = tpccCfg.NumStock,
+                    NewOrderCrossPartitionProbability = tpccCfg.NewOrderCrossPartitionProbability,
+                    PaymentCrossPartitionProbability = tpccCfg.PaymentCrossPartitionProbability,
+                    PartitionsPerMachine = tpccCfg.PartitionsPerMachine
+                }
+            );
+            if (!reply.Success) throw new System.Exception("Failed to populate tables");
+        }
+    }
+
     public void SetSecondaryIndex(PrimaryKey tempPk, ConcurrentDictionary<byte[], PrimaryKey> index){
         var channel = GetServerChannel(tempPk);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
