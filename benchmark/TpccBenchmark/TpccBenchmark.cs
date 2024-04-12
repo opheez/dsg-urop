@@ -181,14 +181,14 @@ public class TpccBenchmark : TableBenchmark {
 
     private static byte[] ORIGINAL = Encoding.ASCII.GetBytes("ORIGINAL");
     private static string ItemDataFilename = "itemData.bin";
-    private static string StockDataFilename = "stockData.bin";
-    private static string WarehouseDataFilename = "warehouseData.bin";
-    private static string DistrictDataFilename = "districtData.bin";
-    private static string CustomerDataFilename = "customerData.bin";
-    private static string HistoryDataFilename = "historyData.bin";
-    private static string NewOrderDataFilename = "newOrderData.bin";
-    private static string OrderDataFilename = "orderData.bin";
-    private static string OrderLineDataFilename = "orderLineData.bin";
+    private static string StockDataFilename = "stockData";
+    private static string WarehouseDataFilename = "warehouseData";
+    private static string DistrictDataFilename = "districtData";
+    private static string CustomerDataFilename = "customerData";
+    private static string HistoryDataFilename = "historyData";
+    private static string NewOrderDataFilename = "newOrderData";
+    private static string OrderDataFilename = "orderData";
+    private static string OrderLineDataFilename = "orderLineData";
     private int[][] ol_cnts;
     private long[][] entry_ds;
 
@@ -520,22 +520,22 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     public void PopulateTables(){
-        Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
-            {TableType.Warehouse, WarehouseDataFilename},
-            {TableType.District, DistrictDataFilename},
-            {TableType.Customer, CustomerDataFilename},
-            {TableType.Item, ItemDataFilename},
-            {TableType.Stock, StockDataFilename},
-            {TableType.Order, OrderDataFilename},
-            {TableType.NewOrder, NewOrderDataFilename},
-            {TableType.OrderLine, OrderLineDataFilename},
-            {TableType.History, HistoryDataFilename}
-        };
 
         // init all tables
         // GenerateItemData(tables[(int)TableType.Item], ItemDataFilename);
         for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
             int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
+            Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
+                {TableType.Warehouse, WarehouseDataFilename + $"_{w_id}.bin"},
+                {TableType.District, DistrictDataFilename + $"_{w_id}.bin"},
+                {TableType.Customer, CustomerDataFilename + $"_{w_id}.bin"},
+                {TableType.Item, ItemDataFilename},
+                {TableType.Stock, StockDataFilename + $"_{w_id}.bin"},
+                {TableType.Order, OrderDataFilename + $"_{w_id}.bin"},
+                {TableType.NewOrder, NewOrderDataFilename + $"_{w_id}.bin"},
+                {TableType.OrderLine, OrderLineDataFilename + $"_{w_id}.bin"},
+                {TableType.History, HistoryDataFilename + $"_{w_id}.bin"}
+            };
             // GenerateCustomerData(partitionId + 1);
             // GenerateDistrictData(partitionId + 1);
             // GenerateHistoryData(partitionId + 1);
@@ -611,13 +611,14 @@ public class TpccBenchmark : TableBenchmark {
         int perThreadDataCount = keys.Count() / cfg.threadCount;
         // have the last thread handle the remaining data
         if (thread_idx == cfg.threadCount - 1) perThreadDataCount += keys.Count() % cfg.threadCount;
+        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount}");
         for (int i = 0; i < perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext ctx = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
-                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                int loc = i + j + (perThreadDataCount * thread_idx);
                 if (loc >= keys.Count()) break;
                 bool insertSuccess = table.Insert(keys[loc], table.GetSchema(), values[loc], ctx);
-                if (!insertSuccess) throw new Exception($"Failed to insert record for table {table.GetId()}");
+                if (!insertSuccess) throw new Exception($"Failed to insert record {loc} {keys[loc]} for table {table.GetId()}");
             }
             var success = txnManager.Commit(ctx);
             if (!success){
@@ -650,7 +651,7 @@ public class TpccBenchmark : TableBenchmark {
         InsertMultiThreadedTransactions(table, txnManager);
     }
     public void PopulateCustomerTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        using (var reader = new BinaryReader(File.Open(CustomerDataFilename + $"_{w_id}", FileMode.Open))) {
+        using (var reader = new BinaryReader(File.Open(CustomerDataFilename + $"_{w_id}.bin", FileMode.Open))) {
             int numEntries = reader.ReadInt32();
             keys = new PrimaryKey[numEntries];
             values = new byte[numEntries][];
@@ -726,7 +727,7 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
     public void GenerateDistrictData(int w_id){
-        using (var writer = new BinaryWriter(File.Open(DistrictDataFilename + $"_{w_id}", FileMode.Create))) {
+        using (var writer = new BinaryWriter(File.Open(DistrictDataFilename + $"_{w_id}.bin", FileMode.Create))) {
             writer.Write(tpcCfg.NumDistrict);
             for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
@@ -765,7 +766,7 @@ public class TpccBenchmark : TableBenchmark {
         ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
-        using (var writer = new BinaryWriter(File.Open(CustomerDataFilename + $"_{w_id}", FileMode.Create))) {
+        using (var writer = new BinaryWriter(File.Open(CustomerDataFilename + $"_{w_id}.bin", FileMode.Create))) {
             writer.Write(tpcCfg.NumDistrict * tpcCfg.NumCustomer);
             for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
@@ -853,7 +854,7 @@ public class TpccBenchmark : TableBenchmark {
     }
     public void GenerateHistoryData(int w_id){
         Table table = tables[(int)TableType.History];
-        using (var writer = new BinaryWriter(File.Open(HistoryDataFilename + $"_{w_id}", FileMode.Create))) {
+        using (var writer = new BinaryWriter(File.Open(HistoryDataFilename + $"_{w_id}.bin", FileMode.Create))) {
             writer.Write(tpcCfg.NumDistrict * tpcCfg.NumCustomer);
             for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
@@ -879,8 +880,8 @@ public class TpccBenchmark : TableBenchmark {
     }
     public void GenerateNewOrderData(int w_id){
         Table table = tables[(int)TableType.NewOrder];
-        using (var writer = new BinaryWriter(File.Open(NewOrderDataFilename + $"_{w_id}", FileMode.Create))) {
-            writer.Write(tpcCfg.NumDistrict * tpcCfg.NumOrder);
+        using (var writer = new BinaryWriter(File.Open(NewOrderDataFilename + $"_{w_id}.bin", FileMode.Create))) {
+            writer.Write(tpcCfg.NumDistrict * (tpcCfg.NumOrder - 2100));
             for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
                 for (int j = 2101; j <= tpcCfg.NumOrder; j++)
@@ -903,7 +904,7 @@ public class TpccBenchmark : TableBenchmark {
         }
         
         Table table = tables[(int)TableType.Order];
-        using (var writer = new BinaryWriter(File.Open(OrderDataFilename + $"_{w_id}", FileMode.Create))) {
+        using (var writer = new BinaryWriter(File.Open(OrderDataFilename + $"_{w_id}.bin", FileMode.Create))) {
             writer.Write(tpcCfg.NumDistrict * tpcCfg.NumOrder);
             for (int i = 1; i <= tpcCfg.NumDistrict; i++)
             {
@@ -940,7 +941,7 @@ public class TpccBenchmark : TableBenchmark {
     // assumes that order data has been generated
     public void GenerateOrderLineData(int w_id){
         Table table = tables[(int)TableType.OrderLine];
-        using (var writer = new BinaryWriter(File.Open(OrderLineDataFilename + $"_{w_id}", FileMode.Create))) {
+        using (var writer = new BinaryWriter(File.Open(OrderLineDataFilename + $"_{w_id}.bin", FileMode.Create))) {
             int count = ol_cnts.Sum(x => x.Sum(y => y));
             writer.Write(count);
 
@@ -1019,7 +1020,7 @@ public class TpccBenchmark : TableBenchmark {
 
     public void GenerateStockData(int w_id) {
         Table table = tables[(int)TableType.Stock];
-        using (var writer = new BinaryWriter(File.Open(StockDataFilename + $"_{w_id}", FileMode.Create))) {
+        using (var writer = new BinaryWriter(File.Open(StockDataFilename + $"_{w_id}.bin", FileMode.Create))) {
             writer.Write(tpcCfg.NumStock);
             for (int i = 1; i <= tpcCfg.NumStock; i++)
             {

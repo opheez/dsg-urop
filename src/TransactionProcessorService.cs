@@ -160,7 +160,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             attrCount: 10,
             threadCount: 12,
             iterationCount: 1,
-            perThreadDataCount: 1000
+            perThreadDataCount: 100
         );
         switch (request.Workload) {
             case "ycsb":
@@ -170,7 +170,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 break;
             case "tpcc":
                 TpccConfig tpccConfig = new TpccConfig(
-                    numWh: 2
+                    numWh: 2,
+                    partitionsPerMachine: 1
                     // numCustomer: 10,
                     // numDistrict: 10,
                     // numItem: 10,
