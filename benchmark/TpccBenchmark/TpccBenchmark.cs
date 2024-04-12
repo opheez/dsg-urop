@@ -1,11 +1,9 @@
 using System.Collections.Concurrent;
-using System.Runtime.Serialization.Formatters.Binary;
-using System.Security.Cryptography.Xml;
 using System.Text;
-using DB;
-using Microsoft.AspNetCore.Http.HttpResults;
+using System.Diagnostics;
 using SharpNeat.Utility;
 
+namespace DB {
 public struct TpccConfig {
     public int NumWh;
     public int NumDistrict;
@@ -306,7 +304,6 @@ public class TpccBenchmark : TableBenchmark {
     public int GenerateQueryData(int partitionId, string filename) {
         this.queries = new Query[cfg.datasetSize];
         int numNewOrders = 0;
-        // using (var writer = new BinaryWriter(File.Open(filename, FileMode.Create))) {
             for (int i = 0; i < queries.Length; i++){
                 // randomly assign NewOrder vs Payment
                 if (Frnd.Next(1, 100) <= 50){
@@ -315,29 +312,8 @@ public class TpccBenchmark : TableBenchmark {
                 } else {
                     queries[i] = GeneratePaymentQuery(partitionId);
                 }
-
-                // byte[] bytes = queries[i].ToBytes();
-                // writer.Write(bytes.Length);
-                // writer.Write(bytes);
             }
-        // }
         return numNewOrders;
-    }
-
-    private byte[] ExtractField(TableType tableType, TableField field, ReadOnlySpan<byte> row) {
-        (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
-        return row.Slice(offset, size).ToArray();
-    }
-
-    private void SetField(TableType tableType, TableField field, byte[] row, byte[] value) {
-        (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
-        value.CopyTo(row, offset);
-    }
-
-    private (byte[], TupleDesc[]) BuildUpdate(byte[] data, TupleDesc[] tds, TableType tableType, TableField field, byte[] value){
-        int size = tables[(int)tableType].GetAttrMetadata((long)field).Item1;
-        int offset = tds.Length == 0 ? 0 : tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
-        return (data.Concat(value).ToArray(), tds.Append(new TupleDesc((int)field, size, offset)).ToArray());
     }
 
     public bool NewOrder(NewOrderQuery query){
@@ -504,19 +480,57 @@ public class TpccBenchmark : TableBenchmark {
 
             new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
             PopulateTables();
-            // var opSw = Stopwatch.StartNew();
-            int txnAborts = WorkloadMultiThreadedTransactions(txnManager, cfg.ratio);
+            var opSw = Stopwatch.StartNew();
+            // table and txnManager not used
+            int txnAborts = WorkloadMultiThreadedTransactions(tables[0], txnManager, cfg.ratio);
+            opSw.Stop();
             Console.WriteLine($"abort count {txnAborts}");
-            // opSw.Stop();
-            // long opMs = opSw.ElapsedMilliseconds;
-            // stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+            long opMs = opSw.ElapsedMilliseconds;
+            stats?.AddTransactionalResult((0, opMs, 0, txnAborts));
             txnManager.Terminate();
         }
 
-        // stats?.ShowAllStats();
-        // stats?.SaveStatsToFile();
+        stats?.ShowAllStats();
+        stats?.SaveStatsToFile();
+    }
 
+    override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
+    {
+        int abortCount = 0;
+        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
+            int loc = i + (cfg.perThreadDataCount * thread_idx);
+            if (queries[loc] is NewOrderQuery){
+                if (!NewOrder((NewOrderQuery)queries[loc])) abortCount++;
+            } else {
+                if (!Payment((PaymentQuery)queries[loc])) abortCount++;
+            }
+        }
+        return abortCount;
+    }
 
+    override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
+        int abortCount = 0;
+        int perThreadDataCount = keys.Count() / cfg.threadCount;
+        // have the last thread handle the remaining data
+        if (thread_idx == cfg.threadCount - 1) {
+            if (perThreadDataCount == 0) thread_idx = 0;
+            perThreadDataCount += keys.Count() % cfg.threadCount;
+        }
+        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount}");
+        for (int i = 0; i < perThreadDataCount; i += cfg.perTransactionCount){
+            TransactionContext ctx = txnManager.Begin();
+            for (int j = 0; j < cfg.perTransactionCount; j++) {
+                int loc = i + j + (perThreadDataCount * thread_idx);
+                if (loc >= keys.Count()) break;
+                bool insertSuccess = table.Insert(keys[loc], table.GetSchema(), values[loc], ctx);
+                if (!insertSuccess) throw new Exception($"Failed to insert record {loc} {keys[loc]} for table {table.GetId()}");
+            }
+            var success = txnManager.Commit(ctx);
+            if (!success){
+                abortCount++;
+            }
+        }
+        return abortCount;
     }
 
     public void PopulateTables(){
@@ -572,63 +586,6 @@ public class TpccBenchmark : TableBenchmark {
             }
         }
         System.Console.WriteLine("done inserting");
-    }
-
-    protected internal int WorkloadSingleThreadedTransactions(ShardedTransactionManager txnManager, int thread_idx, double ratio)
-    {
-        int abortCount = 0;
-        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
-            int loc = i + (cfg.perThreadDataCount * thread_idx);
-            if (queries[loc] is NewOrderQuery){
-                if (!NewOrder((NewOrderQuery)queries[loc])) abortCount++;
-            } else {
-                if (!Payment((PaymentQuery)queries[loc])) abortCount++;
-            }
-        }
-        return abortCount;
-    }
-
-    // TODO: better DRY 
-    protected internal int WorkloadMultiThreadedTransactions(ShardedTransactionManager txnManager, double ratio)
-    {
-        int totalAborts = 0;
-        for (int thread = 0; thread < cfg.threadCount; thread++) {
-            int t = thread;
-            workers[thread] = new Thread(() => {
-                int aborts = WorkloadSingleThreadedTransactions(txnManager, t, ratio);
-                Interlocked.Add(ref totalAborts, aborts);
-            });
-            workers[thread].Start();
-        }
-        for (int thread = 0; thread < cfg.threadCount; thread++) {
-            workers[thread].Join();
-        }
-        return totalAborts;
-    }
-
-    override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
-        int abortCount = 0;
-        int perThreadDataCount = keys.Count() / cfg.threadCount;
-        // have the last thread handle the remaining data
-        if (thread_idx == cfg.threadCount - 1) {
-            if (perThreadDataCount == 0) thread_idx = 0;
-            perThreadDataCount += keys.Count() % cfg.threadCount;
-        }
-        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount}");
-        for (int i = 0; i < perThreadDataCount; i += cfg.perTransactionCount){
-            TransactionContext ctx = txnManager.Begin();
-            for (int j = 0; j < cfg.perTransactionCount; j++) {
-                int loc = i + j + (perThreadDataCount * thread_idx);
-                if (loc >= keys.Count()) break;
-                bool insertSuccess = table.Insert(keys[loc], table.GetSchema(), values[loc], ctx);
-                if (!insertSuccess) throw new Exception($"Failed to insert record {loc} {keys[loc]} for table {table.GetId()}");
-            }
-            var success = txnManager.Commit(ctx);
-            if (!success){
-                abortCount++;
-            }
-        }
-        return abortCount;
     }
 
     public void PopulateTable(ShardedTable table, ShardedTransactionManager txnManager, string filename){
@@ -1079,6 +1036,21 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
 
+    private byte[] ExtractField(TableType tableType, TableField field, ReadOnlySpan<byte> row) {
+        (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
+        return row.Slice(offset, size).ToArray();
+    }
+
+    private void SetField(TableType tableType, TableField field, byte[] row, byte[] value) {
+        (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
+        value.CopyTo(row, offset);
+    }
+
+    private (byte[], TupleDesc[]) BuildUpdate(byte[] data, TupleDesc[] tds, TableType tableType, TableField field, byte[] value){
+        int size = tables[(int)tableType].GetAttrMetadata((long)field).Item1;
+        int offset = tds.Length == 0 ? 0 : tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
+        return (data.Concat(value).ToArray(), tds.Append(new TupleDesc((int)field, size, offset)).ToArray());
+    }
     private void PrintByteArray(byte[] arr){
         foreach (byte b in arr){
             Console.Write(b + " ");
@@ -1156,4 +1128,5 @@ public class TpccBenchmark : TableBenchmark {
         return LastNames[n / 100] + LastNames[(n / 10) % 10] + LastNames[n % 10];
     }
 
+}
 }
