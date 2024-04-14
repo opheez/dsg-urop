@@ -132,27 +132,29 @@ unsafe class Program {
         // DARQ injection
         builder.Services.AddSingleton<Dictionary<long, GrpcChannel>>(clusterMap);
         builder.Services.AddSingleton<Dictionary<DarqId, GrpcChannel>>(clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
-        builder.Services.AddSingleton(new DarqBackgroundWorkerPoolSettings
-        {
-            numWorkers = 2
-        });
-        builder.Services.AddSingleton(new DarqSettings
-        {
-            LogDevice = new LocalStorageDevice($"C:\\Users\\Administrator\\Desktop\\data-{partitionId}.log", deleteOnClose: true),
-            LogCommitDir = $"C:\\Users\\Administrator\\Desktop\\{partitionId}",
-            Me = new DarqId(partitionId),
-            PageSize = 1L << 22,
-            MemorySize = 1L << 28,
-            SegmentSize = 1L << 30,
-            CheckpointPeriodMilli = 10,
-            RefreshPeriodMilli = 5,
-            FastCommitMode = true,
-            DeleteOnClose = true,
-            CleanStart = true
-        });
-        builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
-        builder.Services.AddSingleton<Darq>();
-        builder.Services.AddSingleton<DarqBackgroundWorkerPool>();
+        builder.Services.AddSingleton<Darq>(new Darq(
+            new DarqSettings
+            {
+                LogDevice = new ManagedLocalStorageDevice($"/home/azureuserdata-{partitionId}.log", deleteOnClose: true),
+                LogCommitDir = $"/home/azureuser/{partitionId}",
+                Me = new DarqId(partitionId),
+                PageSize = 1L << 22,
+                MemorySize = 1L << 28,
+                SegmentSize = 1L << 30,
+                CheckpointPeriodMilli = 10,
+                RefreshPeriodMilli = 5,
+                FastCommitMode = true,
+                DeleteOnClose = true,
+                CleanStart = true
+            },
+            new RwLatchVersionScheme()
+        ));
+        builder.Services.AddSingleton<DarqBackgroundWorkerPool>(new DarqBackgroundWorkerPool(
+            new DarqBackgroundWorkerPoolSettings
+            {
+                numWorkers = NumProcessors
+            }
+        ));
         builder.Services.AddSingleton<DarqWal>(
             services => new DarqWal(new DarqId(partitionId), services.GetRequiredService<ILogger<DarqWal>>())
         );
