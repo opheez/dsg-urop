@@ -114,7 +114,7 @@ unsafe class Program {
 
     public static void LaunchService(int partitionId) {
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Error).AddConsole());
+        builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Information).AddConsole());
         // create channel to each server
         Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();
         for (int i = 0; i < NumProcessors; i++){
@@ -131,11 +131,11 @@ unsafe class Program {
         });
         // DARQ injection
         builder.Services.AddSingleton<Dictionary<long, GrpcChannel>>(clusterMap);
-        builder.Services.AddSingleton<Dictionary<DarqId, GrpcChannel>>(clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
-        builder.Services.AddSingleton<Darq>(new Darq(
+        // builder.Services.AddSingleton<Dictionary<DarqId, GrpcChannel>>(clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
+        Darq darq = new Darq(
             new DarqSettings
             {
-                LogDevice = new ManagedLocalStorageDevice($"/home/azureuserdata-{partitionId}.log", deleteOnClose: true),
+                LogDevice = new ManagedLocalStorageDevice($"/home/azureuser/data-{partitionId}.log", deleteOnClose: true),
                 LogCommitDir = $"/home/azureuser/{partitionId}",
                 Me = new DarqId(partitionId),
                 PageSize = 1L << 22,
@@ -148,90 +148,90 @@ unsafe class Program {
                 CleanStart = true
             },
             new RwLatchVersionScheme()
-        ));
-        builder.Services.AddSingleton<DarqBackgroundWorkerPool>(new DarqBackgroundWorkerPool(
-            new DarqBackgroundWorkerPoolSettings
-            {
-                numWorkers = NumProcessors
-            }
-        ));
-        builder.Services.AddSingleton<DarqWal>(
-            services => new DarqWal(new DarqId(partitionId), services.GetRequiredService<ILogger<DarqWal>>())
         );
+        builder.Services.AddSingleton<Darq>(darq);
+        // builder.Services.AddSingleton<DarqBackgroundWorkerPool>(new DarqBackgroundWorkerPool(
+        //     new DarqBackgroundWorkerPoolSettings
+        //     {
+        //         numWorkers = NumProcessors
+        //     }
+        // ));
+        DarqWal darqWal = new DarqWal(new DarqId(partitionId));
+        builder.Services.AddSingleton<DarqWal>(darqWal);
+        TpccRpcClient rpcClient = new TpccRpcClient(partitionId, clusterMap);
+        builder.Services.AddSingleton<TpccRpcClient>(rpcClient);
+        Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
 
-        builder.Services.AddSingleton<RpcClient, TpccRpcClient>(_ => new TpccRpcClient(partitionId, clusterMap));
-        builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(
-            services => {
-                Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
+        // // uncomment for YCSB
+        // var schema = new (long, int)[]{(12345,8)};
+        // tables[0] = new ShardedTable(0, schema, services.GetRequiredService<RpcClient>(), services.GetRequiredService<ILogger<ShardedTable>>());
 
-                // // uncomment for YCSB
-                // var schema = new (long, int)[]{(12345,8)};
-                // tables[0] = new ShardedTable(0, schema, services.GetRequiredService<RpcClient>(), services.GetRequiredService<ILogger<ShardedTable>>());
-
-                // uncomment for TPC-C
-                foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
-                    (long, int)[] schema;
-                    switch (tEnum) {
-                        case TableType.Warehouse:
-                            schema = TpccSchema.WAREHOUSE_SCHEMA;
-                            break;
-                        case TableType.District:
-                            schema = TpccSchema.DISTRICT_SCHEMA;
-                            break;
-                        case TableType.Customer:
-                            schema = TpccSchema.CUSTOMER_SCHEMA;
-                            break;
-                        case TableType.History:
-                            schema = TpccSchema.HISTORY_SCHEMA;
-                            break;  
-                        case TableType.Item:
-                            schema = TpccSchema.ITEM_SCHEMA;
-                            break;
-                        case TableType.NewOrder:
-                            schema = TpccSchema.NEW_ORDER_SCHEMA;
-                            break;
-                        case TableType.Order:
-                            schema = TpccSchema.ORDER_SCHEMA;
-                            break;
-                        case TableType.OrderLine:
-                            schema = TpccSchema.ORDER_LINE_SCHEMA;
-                            break;
-                        case TableType.Stock:
-                            schema = TpccSchema.STOCK_SCHEMA;
-                            break;
-                        default:
-                            throw new Exception("Invalid table type");
-                    }
-                    int i = (int)tEnum;
-                    tables[i] = new ShardedTable(
-                        i,
-                        schema,
-                        services.GetRequiredService<RpcClient>(),
-                        services.GetRequiredService<ILogger<ShardedTable>>()
-                    );
-                }
-                
-                return tables;
+        // uncomment for TPC-C
+        foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
+            (long, int)[] schema;
+            switch (tEnum) {
+                case TableType.Warehouse:
+                    schema = TpccSchema.WAREHOUSE_SCHEMA;
+                    break;
+                case TableType.District:
+                    schema = TpccSchema.DISTRICT_SCHEMA;
+                    break;
+                case TableType.Customer:
+                    schema = TpccSchema.CUSTOMER_SCHEMA;
+                    break;
+                case TableType.History:
+                    schema = TpccSchema.HISTORY_SCHEMA;
+                    break;  
+                case TableType.Item:
+                    schema = TpccSchema.ITEM_SCHEMA;
+                    break;
+                case TableType.NewOrder:
+                    schema = TpccSchema.NEW_ORDER_SCHEMA;
+                    break;
+                case TableType.Order:
+                    schema = TpccSchema.ORDER_SCHEMA;
+                    break;
+                case TableType.OrderLine:
+                    schema = TpccSchema.ORDER_LINE_SCHEMA;
+                    break;
+                case TableType.Stock:
+                    schema = TpccSchema.STOCK_SCHEMA;
+                    break;
+                default:
+                    throw new Exception("Invalid table type");
             }
+            int i = (int)tEnum;
+            tables[i] = new ShardedTable(
+                i,
+                schema,
+                rpcClient
+            );
+        }
+        
+        
+        builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(tables);
+        ShardedTransactionManager stm = new ShardedTransactionManager(
+            1,
+            rpcClient,
+            tables,
+            wal: darqWal
         );
-        builder.Services.AddSingleton<ShardedTransactionManager>(
-            services => new ShardedTransactionManager(1,
-                            services.GetRequiredService<RpcClient>(),
-                            services.GetRequiredService<Dictionary<int, ShardedTable>>(),
-                            wal: services.GetRequiredService<DarqWal>(),
-                            logger: services.GetRequiredService<ILogger<ShardedTransactionManager>>()
-                            ));
+        builder.Services.AddSingleton<ShardedTransactionManager>(stm);
 
         builder.Services.AddSingleton<DarqTransactionProcessorService>(
-            service => new DarqTransactionProcessorService(
+            new DarqTransactionProcessorService(
                 partitionId,
-                service.GetRequiredService<Dictionary<int, ShardedTable>>(),
-                service.GetRequiredService<ShardedTransactionManager>(),
-                service.GetRequiredService<DarqWal>(),
-                service.GetRequiredService<Darq>(),
-                service.GetRequiredService<DarqBackgroundWorkerPool>(),
-                service.GetRequiredService<Dictionary<DarqId, GrpcChannel>>(),
-                service.GetRequiredService<ILogger<DarqTransactionProcessorService>>()
+                tables,
+                stm,
+                darqWal,
+                darq,
+                new DarqBackgroundWorkerPool(
+                    new DarqBackgroundWorkerPoolSettings
+                    {
+                        numWorkers = NumProcessors
+                    }
+                ),
+                clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value)
             )
         );
 
