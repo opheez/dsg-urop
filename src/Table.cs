@@ -35,6 +35,7 @@ public unsafe class Table : IDisposable{
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
         this.logger = logger;
+        this.secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         
         int offset = 0;
         int size = 0;
@@ -182,8 +183,13 @@ public unsafe class Table : IDisposable{
         }
     }
 
-    public void SetSecondaryIndex(ConcurrentDictionary<byte[], PrimaryKey> index){
-        secondaryIndex = index;
+    public void AddSecondaryIndex(Dictionary<byte[], PrimaryKey> index){
+        foreach (var entry in index){
+            bool success = secondaryIndex.TryAdd(entry.Key, entry.Value);
+            if (!success){
+                throw new ArgumentException($"Secondary index already has {entry.Key}");
+            }
+        }
     }
 
     public void Dispose(){
@@ -335,17 +341,9 @@ public class ShardedTable : Table {
         return (project(result, tupleDescs).ToArray(), pk);
     }
 
-    public void SetSecondaryIndex(ConcurrentDictionary<byte[], PrimaryKey> index, Func<byte[], PrimaryKey> buildTempPk){
+    public void AddSecondaryIndex(Dictionary<byte[], PrimaryKey> index, Func<byte[], PrimaryKey> buildTempPk){
+        base.AddSecondaryIndex(index);
         this.buildTempPk = buildTempPk;
-        foreach (var entry in index){
-            PrimaryKey tempPk = buildTempPk(entry.Key);
-            if (rpcClient.IsLocalKey(tempPk)){
-                secondaryIndex = index;
-            } else {
-                rpcClient.SetSecondaryIndex(tempPk, index);
-            }
-            break;
-        }
     }
 
     override public void PrintDebug(string msg, TransactionContext ctx = null){

@@ -101,20 +101,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return Task.FromResult(reply);
     }
 
-    public override Task<SetSecondaryReply> SetSecondary(SetSecondaryRequest request, ServerCallContext context)
-    {
-        PrintDebug($"Setting secondary from rpc service");
-        ShardedTable table = tables[request.Table];
-        ConcurrentDictionary<byte[], PrimaryKey> index = new(new ByteArrayComparer());
-        for (int i = 0; i < request.Keys.Count; i++)
-        {
-            index[request.Keys[i].ToByteArray()] = new PrimaryKey(request.Values[i].Table, request.Values[i].Keys.ToArray());
-        }
-        table.SetSecondaryIndex(index, TpccSchema.customerBuildTempPk);
-        SetSecondaryReply reply = new SetSecondaryReply{ Success = true};
-        return Task.FromResult(reply);
-    }
-
     public override Task<PopulateTablesReply> PopulateTables(PopulateTablesRequest request, ServerCallContext context)
     {
         PrintDebug($"Populating tables from rpc service");

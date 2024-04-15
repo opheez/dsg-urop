@@ -616,7 +616,7 @@ public class TpccBenchmark : TableBenchmark {
                 values[i] = data;
             }
             
-            ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
+            Dictionary<byte[], PrimaryKey> secondaryIndex = new Dictionary<byte[], PrimaryKey>(new ByteArrayComparer());
             int secondaryIndexCount = reader.ReadInt32();
             for (int i = 0; i < secondaryIndexCount; i++)
             {
@@ -626,7 +626,7 @@ public class TpccBenchmark : TableBenchmark {
                 byte[] pk = reader.ReadBytes(pkLen);
                 secondaryIndex[key] = PrimaryKey.FromBytes(pk);           
             }
-            table.SetSecondaryIndex(secondaryIndex, TpccSchema.customerBuildTempPk);
+            table.AddSecondaryIndex(secondaryIndex, TpccSchema.customerBuildTempPk);
         }
         InsertMultiThreadedTransactions(table, txnManager);
     }

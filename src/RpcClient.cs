@@ -74,27 +74,6 @@ public abstract class RpcClient {
         }
     }
 
-    public void SetSecondaryIndex(PrimaryKey tempPk, ConcurrentDictionary<byte[], PrimaryKey> index){
-        var channel = GetServerChannel(tempPk);
-        var client = new TransactionProcessor.TransactionProcessorClient(channel);
-
-        ByteString[] secondaryKeys = new ByteString[index.Count];
-        PbPrimaryKey[] primaryKeys = new PbPrimaryKey[index.Count];
-        int i = 0;
-        foreach (var kv in index){
-            secondaryKeys[i] = ByteString.CopyFrom(kv.Key);
-            primaryKeys[i] = new PbPrimaryKey { Keys = {kv.Value.Keys}, Table = kv.Value.Table};
-            i++;
-        }
-
-        client.SetSecondary(
-            new SetSecondaryRequest {
-                Keys = {secondaryKeys},
-                Values = {primaryKeys},
-                Table = tempPk.Table
-            }
-        );
-    }
 
     /// <summary>
     /// Returns the appropriate channel to talk to correct shard

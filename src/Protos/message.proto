@@ -8,7 +8,6 @@ service TransactionProcessor {
     rpc WriteWalEntry (WalRequest) returns (WalReply);
     rpc ReadSecondary (ReadSecondaryRequest) returns (ReadSecondaryReply);
     rpc PopulateTables (PopulateTablesRequest) returns (PopulateTablesReply);
-    rpc SetSecondary (SetSecondaryRequest) returns (SetSecondaryReply);
     // rpc Update (WriteRequest) returns (WriteReply);
     // rpc Insert (WriteRequest) returns (WriteReply);
     // rpc Begin (BeginRequest) returns (BeginReply);
@@ -66,16 +65,6 @@ message PopulateTablesRequest {
 }
 
 message PopulateTablesReply {
-    bool success = 1;
-}
-
-message SetSecondaryRequest {
-    repeated bytes keys = 1;
-    repeated PbPrimaryKey values = 2;
-    int32 table = 3;
-}
-
-message SetSecondaryReply {
     bool success = 1;
 }
 
