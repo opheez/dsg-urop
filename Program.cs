@@ -114,7 +114,7 @@ unsafe class Program {
 
     public static void LaunchService(int partitionId) {
         var builder = WebApplication.CreateBuilder();
-        builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Information).AddConsole());
+        builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Error).AddConsole());
         // create channel to each server
         Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();
         for (int i = 0; i < NumProcessors; i++){

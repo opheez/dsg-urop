@@ -540,14 +540,14 @@ public class TpccBenchmark : TableBenchmark {
         // GenerateItemData();
         for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
             int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
-            // GenerateWarehouseData(partitionId + 1);
-            // GenerateCustomerData(partitionId + 1);
-            // GenerateDistrictData(partitionId + 1);
-            // GenerateHistoryData(partitionId + 1);
-            // GenerateOrderData(partitionId + 1);
-            // GenerateNewOrderData(partitionId + 1);
-            // GenerateOrderLineData(partitionId + 1);
-            // GenerateStockData(partitionId + 1);
+            // GenerateWarehouseData(w_id);
+            // GenerateCustomerData(w_id);
+            // GenerateDistrictData(w_id);
+            // GenerateHistoryData(w_id);
+            // GenerateOrderData(w_id);
+            // GenerateNewOrderData(w_id);
+            // GenerateOrderLineData(w_id);
+            // GenerateStockData(w_id);
             foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
             {
                 Console.WriteLine($"Start with populating {tableType}");
