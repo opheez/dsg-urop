@@ -19,6 +19,7 @@ public class TransactionManager {
     private IWriteAheadLog? wal;
     protected Dictionary<int, Table> tables;
     protected ILogger logger;
+    public Action<bool> callback;
 
     public TransactionManager(int numThreads, Dictionary<int, Table> tables, IWriteAheadLog? wal = null, ILogger logger = null){
         this.wal = wal;
@@ -71,10 +72,9 @@ public class TransactionManager {
         return false;
     }
 
-    public void CommitWithCallback(TransactionContext ctx, Action callback){
+    public void CommitAsync(TransactionContext ctx){
         PrintDebug($"adding ctx to queue for commit", ctx);
         ctx.status = TransactionStatus.Pending;
-        ctx.commitCallback = callback;
         txnQueue.Add(ctx);
     }
 
@@ -97,6 +97,7 @@ public class TransactionManager {
         tid = 0;
         tnumToCtx = new TransactionContext[pastTnumCircularBufferSize];
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext(tables));
+        callback = null;
     }
 
     public void Terminate(){
@@ -179,7 +180,7 @@ public class TransactionManager {
             commit(ctx.tid, LogType.Commit);
             // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
         }
-        ctx.commitCallback?.Invoke();
+        callback?.Invoke(true);
         // assign num 
         int finalTxnNum;
         try {
@@ -205,6 +206,7 @@ public class TransactionManager {
         if (wal != null){
             wal.Finish(ctx.tid, LogType.Abort);
         }
+        callback?.Invoke(false);
         try {
             sl.Enter(ref lockTaken);
             active.Remove(ctx);

@@ -318,7 +318,7 @@ public class TpccBenchmark : TableBenchmark {
         return numNewOrders;
     }
 
-    public void NewOrder(NewOrderQuery query, Action callback){
+    public void NewOrder(NewOrderQuery query){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -408,10 +408,10 @@ public class TpccBenchmark : TableBenchmark {
             float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
             total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
         }
-        txnManager.CommitWithCallback(ctx, callback);
+        txnManager.CommitAsync(ctx);
     }
 
-    public void Payment(PaymentQuery query, Action callback){
+    public void Payment(PaymentQuery query){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -472,7 +472,7 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Abort(ctx);
             return;
         }
-        txnManager.CommitWithCallback(ctx, callback);
+        txnManager.CommitAsync(ctx);
     }
 
     override public void RunTransactions(){
@@ -499,16 +499,28 @@ public class TpccBenchmark : TableBenchmark {
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
         int successCount = 0;
-        Action incrementSuccessCount = () => Interlocked.Increment(ref successCount);
+        int abortCount = 0;
+        CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
+        Action<bool> incrementCount = (success) => {
+            cde.Signal();
+            if (success)
+                Interlocked.Increment(ref successCount);
+            else 
+                Interlocked.Increment(ref abortCount);
+        };
+        txnManager.callback = incrementCount;
+        
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
             if (queries[loc] is NewOrderQuery){
-                NewOrder((NewOrderQuery)queries[loc], incrementSuccessCount);
+                NewOrder((NewOrderQuery)queries[loc]);
             } else {
-                Payment((PaymentQuery)queries[loc], incrementSuccessCount);
+                Payment((PaymentQuery)queries[loc]);
             }
         }
-        return cfg.perThreadDataCount - successCount;
+
+        cde.Wait();
+        return abortCount;
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
