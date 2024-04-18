@@ -318,7 +318,7 @@ public class TpccBenchmark : TableBenchmark {
         return numNewOrders;
     }
 
-    public bool NewOrder(NewOrderQuery query){
+    public void NewOrder(NewOrderQuery query, Action callback){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -332,7 +332,7 @@ public class TpccBenchmark : TableBenchmark {
         {
             if (query.ol_i_ids[i] == 0) {
                 txnManager.Abort(ctx);
-                return false;
+                return;
             }
             itemRows[i] = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, query.ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx).ToArray();
             stockRows[i] = tables[(int)TableType.Stock].Read(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), tables[(int)TableType.Stock].GetSchema(), ctx).ToArray();
@@ -358,12 +358,12 @@ public class TpccBenchmark : TableBenchmark {
         bool success = tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
         if (!success) {
             txnManager.Abort(ctx);
-            return false;
+            return;
         }
         success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), new byte[0], ctx);
         if (!success) {
             txnManager.Abort(ctx);
-            return false;
+            return;
         }
         float total_amount = 0;
         for (int i = 0; i < query.o_ol_cnt; i++)
@@ -400,7 +400,7 @@ public class TpccBenchmark : TableBenchmark {
             success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
             if (!success) {
                 txnManager.Abort(ctx);
-                return false;
+                return;
             }
             // update total_amount
             float c_discount = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_DISCOUNT, customerRow));
@@ -408,10 +408,10 @@ public class TpccBenchmark : TableBenchmark {
             float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
             total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
         }
-        return txnManager.Commit(ctx);
+        txnManager.CommitWithCallback(ctx, callback);
     }
 
-    public bool Payment(PaymentQuery query){
+    public void Payment(PaymentQuery query, Action callback){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -470,9 +470,9 @@ public class TpccBenchmark : TableBenchmark {
         bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
         if (!success) {
             txnManager.Abort(ctx);
-            return false;
+            return;
         }
-        return txnManager.Commit(ctx);
+        txnManager.CommitWithCallback(ctx, callback);
     }
 
     override public void RunTransactions(){
@@ -498,16 +498,17 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
-        int abortCount = 0;
+        int successCount = 0;
+        Action incrementSuccessCount = () => Interlocked.Increment(ref successCount);
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
             if (queries[loc] is NewOrderQuery){
-                if (!NewOrder((NewOrderQuery)queries[loc])) abortCount++;
+                NewOrder((NewOrderQuery)queries[loc], incrementSuccessCount);
             } else {
-                if (!Payment((PaymentQuery)queries[loc])) abortCount++;
+                Payment((PaymentQuery)queries[loc], incrementSuccessCount);
             }
         }
-        return abortCount;
+        return cfg.perThreadDataCount - successCount;
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){

@@ -71,6 +71,13 @@ public class TransactionManager {
         return false;
     }
 
+    public void CommitWithCallback(TransactionContext ctx, Action callback){
+        PrintDebug($"adding ctx to queue for commit", ctx);
+        ctx.status = TransactionStatus.Pending;
+        ctx.commitCallback = callback;
+        txnQueue.Add(ctx);
+    }
+
     /// <summary>
     /// Spawns a thread that continuously polls the queue to 
     /// validate and commit a transaction context
@@ -172,6 +179,7 @@ public class TransactionManager {
             commit(ctx.tid, LogType.Commit);
             // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
         }
+        ctx.commitCallback?.Invoke();
         // assign num 
         int finalTxnNum;
         try {

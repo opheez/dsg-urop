@@ -143,6 +143,11 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             perThreadDataCount: 10000
         );
         switch (request.Workload) {
+            case "ycsb_single":
+                // only uses single table
+                TableBenchmark ycsb_single = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, wal);
+                ycsb_single.RunTransactions();
+                break;
             case "ycsb":
                 // only uses single table
                 TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
