@@ -215,9 +215,30 @@ public class TpccBenchmark : TableBenchmark {
             entry_ds[i] = new long[tpcCfg.NumOrder];
         }
 
-        int numNewOrders = GenerateQueryData(PartitionId, "");
+        // FOR TESTING TPCC BASE
+        Random r = new Random(cfg.seed);
+        // randomly assign reads and writes
+        int numWrites = (int)(cfg.datasetSize * cfg.ratio);
+        for (int i = 0; i < numWrites; i++){
+            long index = r.NextInt64(cfg.datasetSize-1);
+            // if this index is already a write, find the next available index
+            if (isWrite[(int)index]) {
+                while (isWrite[(int)index]){
+                    index += 1;
+                }
+            }
+            isWrite[(int)index] = true;
+        }
+        for (int i = 0; i < cfg.datasetSize; i++){
+            values[i] = new byte[tables[6].rowSize];
+            r.NextBytes(values[i]);
+        }
+        for (int i = 0; i < cfg.datasetSize; i++){
+            keys[i] = new PrimaryKey(tables[6].GetId(), (i % tpcCfg.NumItem) + 1);
+        }
+        // int numNewOrders = GenerateQueryData(PartitionId, "");
 
-        stats = new BenchmarkStatistics($"TpccBenchmark", cfg, numNewOrders, cfg.datasetSize);
+        stats = new BenchmarkStatistics($"TpccBenchmark", cfg, numWrites, cfg.datasetSize);
         System.Console.WriteLine("Done init");
     }
 
@@ -480,11 +501,12 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Reset();
             txnManager.Run();
 
-            new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
-            PopulateTables();
+            // new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
+            // PopulateTables();
+            PopulateItemTable(tables[6], txnManager, 1);
             var opSw = Stopwatch.StartNew();
             // table and txnManager not used
-            int txnAborts = WorkloadMultiThreadedTransactions(tables[0], txnManager, cfg.ratio);
+            int txnAborts = WorkloadMultiThreadedTransactions(tables[6], txnManager, cfg.ratio);
             opSw.Stop();
             Console.WriteLine($"abort count {txnAborts}");
             long opMs = opSw.ElapsedMilliseconds;
@@ -498,28 +520,52 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
-        int successCount = 0;
-        int abortCount = 0;
-        CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
-        Action<bool> incrementCount = (success) => {
-            cde.Signal();
-            if (success)
-                Interlocked.Increment(ref successCount);
-            else 
-                Interlocked.Increment(ref abortCount);
-        };
-        txnManager.callback = incrementCount;
+        // int successCount = 0;
+        // int abortCount = 0;
+        // CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
+        // Action<bool> incrementCount = (success) => {
+        //     cde.Signal();
+        //     if (success)
+        //         Interlocked.Increment(ref successCount);
+        //     else 
+        //         Interlocked.Increment(ref abortCount);
+        // };
+        // txnManager.callback = incrementCount;
         
+        // for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
+        //     int loc = i + (cfg.perThreadDataCount * thread_idx);
+        //     if (queries[loc] is NewOrderQuery){
+        //         NewOrder((NewOrderQuery)queries[loc]);
+        //     } else {
+        //         Payment((PaymentQuery)queries[loc]);
+        //     }
+        // }
+
+        // cde.Wait();
+        // return abortCount;
+        // FOR TESTING TPCC BASE
+        int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
-            int loc = i + (cfg.perThreadDataCount * thread_idx);
-            if (queries[loc] is NewOrderQuery){
-                NewOrder((NewOrderQuery)queries[loc]);
-            } else {
-                Payment((PaymentQuery)queries[loc]);
+            TransactionContext t = txnManager.Begin();
+            for (int j = 0; j < cfg.perTransactionCount; j++){
+                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                PrimaryKey key = keys[i];
+
+                if (isWrite[loc]) {
+                    // shift value by thread_idx to write new value
+                    int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
+                    // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
+                    byte[] val = values[newValueIndex];
+                    table.Update(key, table.GetSchema(), val, t);
+                } else {
+                    table.Read(key, table.GetSchema(), t);
+                }
+            }
+            var success = txnManager.Commit(t);
+            if (!success){
+                abortCount++;
             }
         }
-
-        cde.Wait();
         return abortCount;
     }
 
