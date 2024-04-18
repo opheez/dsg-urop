@@ -513,13 +513,14 @@ public class TpccBenchmark : TableBenchmark {
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
         int abortCount = 0;
         int perThreadDataCount = keys.Count() / cfg.threadCount;
+        int remainder = 0;
         // have the last thread handle the remaining data
         if (thread_idx == cfg.threadCount - 1) {
             if (perThreadDataCount == 0) thread_idx = 0;
-            perThreadDataCount += keys.Count() % cfg.threadCount;
+            remainder = keys.Count() % cfg.threadCount;
         }
-        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount}");
-        for (int i = 0; i < perThreadDataCount; i += cfg.perTransactionCount){
+        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
+        for (int i = 0; i < perThreadDataCount + remainder; i += cfg.perTransactionCount){
             TransactionContext ctx = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (perThreadDataCount * thread_idx);
@@ -550,7 +551,7 @@ public class TpccBenchmark : TableBenchmark {
             // GenerateStockData(w_id);
             foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
             {
-                Console.WriteLine($"Start with populating {tableType}");
+                Console.WriteLine($"Start with populating {tableType} for {w_id}");
                 switch (tableType) 
                 {
                     case TableType.Customer:
@@ -582,7 +583,7 @@ public class TpccBenchmark : TableBenchmark {
         InsertMultiThreadedTransactions(table, txnManager);
     }
     public void PopulateItemTable(ShardedTable table, ShardedTransactionManager txnManager, int w_id){
-        using (var reader = new BinaryReader(File.Open(tableDataFiles[TableType.Item], FileMode.Open))) {
+        using (var reader = new BinaryReader(File.Open(tableDataFiles[TableType.Item], FileMode.Open, FileAccess.Read, FileShare.Read))) {
             int numItems = reader.ReadInt32();
             values = new byte[numItems][];
             keys = new PrimaryKey[numItems];

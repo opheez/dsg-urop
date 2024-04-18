@@ -80,7 +80,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
     public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
-        PrintDebug($"Reading from rpc service");
         long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
         Table table = tables[request.Key.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
@@ -141,7 +140,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             attrCount: 10,
             threadCount: 12,
             iterationCount: 1,
-            perThreadDataCount: 100
+            perThreadDataCount: 10000
         );
         switch (request.Workload) {
             case "ycsb":
@@ -151,10 +150,10 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 break;
             case "tpcc":
                 TpccConfig tpccConfig = new TpccConfig(
-                    numWh: 2,
-                    partitionsPerMachine: 1,
-                    newOrderCrossPartitionProbability: 80,
-                    paymentCrossPartitionProbability: 80
+                    numWh: 8,
+                    partitionsPerMachine: 4
+                    // newOrderCrossPartitionProbability: 80,
+                    // paymentCrossPartitionProbability: 80
                     // numCustomer: 10,
                     // numDistrict: 10,
                     // numItem: 10,

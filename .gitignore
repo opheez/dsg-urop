@@ -6,3 +6,4 @@ BenchmarkDotNet.Artifacts/
 benchmark/benchmarkResults/
 TestResults/
 global.json
+*.bin
