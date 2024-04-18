@@ -158,15 +158,17 @@ unsafe class Program {
         // ));
         DarqWal darqWal = new DarqWal(new DarqId(partitionId));
         builder.Services.AddSingleton<DarqWal>(darqWal);
-        TpccRpcClient rpcClient = new TpccRpcClient(partitionId, clusterMap);
-        builder.Services.AddSingleton<TpccRpcClient>(rpcClient);
         Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
 
         // // uncomment for YCSB
+        // YcsbRpcClient rpcClient = new YcsbRpcClient(partitionId, clusterMap);
+        // builder.Services.AddSingleton<YcsbRpcClient>(rpcClient);
         // var schema = new (long, int)[]{(12345,8)};
-        // tables[0] = new ShardedTable(0, schema, services.GetRequiredService<RpcClient>(), services.GetRequiredService<ILogger<ShardedTable>>());
+        // tables[0] = new ShardedTable(0, schema, rpcClient);
 
         // uncomment for TPC-C
+        TpccRpcClient rpcClient = new TpccRpcClient(partitionId, clusterMap);
+        builder.Services.AddSingleton<TpccRpcClient>(rpcClient);
         foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
             (long, int)[] schema;
             switch (tEnum) {

@@ -139,8 +139,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             ratio: 0.2,
             attrCount: 10,
             threadCount: 12,
-            iterationCount: 1,
-            perThreadDataCount: 10000
+            iterationCount: 1
+            // perThreadDataCount: 10000
         );
         switch (request.Workload) {
             case "ycsb_single":
