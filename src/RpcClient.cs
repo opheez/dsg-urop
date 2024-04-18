@@ -119,8 +119,8 @@ public class YcsbRpcClient : RpcClient
 
     public override long HashKeyToDarqId(PrimaryKey key){
         // TODO: arbitrary for now, define some rules for how to map keys to servers
-        return key.Keys[0] % clusterMap.Count;
-        // return 0;
+        // return key.Keys[0] % clusterMap.Count;
+        return 0;
     }
 
 }

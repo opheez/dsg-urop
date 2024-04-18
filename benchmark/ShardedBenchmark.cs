@@ -34,7 +34,7 @@ public class ShardedBenchmark : TableBenchmark
         }
 
         for (int i = 0; i < cfg.datasetSize; i++){
-            keys[i] = new PrimaryKey(table.GetId(), i);
+            keys[i] = new PrimaryKey(table.GetId(), (i % 100000) + 1);
         }
         stats = new BenchmarkStatistics($"{name}-ShardedBenchmark", cfg, numWrites, cfg.datasetSize);
         System.Console.WriteLine("Done init");
@@ -60,6 +60,25 @@ public class ShardedBenchmark : TableBenchmark
         // TODO: reset table and 
         stats?.ShowAllStats();
         stats?.SaveStatsToFile();
+    }
+
+    override protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
+        int abortCount = 0;
+        int c = 0;
+        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
+            TransactionContext t = txnManager.Begin();
+            for (int j = 0; j < cfg.perTransactionCount; j++) {
+                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                tbl.Insert(keys[loc], td, values[loc], t);
+            }
+            var success = txnManager.Commit(t);
+            if (!success){
+                abortCount++;
+            } else {
+                c++;
+            }
+        }
+        return abortCount;
     }
 }
 }
