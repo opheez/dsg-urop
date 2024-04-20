@@ -505,6 +505,7 @@ public class TpccBenchmark : TableBenchmark {
             // new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
             // PopulateTables();
             PopulateItemTable(tables[6], txnManager, 1);
+            Console.WriteLine($"done inserting");
             var opSw = Stopwatch.StartNew();
             // table and txnManager not used
             // cde = new CountdownEvent(cfg.perThreadDataCount);
