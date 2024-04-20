@@ -13,6 +13,7 @@ public class TransactionContext {
     internal List<(PrimaryKey, TupleDesc[], byte[])> Wset = new(); // byte[] corresponds to the TupleDesc
     public long tid;
     public Dictionary<int, Table> tables;
+    public Action<bool> callback;
     public TransactionContext(Dictionary<int, Table> tables){
         this.tables = tables;
     }

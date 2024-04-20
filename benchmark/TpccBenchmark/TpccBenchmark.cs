@@ -198,6 +198,7 @@ public class TpccBenchmark : TableBenchmark {
     private ShardedTransactionManager txnManager;
     Query[] queries;
     private RpcClient rpcClient;
+    // CountdownEvent cde;
 
     public TpccBenchmark(int partitionId, TpccConfig tpcCfg, BenchmarkConfig cfg, Dictionary<int, ShardedTable> tables, ShardedTransactionManager txnManager) : base(cfg){
         System.Console.WriteLine("Init");
@@ -339,7 +340,7 @@ public class TpccBenchmark : TableBenchmark {
         return numNewOrders;
     }
 
-    public void NewOrder(NewOrderQuery query){
+    public void NewOrder(NewOrderQuery query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -429,10 +430,10 @@ public class TpccBenchmark : TableBenchmark {
             float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
             total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
         }
-        txnManager.CommitAsync(ctx);
+        txnManager.CommitWithCallback(ctx, callback);
     }
 
-    public void Payment(PaymentQuery query){
+    public void Payment(PaymentQuery query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -493,7 +494,7 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Abort(ctx);
             return;
         }
-        txnManager.CommitAsync(ctx);
+        txnManager.CommitWithCallback(ctx, callback);
     }
 
     override public void RunTransactions(){
@@ -506,6 +507,7 @@ public class TpccBenchmark : TableBenchmark {
             PopulateItemTable(tables[6], txnManager, 1);
             var opSw = Stopwatch.StartNew();
             // table and txnManager not used
+            // cde = new CountdownEvent(cfg.perThreadDataCount);
             int txnAborts = WorkloadMultiThreadedTransactions(tables[6], txnManager, cfg.ratio);
             opSw.Stop();
             Console.WriteLine($"abort count {txnAborts}");
@@ -520,17 +522,13 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
-        // int successCount = 0;
-        // int abortCount = 0;
-        // CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
-        // Action<bool> incrementCount = (success) => {
-        //     cde.Signal();
-        //     if (success)
-        //         Interlocked.Increment(ref successCount);
-        //     else 
-        //         Interlocked.Increment(ref abortCount);
-        // };
-        // txnManager.callback = incrementCount;
+        int successCount = 0;
+        CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
+        Action<bool> incrementCount = (success) => {
+            cde.Signal();
+            if (success)
+                Interlocked.Increment(ref successCount);
+        };
         
         // for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
         //     int loc = i + (cfg.perThreadDataCount * thread_idx);
@@ -544,7 +542,6 @@ public class TpccBenchmark : TableBenchmark {
         // cde.Wait();
         // return abortCount;
         // FOR TESTING TPCC BASE
-        int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++){
@@ -561,12 +558,10 @@ public class TpccBenchmark : TableBenchmark {
                     table.Read(key, table.GetSchema(), t);
                 }
             }
-            var success = txnManager.Commit(t);
-            if (!success){
-                abortCount++;
-            }
+            txnManager.CommitWithCallback(t, incrementCount);
         }
-        return abortCount;
+        cde.Wait();
+        return cfg.perThreadDataCount - successCount;
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
