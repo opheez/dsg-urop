@@ -156,9 +156,9 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             case "tpcc":
                 TpccConfig tpccConfig = new TpccConfig(
                     numWh: 8,
-                    partitionsPerMachine: 4
-                    // newOrderCrossPartitionProbability: 80,
-                    // paymentCrossPartitionProbability: 80
+                    partitionsPerMachine: 4,
+                    newOrderCrossPartitionProbability: 0,
+                    paymentCrossPartitionProbability: 0
                     // numCustomer: 10,
                     // numDistrict: 10,
                     // numItem: 10,

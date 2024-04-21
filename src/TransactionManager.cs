@@ -70,12 +70,12 @@ public class TransactionManager {
         return false;
     }
 
-    public void CommitWithCallback(TransactionContext ctx, Action<bool> callback){
-        PrintDebug($"adding ctx to queue for commit", ctx);
-        ctx.status = TransactionStatus.Pending;
-        ctx.callback = callback;
-        txnQueue.Add(ctx);
-    }
+    // public void CommitWithCallback(TransactionContext ctx, Action<bool> callback){
+    //     PrintDebug($"adding ctx to queue for commit", ctx);
+    //     ctx.status = TransactionStatus.Pending;
+    //     ctx.callback = callback;
+    //     txnQueue.Add(ctx);
+    // }
 
     /// <summary>
     /// Spawns a thread that continuously polls the queue to 
@@ -178,7 +178,7 @@ public class TransactionManager {
             commit(ctx.tid, LogType.Commit);
             // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
         }
-        ctx.callback?.Invoke(true);
+        // ctx.callback?.Invoke(true);
         // assign num 
         int finalTxnNum;
         try {
@@ -204,7 +204,7 @@ public class TransactionManager {
         if (wal != null){
             wal.Finish(ctx.tid, LogType.Abort);
         }
-        ctx.callback?.Invoke(false);
+        // ctx.callback?.Invoke(false);
         try {
             sl.Enter(ref lockTaken);
             active.Remove(ctx);
