@@ -9,8 +9,8 @@ public class TransactionContext {
 
     internal TransactionStatus status;
     internal int startTxnNum;
-    internal List<(PrimaryKey, byte[])> Rset = new(); // byte[] is the entire record
-    internal List<(PrimaryKey, TupleDesc[], byte[])> Wset = new(); // byte[] corresponds to the TupleDesc
+    internal List<(PrimaryKey, byte[])> Rset = new(50); // byte[] is the entire record
+    internal List<(PrimaryKey, TupleDesc[], byte[])> Wset = new(50); // byte[] corresponds to the TupleDesc
     public long tid;
     public Dictionary<int, Table> tables;
     public Action<bool> callback;
