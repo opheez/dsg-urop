@@ -560,7 +560,7 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Reset();
             txnManager.Run();
 
-            new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
+            // new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
             PopulateTables();
             // PopulateItemTable(tables[6], txnManager, 1);
             Console.WriteLine($"done inserting");

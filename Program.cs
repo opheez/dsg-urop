@@ -25,13 +25,75 @@ unsafe class Program {
     //         seed: 12345,
     //         attrCount: 10,
     //         threadCount: 12,
-    //         iterationCount: 3
+    //         iterationCount: 1
     //     );
-    //     TableBenchmark b = new FixedLenTableBenchmark("DictContext", ycsbCfg);
-    //     b.RunTransactions();
+    //     // TableBenchmark b = new FixedLenTableBenchmark("DictContext", ycsbCfg);
+    //     // b.RunTransactions();
     //     // b = new VarLenTableBenchmark(12345, 0.5);
     //     // b.Run();
+    //     TpccConfig tpccConfig = new TpccConfig(
+    //         numWh: 4,
+    //         partitionsPerMachine: 4,
+    //         newOrderCrossPartitionProbability: 0,
+    //         paymentCrossPartitionProbability: 0
+    //         // numCustomer: 10,
+    //         // numDistrict: 10,
+    //         // numItem: 10,
+    //         // numOrder: 10,
+    //         // numStock: 10
+    //     );
+    //     Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();  
+    //     TpccRpcClient rpcClient = new TpccRpcClient(0, clusterMap);
 
+    //     Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
+    //     foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
+    //         (long, int)[] schema;
+    //         switch (tEnum) {
+    //             case TableType.Warehouse:
+    //                 schema = TpccSchema.WAREHOUSE_SCHEMA;
+    //                 break;
+    //             case TableType.District:
+    //                 schema = TpccSchema.DISTRICT_SCHEMA;
+    //                 break;
+    //             case TableType.Customer:
+    //                 schema = TpccSchema.CUSTOMER_SCHEMA;
+    //                 break;
+    //             case TableType.History:
+    //                 schema = TpccSchema.HISTORY_SCHEMA;
+    //                 break;  
+    //             case TableType.Item:
+    //                 schema = TpccSchema.ITEM_SCHEMA;
+    //                 break;
+    //             case TableType.NewOrder:
+    //                 schema = TpccSchema.NEW_ORDER_SCHEMA;
+    //                 break;
+    //             case TableType.Order:
+    //                 schema = TpccSchema.ORDER_SCHEMA;
+    //                 break;
+    //             case TableType.OrderLine:
+    //                 schema = TpccSchema.ORDER_LINE_SCHEMA;
+    //                 break;
+    //             case TableType.Stock:
+    //                 schema = TpccSchema.STOCK_SCHEMA;
+    //                 break;
+    //             default:
+    //                 throw new Exception("Invalid table type");
+    //         }
+    //         int i = (int)tEnum;
+    //         tables[i] = new ShardedTable(
+    //             i,
+    //             schema,
+    //             rpcClient
+    //         );
+    //     }
+    //     ShardedTransactionManager stm = new ShardedTransactionManager(
+    //         7,
+    //         rpcClient,
+    //         tables
+    //     );
+        
+    //     TpccBenchmark tpccBenchmark = new TpccBenchmark((int)0, tpccConfig, ycsbCfg, tables, stm);
+    //     tpccBenchmark.RunTransactions();
     // }
 
     //     private static void RunDarqWithProcessor(DarqId me, IDarqClusterInfo clusterInfo)
