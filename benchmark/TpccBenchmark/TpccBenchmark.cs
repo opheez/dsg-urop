@@ -428,12 +428,14 @@ public class TpccBenchmark : TableBenchmark {
         bool success = tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
         if (!success) {
             txnManager.Abort(ctx);
-            return false;
+            callback?.Invoke(false);
+            return;
         }
         success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), emptyByteArr, ctx);
         if (!success) {
             txnManager.Abort(ctx);
-            return false;
+            callback?.Invoke(false);
+            return;
         }
         float total_amount = 0;
         for (int i = 0; i < query.o_ol_cnt; i++)
@@ -475,7 +477,8 @@ public class TpccBenchmark : TableBenchmark {
             success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
             if (!success) {
                 txnManager.Abort(ctx);
-                return false;
+                callback?.Invoke(false);
+                return;
             }
             // update total_amount
             float c_discount = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_DISCOUNT, customerRow));
@@ -487,14 +490,14 @@ public class TpccBenchmark : TableBenchmark {
             stockBytePool.Return(updateStockData);
             orderLineBytePool.Return(updateOrderLineData);
         }
-        success = txnManager.Commit(ctx);
+        txnManager.CommitWithCallback(ctx, callback);
         newOrderOlBytePool.Return(itemRows);
         newOrderOlBytePool.Return(stockRows);
         orderBytePool.Return(insertOrderData);
-        return success;
+        return;
     }
 
-    public bool Payment(PaymentQuery query){
+    public void Payment(PaymentQuery query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -548,12 +551,12 @@ public class TpccBenchmark : TableBenchmark {
         bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
         if (!success) {
             txnManager.Abort(ctx);
-            return false;
+            callback?.Invoke(false);
+            return;
         }
-        success = txnManager.Commit(ctx);
+        txnManager.CommitWithCallback(ctx, callback);
         customerBytePool.Return(updateCustomerData);
         historyBytePool.Return(insertHistoryData);
-        return success;
     }
 
     override public void RunTransactions(){
@@ -582,22 +585,23 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
-        // int successCount = 0;
-        // CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
-        // Action<bool> incrementCount = (success) => {
-        //     cde.Signal();
-        //     if (success)
-        //         Interlocked.Increment(ref successCount);
-        // };
+        int successCount = 0;
+        CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
+        Action<bool> incrementCount = (success) => {
+            cde.Signal();
+            if (success)
+                Interlocked.Increment(ref successCount);
+        };
         int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
             if (queries[loc] is NewOrderQuery){
-                if (!NewOrder((NewOrderQuery)queries[loc])) abortCount++;
+                NewOrder((NewOrderQuery)queries[loc], incrementCount);
             } else {
-                if (!Payment((PaymentQuery)queries[loc])) abortCount++;
+                Payment((PaymentQuery)queries[loc], incrementCount);
             }
         }
+        // return abortCount;
 
         // cde.Wait();
         // return abortCount;
@@ -625,9 +629,8 @@ public class TpccBenchmark : TableBenchmark {
         //     }
         //     // txnManager.CommitWithCallback(t, incrementCount);
         // }
-        return abortCount;
-        // cde.Wait();
-        // return cfg.perThreadDataCount - successCount;
+        cde.Wait();
+        return cfg.perThreadDataCount - successCount;
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){

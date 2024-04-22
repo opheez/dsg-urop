@@ -7,7 +7,7 @@ using FASTER.libdpr;
 
 namespace DB {
 public class TransactionManager {
-    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>();
+    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>(14);
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
     internal int txnc = 0;
@@ -70,12 +70,12 @@ public class TransactionManager {
         return false;
     }
 
-    // public void CommitWithCallback(TransactionContext ctx, Action<bool> callback){
-    //     PrintDebug($"adding ctx to queue for commit", ctx);
-    //     ctx.status = TransactionStatus.Pending;
-    //     ctx.callback = callback;
-    //     txnQueue.Add(ctx);
-    // }
+    public void CommitWithCallback(TransactionContext ctx, Action<bool> callback){
+        PrintDebug($"adding ctx to queue for commit", ctx);
+        ctx.status = TransactionStatus.Pending;
+        ctx.callback = callback;
+        txnQueue.Add(ctx);
+    }
 
     /// <summary>
     /// Spawns a thread that continuously polls the queue to 
