@@ -261,7 +261,7 @@ public unsafe class Table : IDisposable{
             }
             totalSize += desc.Size;
         }
-        if (write && totalSize != value.Length) {
+        if (write && totalSize > value.Length) {
             throw new ArgumentException($"Expected size {totalSize} from tuple description but instead got size {value.Length}");
         }
     }

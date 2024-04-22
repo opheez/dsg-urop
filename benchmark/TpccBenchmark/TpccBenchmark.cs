@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Text;
 using System.Diagnostics;
 using SharpNeat.Utility;
+using FASTER.common;
 
 namespace DB {
 public struct TpccConfig {
@@ -178,6 +179,34 @@ public class TpccBenchmark : TableBenchmark {
     };
 
     private static byte[] ORIGINAL = Encoding.ASCII.GetBytes("ORIGINAL");
+    private static TupleDesc[] updateStockTds = new TupleDesc[] {
+        new TupleDesc((int)TableField.S_QUANTITY, TpccSchema.fieldsToSchema[TableField.S_QUANTITY].Item1, 0),
+        new TupleDesc((int)TableField.S_YTD, TpccSchema.fieldsToSchema[TableField.S_YTD].Item1, TpccSchema.fieldsToSchema[TableField.S_QUANTITY].Item1),
+        new TupleDesc((int)TableField.S_ORDER_CNT, TpccSchema.fieldsToSchema[TableField.S_ORDER_CNT].Item1, TpccSchema.fieldsToSchema[TableField.S_QUANTITY].Item1 + TpccSchema.fieldsToSchema[TableField.S_YTD].Item1),
+        new TupleDesc((int)TableField.S_REMOTE_CNT, TpccSchema.fieldsToSchema[TableField.S_REMOTE_CNT].Item1, TpccSchema.fieldsToSchema[TableField.S_QUANTITY].Item1 + TpccSchema.fieldsToSchema[TableField.S_YTD].Item1 + TpccSchema.fieldsToSchema[TableField.S_ORDER_CNT].Item1)
+    };
+
+    private static TupleDesc[] updateWarehouseTds = new TupleDesc[] {
+        new TupleDesc((int)TableField.W_YTD, TpccSchema.fieldsToSchema[TableField.W_YTD].Item1, 0)
+    };
+
+    private static TupleDesc[] updateDistrictYtdTds = new TupleDesc[] {
+        new TupleDesc((int)TableField.D_YTD, TpccSchema.fieldsToSchema[TableField.D_YTD].Item1, 0)
+    };
+
+    private static TupleDesc[] updateDistrictNextOIdTds = new TupleDesc[] {
+        new TupleDesc((int)TableField.D_NEXT_O_ID, TpccSchema.fieldsToSchema[TableField.D_NEXT_O_ID].Item1, 0)
+    };
+
+    private static TupleDesc[] updateCustomerTds = new TupleDesc[] {
+        new TupleDesc((int)TableField.C_BALANCE, TpccSchema.fieldsToSchema[TableField.C_BALANCE].Item1, 0),
+        new TupleDesc((int)TableField.C_YTD_PAYMENT, TpccSchema.fieldsToSchema[TableField.C_YTD_PAYMENT].Item1, TpccSchema.fieldsToSchema[TableField.C_BALANCE].Item1),
+        new TupleDesc((int)TableField.C_PAYMENT_CNT, TpccSchema.fieldsToSchema[TableField.C_PAYMENT_CNT].Item1, TpccSchema.fieldsToSchema[TableField.C_BALANCE].Item1 + TpccSchema.fieldsToSchema[TableField.C_YTD_PAYMENT].Item1),
+        new TupleDesc((int)TableField.C_DATA, TpccSchema.fieldsToSchema[TableField.C_DATA].Item1, TpccSchema.fieldsToSchema[TableField.C_BALANCE].Item1 + TpccSchema.fieldsToSchema[TableField.C_YTD_PAYMENT].Item1 + TpccSchema.fieldsToSchema[TableField.C_PAYMENT_CNT].Item1)
+    };
+
+    private static byte[] emptyByteArr = new byte[0];
+
     Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
         {TableType.Warehouse, "warehouseData_{0}.bin"},
         {TableType.District, "districtData_{0}.bin"},
@@ -198,6 +227,12 @@ public class TpccBenchmark : TableBenchmark {
     private ShardedTransactionManager txnManager;
     Query[] queries;
     private RpcClient rpcClient;
+    internal SimpleObjectPool<byte[]> orderBytePool;
+    internal SimpleObjectPool<byte[]> stockBytePool;
+    internal SimpleObjectPool<byte[]> orderLineBytePool;
+    internal SimpleObjectPool<byte[]> customerBytePool;
+    internal SimpleObjectPool<byte[]> historyBytePool;
+    internal SimpleObjectPool<byte[][]> newOrderOlBytePool;
     // CountdownEvent cde;
 
     public TpccBenchmark(int partitionId, TpccConfig tpcCfg, BenchmarkConfig cfg, Dictionary<int, ShardedTable> tables, ShardedTransactionManager txnManager) : base(cfg){
@@ -207,6 +242,17 @@ public class TpccBenchmark : TableBenchmark {
         this.tables = tables;
         this.txnManager = txnManager;
         this.rpcClient = txnManager.GetRpcClient();
+        orderBytePool = new SimpleObjectPool<byte[]>(() => new byte[tables[(int)TableType.Order].rowSize]);
+        // assume larger
+        int stockByteSize = TpccSchema.fieldsToSchema[TableField.S_YTD].Item1 + TpccSchema.fieldsToSchema[TableField.S_ORDER_CNT].Item1 + TpccSchema.fieldsToSchema[TableField.S_REMOTE_CNT].Item1 + TpccSchema.fieldsToSchema[TableField.S_QUANTITY].Item1;
+        stockBytePool = new SimpleObjectPool<byte[]>(() => new byte[stockByteSize]);
+        orderLineBytePool = new SimpleObjectPool<byte[]>(() => new byte[tables[(int)TableType.OrderLine].rowSize]);
+        // assume larger
+        int customerByteSize = TpccSchema.fieldsToSchema[TableField.C_BALANCE].Item1 + TpccSchema.fieldsToSchema[TableField.C_YTD_PAYMENT].Item1 + TpccSchema.fieldsToSchema[TableField.C_PAYMENT_CNT].Item1 + TpccSchema.fieldsToSchema[TableField.C_DATA].Item1;
+        customerBytePool = new SimpleObjectPool<byte[]>(() => new byte[customerByteSize]);
+        historyBytePool = new SimpleObjectPool<byte[]>(() => new byte[tables[(int)TableType.History].rowSize]);
+        newOrderOlBytePool = new SimpleObjectPool<byte[][]>(() => new byte[15][]);
+
         this.ol_cnts = new int[tpcCfg.NumDistrict][];
         for (int i = 0; i < tpcCfg.NumDistrict; i++){
             ol_cnts[i] = new int[tpcCfg.NumOrder];
@@ -348,8 +394,8 @@ public class TpccBenchmark : TableBenchmark {
         ReadOnlySpan<byte> districtRow = tables[(int)TableType.District].Read(districtPk, tables[(int)TableType.District].GetSchema(), ctx);
         ReadOnlySpan<byte> customerRow = tables[(int)TableType.Customer].Read(new PrimaryKey((int)TableType.Customer, query.w_id, query.d_id, query.c_id), tables[(int)TableType.Customer].GetSchema(), ctx);
 
-        byte[][] itemRows = new byte[query.o_ol_cnt][];
-        byte[][] stockRows = new byte[query.o_ol_cnt][];
+        byte[][] itemRows = newOrderOlBytePool.Checkout();
+        byte[][] stockRows = newOrderOlBytePool.Checkout();
         bool allLocal = true;
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
@@ -367,12 +413,12 @@ public class TpccBenchmark : TableBenchmark {
         int old_d_next_o_id = BitConverter.ToInt32(old_d_next_o_id_bytes);
         int new_d_next_o_id = old_d_next_o_id + 1;
         byte[] new_d_next_o_id_bytes = BitConverter.GetBytes(new_d_next_o_id);
-        tables[(int)TableType.District].Update(districtPk, new TupleDesc[]{new TupleDesc((int)TableField.D_NEXT_O_ID, 4, 0)}, new_d_next_o_id_bytes, ctx);
+        tables[(int)TableType.District].Update(districtPk, updateDistrictNextOIdTds, new_d_next_o_id_bytes, ctx);
 
         // insert into order and new order
         PrimaryKey newOrderPk = new PrimaryKey((int)TableType.NewOrder, query.w_id, query.d_id, old_d_next_o_id);
         PrimaryKey orderPk = new PrimaryKey((int)TableType.Order, query.w_id, query.d_id, old_d_next_o_id);
-        byte[] insertOrderData = new byte[tables[(int)TableType.Order].rowSize];
+        byte[] insertOrderData = orderBytePool.Checkout();
         SetField(TableType.Order, TableField.O_C_ID, insertOrderData, BitConverter.GetBytes(query.c_id));
         SetField(TableType.Order, TableField.O_ENTRY_D, insertOrderData, BitConverter.GetBytes(DateTime.Now.ToBinary()));
         SetField(TableType.Order, TableField.O_CARRIER_ID, insertOrderData, BitConverter.GetBytes(0));
@@ -383,7 +429,7 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Abort(ctx);
             return false;
         }
-        success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), new byte[0], ctx);
+        success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), emptyByteArr, ctx);
         if (!success) {
             txnManager.Abort(ctx);
             return false;
@@ -392,27 +438,32 @@ public class TpccBenchmark : TableBenchmark {
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
             // update stock
-            byte[] updateStockData = new byte[0];
-            TupleDesc[] updateStockTds = new TupleDesc[0];
+            byte[] updateStockData = stockBytePool.Checkout();
             float i_price = BitConverter.ToSingle(ExtractField(TableType.Item, TableField.I_PRICE, itemRows[i]));
+
             int s_quantity = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_QUANTITY, stockRows[i]));
             if (s_quantity >= query.ol_quantity[i] + 10) s_quantity -= query.ol_quantity[i];
             else s_quantity += 91 - query.ol_quantity[i];
-            (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_QUANTITY, BitConverter.GetBytes(s_quantity));
+            BitConverter.GetBytes(s_quantity).CopyTo(updateStockData, updateStockTds[0].Offset);
+
             int s_ytd = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_YTD, stockRows[i])) + query.ol_quantity[i];
-            (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_YTD, BitConverter.GetBytes(s_ytd));
+            BitConverter.GetBytes(s_ytd).CopyTo(updateStockData, updateStockTds[1].Offset);
+
             int s_order_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_ORDER_CNT, stockRows[i])) + 1;
-            (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_ORDER_CNT, BitConverter.GetBytes(s_order_cnt));
+            BitConverter.GetBytes(s_order_cnt).CopyTo(updateStockData, updateStockTds[2].Offset);
+
             if (query.ol_supply_w_id[i] != query.w_id)
             {
                 int s_remote_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_REMOTE_CNT, stockRows[i])) + 1;
-                (updateStockData, updateStockTds) = BuildUpdate(updateStockData, updateStockTds, TableType.Stock, TableField.S_REMOTE_CNT, BitConverter.GetBytes(s_remote_cnt));
+                BitConverter.GetBytes(s_remote_cnt).CopyTo(updateStockData, updateStockTds[3].Offset);
+                tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), updateStockTds, updateStockData, ctx);
+            } else {
+                tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), updateStockTds[0..3], updateStockData, ctx);
             }
-            tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), updateStockTds, updateStockData, ctx);
 
             // insert into order line
             float ol_amount = i_price * query.ol_quantity[i];
-            byte[] updateOrderLineData = new byte[tables[(int)TableType.OrderLine].rowSize];
+            byte[] updateOrderLineData = orderLineBytePool.Checkout();
             SetField(TableType.OrderLine, TableField.OL_I_ID, updateOrderLineData, BitConverter.GetBytes(query.ol_i_ids[i]));
             SetField(TableType.OrderLine, TableField.OL_SUPPLY_W_ID, updateOrderLineData, BitConverter.GetBytes(query.ol_supply_w_id[i]));
             SetField(TableType.OrderLine, TableField.OL_DELIVERY_D, updateOrderLineData, BitConverter.GetBytes(0));
@@ -430,8 +481,16 @@ public class TpccBenchmark : TableBenchmark {
             float w_tax = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_TAX, warehouseRow));
             float d_tax = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_TAX, districtRow));
             total_amount += ol_amount * (1 - c_discount) * (1 + w_tax + d_tax);
+
+            // should be fine since Insert and Update call AddToWriteset which makes a copy of the data? 
+            stockBytePool.Return(updateStockData);
+            orderLineBytePool.Return(updateOrderLineData);
         }
-        return txnManager.Commit(ctx);
+        success = txnManager.Commit(ctx);
+        newOrderOlBytePool.Return(itemRows);
+        newOrderOlBytePool.Return(stockRows);
+        orderBytePool.Return(insertOrderData);
+        return success;
     }
 
     public bool Payment(PaymentQuery query){
@@ -453,41 +512,36 @@ public class TpccBenchmark : TableBenchmark {
         // standard tpcc write to w_ytd
         // update warehouse with increment W_YTD
         float w_ytd = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_YTD, warehouseRow)) + query.h_amount;
-        byte[] updateWarehouseData = new byte[0];
-        TupleDesc[] updateWarehouseTds = new TupleDesc[0];
-        (updateWarehouseData, updateWarehouseTds) = BuildUpdate(updateWarehouseData, updateWarehouseTds, TableType.Warehouse, TableField.W_YTD, BitConverter.GetBytes(w_ytd));
-        tables[(int)TableType.Warehouse].Update(warehousePk, updateWarehouseTds, updateWarehouseData, ctx);
+        tables[(int)TableType.Warehouse].Update(warehousePk, updateWarehouseTds, BitConverter.GetBytes(w_ytd), ctx);
 
         // update district with increment D_YTD
         float d_ytd = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_YTD, districtRow)) + query.h_amount;
-        byte[] updateDistrictData = new byte[0];
-        TupleDesc[] updateDistrictTds = new TupleDesc[0];
-        (updateDistrictData, updateDistrictTds) = BuildUpdate(updateDistrictData, updateDistrictTds, TableType.District, TableField.D_YTD, BitConverter.GetBytes(d_ytd));
-        tables[(int)TableType.District].Update(districtPk, updateDistrictTds, updateDistrictData, ctx);
+        tables[(int)TableType.District].Update(districtPk, updateDistrictYtdTds, BitConverter.GetBytes(d_ytd), ctx);
 
         // update customer
-        byte[] updateCustomerData = new byte[0];
-        TupleDesc[] updateCustomerTds = new TupleDesc[0];
+        byte[] updateCustomerData = customerBytePool.Checkout();
         byte[] c_credit = ExtractField(TableType.Customer, TableField.C_CREDIT, customerRow);
+        float c_balance = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_BALANCE, customerRow)) - query.h_amount;
+        float c_ytd_payment = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_YTD_PAYMENT, customerRow)) + query.h_amount;
+        int c_payment_cnt = BitConverter.ToInt32(ExtractField(TableType.Customer, TableField.C_PAYMENT_CNT, customerRow)) + 1;
+        BitConverter.GetBytes(c_balance).CopyTo(updateCustomerData, updateCustomerTds[0].Offset);
+        BitConverter.GetBytes(c_ytd_payment).CopyTo(updateCustomerData, updateCustomerTds[1].Offset);
+        BitConverter.GetBytes(c_payment_cnt).CopyTo(updateCustomerData, updateCustomerTds[2].Offset);
         if (Encoding.ASCII.GetString(c_credit) == "BC")
         {
             string c_data_old = Encoding.ASCII.GetString(ExtractField(TableType.Customer, TableField.C_DATA, customerRow));
             string c_data_new = query.c_id + " " + query.c_d_id + " " + query.c_w_id + " " + query.d_id + " " + query.w_id + " " + String.Format("{0:0.00}", query.h_amount) + " " + c_data_old;
             c_data_new = c_data_new.Substring(0, Math.Min(c_data_new.Length, 500));
-            (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_DATA, Encoding.ASCII.GetBytes(c_data_new));
+            Encoding.ASCII.GetBytes(c_data_new).CopyTo(updateCustomerData, updateCustomerTds[3].Offset);
+            tables[(int)TableType.Customer].Update(customerPk, updateCustomerTds, updateCustomerData, ctx);
+        } else {
+            tables[(int)TableType.Customer].Update(customerPk, updateCustomerTds[0..3], updateCustomerData, ctx);
         }
-        float c_balance = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_BALANCE, customerRow)) - query.h_amount;
-        (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_BALANCE, BitConverter.GetBytes(c_balance));
-        float c_ytd_payment = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_YTD_PAYMENT, customerRow)) + query.h_amount;
-        (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_YTD_PAYMENT, BitConverter.GetBytes(c_ytd_payment));
-        int c_payment_cnt = BitConverter.ToInt32(ExtractField(TableType.Customer, TableField.C_PAYMENT_CNT, customerRow)) + 1;
-        (updateCustomerData, updateCustomerTds) = BuildUpdate(updateCustomerData, updateCustomerTds, TableType.Customer, TableField.C_PAYMENT_CNT, BitConverter.GetBytes(c_payment_cnt));
-        tables[(int)TableType.Customer].Update(customerPk, updateCustomerTds, updateCustomerData, ctx);
 
         // insert into history
         string h_data = Encoding.ASCII.GetString(ExtractField(TableType.Warehouse, TableField.W_NAME, warehouseRow)) + "    " + Encoding.ASCII.GetString(ExtractField(TableType.District, TableField.D_NAME, districtRow));
         PrimaryKey historyPk = new PrimaryKey((int)TableType.History, query.w_id, query.d_id, query.c_w_id, query.c_d_id, query.c_id, DateTime.Now.ToBinary());
-        byte[] insertHistoryData = new byte[tables[(int)TableType.History].rowSize];
+        byte[] insertHistoryData = historyBytePool.Checkout();
         SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(query.h_amount));
         SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
         bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
@@ -495,7 +549,10 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Abort(ctx);
             return false;
         }
-        return txnManager.Commit(ctx);
+        success = txnManager.Commit(ctx);
+        customerBytePool.Return(updateCustomerData);
+        historyBytePool.Return(insertHistoryData);
+        return success;
     }
 
     override public void RunTransactions(){
@@ -1105,11 +1162,11 @@ public class TpccBenchmark : TableBenchmark {
         value.CopyTo(row, offset);
     }
 
-    private (byte[], TupleDesc[]) BuildUpdate(byte[] data, TupleDesc[] tds, TableType tableType, TableField field, byte[] value){
-        int size = tables[(int)tableType].GetAttrMetadata((long)field).Item1;
-        int offset = tds.Length == 0 ? 0 : tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
-        return (data.Concat(value).ToArray(), tds.Append(new TupleDesc((int)field, size, offset)).ToArray());
-    }
+    // private (byte[], TupleDesc[]) BuildUpdate(byte[] data, TupleDesc[] tds, TableType tableType, TableField field, byte[] value){
+    //     int size = tables[(int)tableType].GetAttrMetadata((long)field).Item1;
+    //     int offset = tds.Length == 0 ? 0 : tds[tds.Length - 1].Offset + tds[tds.Length - 1].Size;
+    //     return (data.Concat(value).ToArray(), tds.Append(new TupleDesc((int)field, size, offset)).ToArray());
+    // }
     private void PrintByteArray(byte[] arr){
         foreach (byte b in arr){
             Console.Write(b + " ");
