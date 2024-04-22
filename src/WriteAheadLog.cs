@@ -127,7 +127,7 @@ public class DarqWal : IWriteAheadLog {
             long darqId = shard.Key;
             List<(KeyAttr, byte[])> writeset = shard.Value;
             LogEntry outEntry = new LogEntry(0, entry.tid, writeset.Select(x => x.Item1).ToArray(),  writeset.Select(x => x.Item2).ToArray());
-            PrintDebug($"sending prepare msg to {darqId} with keys {string.Join(", ", writeset.Select(x => x.Item1))}");
+            // PrintDebug($"sending prepare msg to {darqId} with keys {string.Join(", ", writeset.Select(x => x.Item1))}");
             requestBuilder.AddOutMessage(new DarqId(darqId), outEntry.ToBytes());
         }
 

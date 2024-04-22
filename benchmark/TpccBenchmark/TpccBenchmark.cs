@@ -409,7 +409,7 @@ public class TpccBenchmark : TableBenchmark {
         }
 
         // update district with increment D_NEXT_O_ID
-        byte[] old_d_next_o_id_bytes = ExtractField(TableType.District, TableField.D_NEXT_O_ID, districtRow);
+        ReadOnlySpan<byte> old_d_next_o_id_bytes = ExtractField(TableType.District, TableField.D_NEXT_O_ID, districtRow);
         int old_d_next_o_id = BitConverter.ToInt32(old_d_next_o_id_bytes);
         int new_d_next_o_id = old_d_next_o_id + 1;
         byte[] new_d_next_o_id_bytes = BitConverter.GetBytes(new_d_next_o_id);
@@ -520,7 +520,7 @@ public class TpccBenchmark : TableBenchmark {
 
         // update customer
         byte[] updateCustomerData = customerBytePool.Checkout();
-        byte[] c_credit = ExtractField(TableType.Customer, TableField.C_CREDIT, customerRow);
+        ReadOnlySpan<byte> c_credit = ExtractField(TableType.Customer, TableField.C_CREDIT, customerRow);
         float c_balance = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_BALANCE, customerRow)) - query.h_amount;
         float c_ytd_payment = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_YTD_PAYMENT, customerRow)) + query.h_amount;
         int c_payment_cnt = BitConverter.ToInt32(ExtractField(TableType.Customer, TableField.C_PAYMENT_CNT, customerRow)) + 1;
@@ -1152,9 +1152,9 @@ public class TpccBenchmark : TableBenchmark {
         }
     }
 
-    private byte[] ExtractField(TableType tableType, TableField field, ReadOnlySpan<byte> row) {
+    private ReadOnlySpan<byte> ExtractField(TableType tableType, TableField field, ReadOnlySpan<byte> row) {
         (int size, int offset) = tables[(int)tableType].GetAttrMetadata((long)field);
-        return row.Slice(offset, size).ToArray();
+        return row.Slice(offset, size);
     }
 
     private void SetField(TableType tableType, TableField field, byte[] row, byte[] value) {

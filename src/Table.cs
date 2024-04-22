@@ -56,7 +56,7 @@ public unsafe class Table : IDisposable{
     // will never return null, empty 
     virtual public ReadOnlySpan<byte> Read(PrimaryKey tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        PrintDebug($"Reading normal {tupleId}", ctx);
+        // PrintDebug($"Reading normal {tupleId}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
@@ -144,7 +144,7 @@ public unsafe class Table : IDisposable{
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns>whether insert succeeded</returns>
     public bool Insert(PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
-        PrintDebug($"Inserting {id}", ctx);
+        // PrintDebug($"Inserting {id}", ctx);
         if (this.data.ContainsKey(id)){
             return false;
         }
@@ -278,7 +278,7 @@ public class ShardedTable : Table {
 
     public override ReadOnlySpan<byte> Read(PrimaryKey tupleId, TupleDesc[] tupleDescs, TransactionContext ctx) {
         Validate(tupleDescs, null, false);
-        PrintDebug($"Reading {tupleId}", ctx);
+        // PrintDebug($"Reading {tupleId}", ctx);
 
         ReadOnlySpan<byte> value = ctx.GetFromReadset(tupleId);
         if (value == null) {
