@@ -387,7 +387,7 @@ public class TpccBenchmark : TableBenchmark {
         return numNewOrders;
     }
 
-    public bool NewOrder(NewOrderQuery query){
+    public void NewOrder(NewOrderQuery query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -401,7 +401,8 @@ public class TpccBenchmark : TableBenchmark {
         {
             if (query.ol_i_ids[i] == 0) {
                 txnManager.Abort(ctx);
-                return false;
+                callback?.Invoke(false);
+                return;
             }
             itemRows[i] = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, query.ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx).ToArray();
             stockRows[i] = tables[(int)TableType.Stock].Read(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), tables[(int)TableType.Stock].GetSchema(), ctx).ToArray();
