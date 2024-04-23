@@ -168,6 +168,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 
                 TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
                 tpccBenchmark.RunTransactions();
+                // tpccBenchmark.GenerateTables();
                 break;
             default:
                 throw new NotImplementedException();

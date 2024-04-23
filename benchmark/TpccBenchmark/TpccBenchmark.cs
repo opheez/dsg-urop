@@ -267,28 +267,6 @@ public class TpccBenchmark : TableBenchmark {
             entry_ds[i] = new long[tpcCfg.NumOrder];
         }
 
-        // // FOR TESTING TPCC BASE
-        // Random r = new Random(cfg.seed);
-        // // randomly assign reads and writes
-        // int numWrites = (int)(cfg.datasetSize * cfg.ratio);
-        // for (int i = 0; i < numWrites; i++){
-        //     long index = r.NextInt64(cfg.datasetSize-1);
-        //     // if this index is already a write, find the next available index
-        //     if (isWrite[(int)index]) {
-        //         while (isWrite[(int)index]){
-        //             index += 1;
-        //         }
-        //     }
-        //     isWrite[(int)index] = true;
-        // }
-        // for (int i = 0; i < cfg.datasetSize; i++){
-        //     values[i] = new byte[tables[6].rowSize];
-        //     r.NextBytes(values[i]);
-        // }
-        // for (int i = 0; i < cfg.datasetSize; i++){
-        //     keys[i] = new PrimaryKey(tables[6].GetId(), (i % tpcCfg.NumItem) + 1);
-        // }
-
         int numNewOrders = GenerateQueryData(PartitionId, "");
 
         stats = new BenchmarkStatistics($"TpccBenchmark", cfg, numNewOrders, cfg.datasetSize);
@@ -613,31 +591,6 @@ public class TpccBenchmark : TableBenchmark {
 
         // cde.Wait();
         // return abortCount;
-        // // FOR TESTING TPCC BASE
-        // int abortCount = 0;
-        // for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
-        //     TransactionContext t = txnManager.Begin();
-        //     for (int j = 0; j < cfg.perTransactionCount; j++){
-        //         int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-        //         PrimaryKey key = keys[i];
-
-        //         if (isWrite[loc]) {
-        //             // shift value by thread_idx to write new value
-        //             int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
-        //             // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
-        //             byte[] val = values[newValueIndex];
-        //             table.Update(key, table.GetSchema(), val, t);
-        //         } else {
-        //             table.Read(key, table.GetSchema(), t);
-        //         }
-        //     }
-        //     var success = txnManager.Commit(t);
-        //     if (!success){
-        //         abortCount++;
-        //     }
-        //     // txnManager.CommitWithCallback(t, incrementCount);
-        // }
-        // cde.Wait();
         return 0;
     }
 
@@ -667,19 +620,24 @@ public class TpccBenchmark : TableBenchmark {
         return abortCount;
     }
 
-    public void PopulateTables(){
-        // init all tables
-        // GenerateItemData();
+    public void GenerateTables(){
+        GenerateItemData();
         for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
             int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
-            // GenerateWarehouseData(w_id);
-            // GenerateCustomerData(w_id);
-            // GenerateDistrictData(w_id);
-            // GenerateHistoryData(w_id);
-            // GenerateOrderData(w_id);
-            // GenerateNewOrderData(w_id);
-            // GenerateOrderLineData(w_id);
-            // GenerateStockData(w_id);
+            GenerateWarehouseData(w_id);
+            GenerateCustomerData(w_id);
+            GenerateDistrictData(w_id);
+            GenerateHistoryData(w_id);
+            GenerateOrderData(w_id);
+            GenerateNewOrderData(w_id);
+            GenerateOrderLineData(w_id);
+            GenerateStockData(w_id);
+        }
+    }
+
+    public void PopulateTables(){
+        for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
+            int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
             foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
             {
                 Console.WriteLine($"Start with populating {tableType} for {w_id}");
