@@ -593,7 +593,7 @@ public class TpccBenchmark : TableBenchmark {
                 Interlocked.Increment(ref successCount);
         };
         int abortCount = 0;
-        for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
+        for (int i = 0; i < cfg.perThreadDataCount; i += 1){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
             if (queries[loc] is NewOrderQuery){
                 NewOrder((NewOrderQuery)queries[loc], incrementCount);

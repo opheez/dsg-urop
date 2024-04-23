@@ -7,7 +7,7 @@ using FASTER.libdpr;
 
 namespace DB {
 public class TransactionManager {
-    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>(14);
+    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>(50);
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
     internal int txnc = 0;

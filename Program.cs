@@ -275,7 +275,7 @@ unsafe class Program {
         
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(tables);
         ShardedTransactionManager stm = new ShardedTransactionManager(
-            7,
+            12,
             rpcClient,
             tables,
             wal: darqWal
