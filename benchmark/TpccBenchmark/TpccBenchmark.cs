@@ -233,7 +233,9 @@ public class TpccBenchmark : TableBenchmark {
     internal SimpleObjectPool<byte[]> customerBytePool;
     internal SimpleObjectPool<byte[]> historyBytePool;
     internal SimpleObjectPool<byte[][]> newOrderOlBytePool;
-    // CountdownEvent cde;
+    CountdownEvent cde;
+    internal int[] successCounts;
+    // internal int[] abortCounts;
 
     public TpccBenchmark(int partitionId, TpccConfig tpcCfg, BenchmarkConfig cfg, Dictionary<int, ShardedTable> tables, ShardedTransactionManager txnManager) : base(cfg){
         System.Console.WriteLine("Init");
@@ -252,6 +254,9 @@ public class TpccBenchmark : TableBenchmark {
         customerBytePool = new SimpleObjectPool<byte[]>(() => new byte[customerByteSize]);
         historyBytePool = new SimpleObjectPool<byte[]>(() => new byte[tables[(int)TableType.History].rowSize]);
         newOrderOlBytePool = new SimpleObjectPool<byte[][]>(() => new byte[15][]);
+        cde = new CountdownEvent(cfg.threadCount * cfg.perThreadDataCount);
+        successCounts = new int[cfg.threadCount];
+        // abortCounts = new int[cfg.threadCount];
 
         this.ol_cnts = new int[tpcCfg.NumDistrict][];
         for (int i = 0; i < tpcCfg.NumDistrict; i++){
@@ -571,8 +576,10 @@ public class TpccBenchmark : TableBenchmark {
             var opSw = Stopwatch.StartNew();
             // table and txnManager not used
             // cde = new CountdownEvent(cfg.perThreadDataCount);
-            int txnAborts = WorkloadMultiThreadedTransactions(tables[6], txnManager, cfg.ratio);
+            WorkloadMultiThreadedTransactions(tables[6], txnManager, cfg.ratio);
+            cde.Wait();
             opSw.Stop();
+            int txnAborts = cfg.datasetSize - successCounts.Sum();
             Console.WriteLine($"abort count {txnAborts}");
             long opMs = opSw.ElapsedMilliseconds;
             stats?.AddTransactionalResult((0, opMs, 0, txnAborts));
@@ -585,14 +592,15 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
-        int successCount = 0;
-        CountdownEvent cde = new CountdownEvent(cfg.perThreadDataCount);
         Action<bool> incrementCount = (success) => {
+            if (success) {
+                Interlocked.Increment(ref successCounts[thread_idx]);
+                // Console.WriteLine($"Thread {thread_idx} success count now {successCounts[thread_idx]}");
+            // } else {
+            //     Console.WriteLine($"Thread {thread_idx} failed count now {abortCounts[thread_idx]}");
+            }
             cde.Signal();
-            if (success)
-                Interlocked.Increment(ref successCount);
         };
-        int abortCount = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += 1){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
             if (queries[loc] is NewOrderQuery){
@@ -629,8 +637,8 @@ public class TpccBenchmark : TableBenchmark {
         //     }
         //     // txnManager.CommitWithCallback(t, incrementCount);
         // }
-        cde.Wait();
-        return cfg.perThreadDataCount - successCount;
+        // cde.Wait();
+        return 0;
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
