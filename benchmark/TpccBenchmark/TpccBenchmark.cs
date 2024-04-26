@@ -273,29 +273,29 @@ public class TpccBenchmark : TableBenchmark {
         System.Console.WriteLine("Done init");
     }
 
-    private NewOrderQuery GenerateNewOrderQuery(int partitionId){
+    private NewOrderQuery GenerateNewOrderQuery(int w_id, int i){
         int rbk = Frnd.Next(1, 100);
-        int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerMachine) + 1, (partitionId * tpcCfg.PartitionsPerMachine) + 1 + tpcCfg.PartitionsPerMachine);
         int o_ol_cnt = Frnd.Next(5, 15);
         int[] ol_i_ids = new int[o_ol_cnt];
         int[] ol_supply_w_id = new int[o_ol_cnt];
         int[] ol_quantity = new int[o_ol_cnt];
         for (int j = 0; j < o_ol_cnt; j++){
-            bool retry;
-            do {
-                retry = false;
-                ol_i_ids[j] = NonUniformRandom(8191, 1, 100000);
-                for (int k = 0; k < j; k++){
-                    if (ol_i_ids[j] == ol_i_ids[k]){
-                        retry = true;
-                        break;
-                    }
-                }
-            } while (retry);
+            ol_i_ids[j] = (i / cfg.perThreadDataCount) * (tpcCfg.NumItem / cfg.threadCount) + j;
+            // bool retry;
+            // do {
+            //     retry = false;
+            //     ol_i_ids[j] = NonUniformRandom(8191, 1, 100000);
+            //     for (int k = 0; k < j; k++){
+            //         if (ol_i_ids[j] == ol_i_ids[k]){
+            //             retry = true;
+            //             break;
+            //         }
+            //     }
+            // } while (retry);
 
-            if (j == o_ol_cnt - 1 && rbk == 1){
-                ol_i_ids[j] = 0;
-            }
+            // if (j == o_ol_cnt - 1 && rbk == 1){
+            //     ol_i_ids[j] = 0;
+            // }
 
             ol_supply_w_id[j] = w_id;
             if (j == 0) {
@@ -319,8 +319,7 @@ public class TpccBenchmark : TableBenchmark {
         );
     }
 
-    public PaymentQuery GeneratePaymentQuery(int partitionId) {
-        int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerMachine) + 1, (partitionId * tpcCfg.PartitionsPerMachine) + 1 + tpcCfg.PartitionsPerMachine);
+    public PaymentQuery GeneratePaymentQuery(int w_id, int i) {
         int d_id = Frnd.Next(1, tpcCfg.NumDistrict + 1);
         int c_w_id = w_id;
         int c_d_id;
@@ -360,11 +359,13 @@ public class TpccBenchmark : TableBenchmark {
         int numNewOrders = 0;
             for (int i = 0; i < queries.Length; i++){
                 // randomly assign NewOrder vs Payment
+                // int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerMachine) + 1, (partitionId * tpcCfg.PartitionsPerMachine) + 1 + tpcCfg.PartitionsPerMachine);
+                int w_id = ((i / cfg.perThreadDataCount) % tpcCfg.PartitionsPerMachine)+ 1;
                 if (Frnd.Next(1, 100) <= 50){
                     numNewOrders++;
-                    queries[i] = GenerateNewOrderQuery(partitionId);
+                    queries[i] = GenerateNewOrderQuery(w_id, i);
                 } else {
-                    queries[i] = GeneratePaymentQuery(partitionId);
+                    queries[i] = GeneratePaymentQuery(w_id, i);
                 }
             }
         return numNewOrders;
