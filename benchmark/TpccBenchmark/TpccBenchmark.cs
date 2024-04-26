@@ -39,15 +39,23 @@ public struct TpccConfig {
     }
 }
 
-public struct NewOrderQuery : Query {
+public struct Query {
+
     public int w_id;
     public int d_id;
     public int c_id;
+    public int c_d_id;
+    public int c_w_id;
+    public float h_amount;
+    public string c_last;
     public int o_ol_cnt;
     public int[] ol_i_ids;
     public int[] ol_supply_w_id;
     public int[] ol_quantity;
-    public NewOrderQuery(int w_id, int d_id, int c_id, int o_ol_cnt, int[] ol_i_ids, int[] ol_supply_w_id, int[] ol_quantity){
+    public bool isNewOrder;
+
+    public Query(int w_id, int d_id, int c_id, int o_ol_cnt, int[] ol_i_ids, int[] ol_supply_w_id, int[] ol_quantity) {
+        isNewOrder = true;
         this.w_id = w_id;
         this.d_id = d_id;
         this.c_id = c_id;
@@ -57,67 +65,8 @@ public struct NewOrderQuery : Query {
         this.ol_quantity = ol_quantity;
     }
 
-    public unsafe byte[] ToBytes(){
-        byte[] bytes = new byte[4 + 4 + 4 + 4 + 4 + 4 + 4 * ol_i_ids.Length + 4 * ol_supply_w_id.Length + 4 * ol_quantity.Length];
-        fixed (byte* b = bytes){
-            *(int*)b = w_id;
-            *(int*)(b + 4) = d_id;
-            *(int*)(b + 8) = c_id;
-            *(int*)(b + 12) = o_ol_cnt;
-            *(int*)(b + 16) = ol_i_ids.Length;
-            for (int i = 0; i < ol_i_ids.Length; i++){
-                *(int*)(b + 20 + i * 4) = ol_i_ids[i];
-            }
-            *(int*)(b + 20 + ol_i_ids.Length * 4) = ol_supply_w_id.Length;
-            for (int i = 0; i < ol_supply_w_id.Length; i++){
-                *(int*)(b + 24 + ol_i_ids.Length * 4 + i * 4) = ol_supply_w_id[i];
-            }
-            *(int*)(b + 24 + ol_i_ids.Length * 4 + ol_supply_w_id.Length * 4) = ol_quantity.Length;
-            for (int i = 0; i < ol_quantity.Length; i++){
-                *(int*)(b + 28 + ol_i_ids.Length * 4 + ol_supply_w_id.Length * 4 + i * 4) = ol_quantity[i];
-            }
-        }
-        return bytes;
-    }
-
-    public static unsafe NewOrderQuery FromBytes(byte[] bytes){
-        int w_id, d_id, c_id, o_ol_cnt;
-        int[] ol_i_ids, ol_supply_w_id, ol_quantity;
-        fixed (byte* b = bytes){
-            w_id = *(int*)b;
-            d_id = *(int*)(b + 4);
-            c_id = *(int*)(b + 8);
-            o_ol_cnt = *(int*)(b + 12);
-            int ol_i_ids_len = *(int*)(b + 16);
-            ol_i_ids = new int[ol_i_ids_len];
-            for (int i = 0; i < ol_i_ids_len; i++){
-                ol_i_ids[i] = *(int*)(b + 20 + i * 4);
-            }
-            int ol_supply_w_id_len = *(int*)(b + 20 + ol_i_ids_len * 4);
-            ol_supply_w_id = new int[ol_supply_w_id_len];
-            for (int i = 0; i < ol_supply_w_id_len; i++){
-                ol_supply_w_id[i] = *(int*)(b + 24 + ol_i_ids_len * 4 + i * 4);
-            }
-            int ol_quantity_len = *(int*)(b + 24 + ol_i_ids_len * 4 + ol_supply_w_id_len * 4);
-            ol_quantity = new int[ol_quantity_len];
-            for (int i = 0; i < ol_quantity_len; i++){
-                ol_quantity[i] = *(int*)(b + 28 + ol_i_ids_len * 4 + ol_supply_w_id_len * 4 + i * 4);
-            }
-        }
-        return new NewOrderQuery(w_id, d_id, c_id, o_ol_cnt, ol_i_ids, ol_supply_w_id, ol_quantity);
-    }
-}
-
-public struct PaymentQuery : Query {
-    public int w_id;
-    public int d_id;
-    public int c_id;
-    public int c_d_id;
-    public int c_w_id;
-    public float h_amount;
-    public string c_last;
-    public static int Size = 4 + 4 + 4 + 4 + 4 + 4 + 16;
-    public PaymentQuery(int w_id, int d_id, int c_id, int c_d_id, int c_w_id, float h_amount, string c_last){
+    public Query(int w_id, int d_id, int c_id, int c_d_id, int c_w_id, float h_amount, string c_last) {
+        isNewOrder = false;
         this.w_id = w_id;
         this.d_id = d_id;
         this.c_id = c_id;
@@ -126,43 +75,127 @@ public struct PaymentQuery : Query {
         this.h_amount = h_amount;
         this.c_last = c_last;
     }
-
-    public unsafe byte[] ToBytes(){
-        byte[] bytes = new byte[Size];
-        fixed (byte* b = bytes){
-            *(int*)b = w_id;
-            *(int*)(b + 4) = d_id;
-            *(int*)(b + 8) = c_id;
-            *(int*)(b + 12) = c_d_id;
-            *(int*)(b + 16) = c_w_id;
-            *(float*)(b + 20) = h_amount;
-            Encoding.ASCII.GetBytes(c_last).CopyTo(bytes, 24);
-        }
-        return bytes;
-    }
-
-    public static unsafe PaymentQuery FromBytes(byte[] bytes){
-        int w_id, d_id, c_id, c_d_id, c_w_id;
-        float h_amount;
-        string c_last;
-        fixed (byte* b = bytes){
-            w_id = *(int*)b;
-            d_id = *(int*)(b + 4);
-            c_id = *(int*)(b + 8);
-            c_d_id = *(int*)(b + 12);
-            c_w_id = *(int*)(b + 16);
-            h_amount = *(float*)(b + 20);
-            c_last = Encoding.ASCII.GetString(bytes, 24, 16);
-        }
-        return new PaymentQuery(w_id, d_id, c_id, c_d_id, c_w_id, h_amount, c_last);
-    }
-
 }
 
-public interface Query {
-    public byte[] ToBytes();
+// public struct NewOrderQuery : Query {
+//     public int w_id;
+//     public int d_id;
+//     public int c_id;
+//     public int o_ol_cnt;
+//     public int[] ol_i_ids;
+//     public int[] ol_supply_w_id;
+//     public int[] ol_quantity;
+//     public NewOrderQuery(int w_id, int d_id, int c_id, int o_ol_cnt, int[] ol_i_ids, int[] ol_supply_w_id, int[] ol_quantity){
+//         this.w_id = w_id;
+//         this.d_id = d_id;
+//         this.c_id = c_id;
+//         this.o_ol_cnt = o_ol_cnt;
+//         this.ol_i_ids = ol_i_ids;
+//         this.ol_supply_w_id = ol_supply_w_id;
+//         this.ol_quantity = ol_quantity;
+//     }
 
-}
+//     public unsafe byte[] ToBytes(){
+//         byte[] bytes = new byte[4 + 4 + 4 + 4 + 4 + 4 + 4 * ol_i_ids.Length + 4 * ol_supply_w_id.Length + 4 * ol_quantity.Length];
+//         fixed (byte* b = bytes){
+//             *(int*)b = w_id;
+//             *(int*)(b + 4) = d_id;
+//             *(int*)(b + 8) = c_id;
+//             *(int*)(b + 12) = o_ol_cnt;
+//             *(int*)(b + 16) = ol_i_ids.Length;
+//             for (int i = 0; i < ol_i_ids.Length; i++){
+//                 *(int*)(b + 20 + i * 4) = ol_i_ids[i];
+//             }
+//             *(int*)(b + 20 + ol_i_ids.Length * 4) = ol_supply_w_id.Length;
+//             for (int i = 0; i < ol_supply_w_id.Length; i++){
+//                 *(int*)(b + 24 + ol_i_ids.Length * 4 + i * 4) = ol_supply_w_id[i];
+//             }
+//             *(int*)(b + 24 + ol_i_ids.Length * 4 + ol_supply_w_id.Length * 4) = ol_quantity.Length;
+//             for (int i = 0; i < ol_quantity.Length; i++){
+//                 *(int*)(b + 28 + ol_i_ids.Length * 4 + ol_supply_w_id.Length * 4 + i * 4) = ol_quantity[i];
+//             }
+//         }
+//         return bytes;
+//     }
+
+//     public static unsafe NewOrderQuery FromBytes(byte[] bytes){
+//         int w_id, d_id, c_id, o_ol_cnt;
+//         int[] ol_i_ids, ol_supply_w_id, ol_quantity;
+//         fixed (byte* b = bytes){
+//             w_id = *(int*)b;
+//             d_id = *(int*)(b + 4);
+//             c_id = *(int*)(b + 8);
+//             o_ol_cnt = *(int*)(b + 12);
+//             int ol_i_ids_len = *(int*)(b + 16);
+//             ol_i_ids = new int[ol_i_ids_len];
+//             for (int i = 0; i < ol_i_ids_len; i++){
+//                 ol_i_ids[i] = *(int*)(b + 20 + i * 4);
+//             }
+//             int ol_supply_w_id_len = *(int*)(b + 20 + ol_i_ids_len * 4);
+//             ol_supply_w_id = new int[ol_supply_w_id_len];
+//             for (int i = 0; i < ol_supply_w_id_len; i++){
+//                 ol_supply_w_id[i] = *(int*)(b + 24 + ol_i_ids_len * 4 + i * 4);
+//             }
+//             int ol_quantity_len = *(int*)(b + 24 + ol_i_ids_len * 4 + ol_supply_w_id_len * 4);
+//             ol_quantity = new int[ol_quantity_len];
+//             for (int i = 0; i < ol_quantity_len; i++){
+//                 ol_quantity[i] = *(int*)(b + 28 + ol_i_ids_len * 4 + ol_supply_w_id_len * 4 + i * 4);
+//             }
+//         }
+//         return new NewOrderQuery(w_id, d_id, c_id, o_ol_cnt, ol_i_ids, ol_supply_w_id, ol_quantity);
+//     }
+// }
+
+// public struct PaymentQuery {
+//     public int w_id;
+//     public int d_id;
+//     public int c_id;
+//     public int c_d_id;
+//     public int c_w_id;
+//     public float h_amount;
+//     public string c_last;
+//     public static int Size = 4 + 4 + 4 + 4 + 4 + 4 + 16;
+//     public PaymentQuery(int w_id, int d_id, int c_id, int c_d_id, int c_w_id, float h_amount, string c_last){
+//         this.w_id = w_id;
+//         this.d_id = d_id;
+//         this.c_id = c_id;
+//         this.c_d_id = c_d_id;
+//         this.c_w_id = c_w_id;
+//         this.h_amount = h_amount;
+//         this.c_last = c_last;
+//     }
+
+//     // public unsafe byte[] ToBytes(){
+//     //     byte[] bytes = new byte[Size];
+//     //     fixed (byte* b = bytes){
+//     //         *(int*)b = w_id;
+//     //         *(int*)(b + 4) = d_id;
+//     //         *(int*)(b + 8) = c_id;
+//     //         *(int*)(b + 12) = c_d_id;
+//     //         *(int*)(b + 16) = c_w_id;
+//     //         *(float*)(b + 20) = h_amount;
+//     //         Encoding.ASCII.GetBytes(c_last).CopyTo(bytes, 24);
+//     //     }
+//     //     return bytes;
+//     // }
+
+//     // public static unsafe PaymentQuery FromBytes(byte[] bytes){
+//     //     int w_id, d_id, c_id, c_d_id, c_w_id;
+//     //     float h_amount;
+//     //     string c_last;
+//     //     fixed (byte* b = bytes){
+//     //         w_id = *(int*)b;
+//     //         d_id = *(int*)(b + 4);
+//     //         c_id = *(int*)(b + 8);
+//     //         c_d_id = *(int*)(b + 12);
+//     //         c_w_id = *(int*)(b + 16);
+//     //         h_amount = *(float*)(b + 20);
+//     //         c_last = Encoding.ASCII.GetString(bytes, 24, 16);
+//     //     }
+//     //     return new PaymentQuery(w_id, d_id, c_id, c_d_id, c_w_id, h_amount, c_last);
+//     // }
+
+// }
 
 /// <summary>
 /// Adapted from https://github.com/SQLServerIO/TPCCBench/blob/master/TPCCDatabaseGenerator/TPCCGenData.cs
@@ -273,7 +306,7 @@ public class TpccBenchmark : TableBenchmark {
         System.Console.WriteLine("Done init");
     }
 
-    private NewOrderQuery GenerateNewOrderQuery(int w_id, int i){
+    private Query GenerateNewOrderQuery(int w_id, int i){
         int rbk = Frnd.Next(1, 100);
         int o_ol_cnt = Frnd.Next(5, 15);
         int[] ol_i_ids = new int[o_ol_cnt];
@@ -308,7 +341,7 @@ public class TpccBenchmark : TableBenchmark {
             }
             ol_quantity[j] = Frnd.Next(1, 10);
         }
-        return new NewOrderQuery(
+        return new Query(
             w_id,
             Frnd.Next(1, tpcCfg.NumDistrict + 1), 
             NonUniformRandom(1023, 1, 3000),
@@ -319,7 +352,7 @@ public class TpccBenchmark : TableBenchmark {
         );
     }
 
-    public PaymentQuery GeneratePaymentQuery(int w_id, int i) {
+    public Query GeneratePaymentQuery(int w_id, int i) {
         int d_id = Frnd.Next(1, tpcCfg.NumDistrict + 1);
         int c_w_id = w_id;
         int c_d_id;
@@ -343,7 +376,7 @@ public class TpccBenchmark : TableBenchmark {
         } else {
             c_id = NonUniformRandom(1023, 1, 3000);
         }
-        return new PaymentQuery(
+        return new Query(
             w_id,
             d_id,
             c_id,
@@ -371,7 +404,7 @@ public class TpccBenchmark : TableBenchmark {
         return numNewOrders;
     }
 
-    public void NewOrder(NewOrderQuery query, Action<bool> callback){
+    public void NewOrder(Query query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -481,7 +514,7 @@ public class TpccBenchmark : TableBenchmark {
         return;
     }
 
-    public void Payment(PaymentQuery query, Action<bool> callback){
+    public void Payment(Query query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -582,10 +615,10 @@ public class TpccBenchmark : TableBenchmark {
         };
         for (int i = 0; i < cfg.perThreadDataCount; i += 1){
             int loc = i + (cfg.perThreadDataCount * thread_idx);
-            if (queries[loc] is NewOrderQuery){
-                NewOrder((NewOrderQuery)queries[loc], incrementCount);
+            if (queries[loc].isNewOrder){
+                NewOrder(queries[loc], incrementCount);
             } else {
-                Payment((PaymentQuery)queries[loc], incrementCount);
+                Payment(queries[loc], incrementCount);
             }
         }
         // return abortCount;
