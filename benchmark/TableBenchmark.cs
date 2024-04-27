@@ -188,12 +188,14 @@ public class BenchmarkStatistics {
     internal readonly List<int> txnAbortsPerRun = new List<int>();
     internal string name;
     internal BenchmarkConfig cfg;
+    internal TpccConfig? tpcCfg;
     internal int inserts;
     internal int operations;
 
-    internal BenchmarkStatistics(string name, BenchmarkConfig cfg, int inserts, int operations)
+    internal BenchmarkStatistics(string name, BenchmarkConfig cfg, int inserts, int operations, TpccConfig? tpcCfg = null)
     {
         this.cfg = cfg;
+        this.tpcCfg = tpcCfg;
         this.name = name;
         this.inserts = inserts;
         this.operations = operations;
@@ -218,9 +220,11 @@ public class BenchmarkStatistics {
             $"Benchmark {name}",
             "-----BENCHMARK CONFIG-----",
             cfg.ToString(),
+            "-----TPCC CONFIG-----",
+            tpcCfg?.ToString(),
             "-----STATS-----",
             GetInsDataString(operations, insMsPerRun),
-            GetOpsDataString(inserts, operations-inserts, opsMsPerRun)
+            GetOpsDataString(inserts, operations-inserts, opsMsPerRun, txnAbortsPerRun)
         };
 
         if (insAbortsPerRun.Count != 0) {
@@ -244,10 +248,10 @@ public class BenchmarkStatistics {
         await File.WriteAllLinesAsync($"benchmark/benchmarkResults/{name}-{now}.txt", GetStats());
     }
 
-    internal string GetOpsDataString(int inserts, int reads, List<long> opsMsPerRun) => $"{(inserts+reads)/opsMsPerRun.Average()} operations/ms ({inserts+reads} operations ({inserts} inserts, {reads} reads) in {opsMsPerRun.Average()} ms)";
+    internal string GetOpsDataString(int inserts, int reads, List<long> opsMsPerRun, List<int> txnAborts) => $"{(inserts+reads-txnAborts.Average())/opsMsPerRun.Average()} successful operations/ms {(inserts+reads)/opsMsPerRun.Average()} operations/ms ({inserts+reads} operations ({inserts} inserts, {reads} reads) in {opsMsPerRun.Average()} ms)";
     internal string GetInsDataString(int inserts, List<long> insMsPerRun) => $"{inserts/insMsPerRun.Average()} inserts/ms ({inserts} inserts in {insMsPerRun.Average()} ms)";
-    internal string GetTxnAbortDataString(List<int> txnAborts) => $"Operations: Average {txnAborts.Average()} aborts out of {cfg.perThreadDataCount/cfg.perTransactionCount} transactions ({txnAborts.Average()/(cfg.perThreadDataCount/cfg.perTransactionCount)}% abort rate)";
-    internal string GetInsAbortDataString(List<int> insAborts) => $"Insertions: Average {insAborts.Average()} aborts out of {cfg.perThreadDataCount/cfg.perTransactionCount} transactions ({insAborts.Average()/(cfg.perThreadDataCount/cfg.perTransactionCount)}% abort rate)";
+    internal string GetTxnAbortDataString(List<int> txnAborts) => $"Operations: Average {txnAborts.Average()} aborts out of {cfg.datasetSize/cfg.perTransactionCount} transactions ({txnAborts.Average()/(cfg.datasetSize/cfg.perTransactionCount)*100}% abort rate)";
+    internal string GetInsAbortDataString(List<int> insAborts) => $"Insertions: Average {insAborts.Average()} aborts out of {cfg.datasetSize/cfg.perTransactionCount} transactions ({insAborts.Average()/(cfg.datasetSize/cfg.perTransactionCount)*100}% abort rate)";
 
     // internal static string GetLoadingTimeLine(double insertsPerSec, long elapsedMs)
     //     => $"##00; {InsPerSec}: {insertsPerSec:N2}; sec: {(double)elapsedMs / 1000:N3}";

@@ -37,6 +37,11 @@ public struct TpccConfig {
         PaymentCrossPartitionProbability = paymentCrossPartitionProbability;
         PartitionsPerMachine = partitionsPerMachine;
     }
+
+    public override string ToString()
+    {
+        return $"NumWh: {NumWh}, NumDistrict: {NumDistrict}, NumCustomer: {NumCustomer}, NumOrder: {NumOrder}, NumItem: {NumItem}, NumStock: {NumStock}, NewOrderCrossPartitionProbability: {NewOrderCrossPartitionProbability}, PaymentCrossPartitionProbability: {PaymentCrossPartitionProbability}, PartitionsPerMachine: {PartitionsPerMachine}";
+    }
 }
 
 public struct Query {
