@@ -9,6 +9,7 @@ public struct BenchmarkConfig {
     public int seed;
     public double ratio;
     public int threadCount;
+    public int insertThreadCount;
     public int attrCount;
     public int perThreadDataCount; // enough to be larger than l3 cache
     public int iterationCount;
@@ -20,6 +21,7 @@ public struct BenchmarkConfig {
         int seed = 12345,
         double ratio = 0.2,
         int threadCount = 16,
+        int insertThreadCount = -1,
         int attrCount = 2,
         int perThreadDataCount = 100000,
         int iterationCount = 10,
@@ -29,6 +31,7 @@ public struct BenchmarkConfig {
         this.seed = seed;
         this.ratio = ratio;
         this.threadCount = threadCount;
+        this.insertThreadCount = insertThreadCount == -1 ? threadCount : insertThreadCount;
         this.attrCount = attrCount;
         this.perThreadDataCount = perThreadDataCount;
         this.iterationCount = iterationCount;
@@ -58,7 +61,7 @@ public abstract class TableBenchmark
         this.cfg = cfg;
         this.wal = wal;
         td = new TupleDesc[cfg.attrCount];
-        workers = new Thread[cfg.threadCount];
+        workers = new Thread[Math.Max(cfg.insertThreadCount, cfg.threadCount)];
 
         keys = new PrimaryKey[cfg.datasetSize];
         values = new byte[cfg.datasetSize][];
@@ -68,6 +71,7 @@ public abstract class TableBenchmark
     virtual protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
         int abortCount = 0;
         int c = 0;
+        Debug.Assert(cfg.threadCount == cfg.insertThreadCount, "Insert thread count must be equal to thread count");
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
@@ -88,7 +92,7 @@ public abstract class TableBenchmark
     protected internal int InsertMultiThreadedTransactions(Table tbl, TransactionManager txnManager)
     {
         int totalAborts = 0;
-        for (int thread = 0; thread < cfg.threadCount; thread++) {
+        for (int thread = 0; thread < cfg.insertThreadCount; thread++) {
             int t = thread;
             workers[thread] = new Thread(() => {
                 int aborts = InsertSingleThreadedTransactions(tbl, txnManager, t);
@@ -96,7 +100,7 @@ public abstract class TableBenchmark
             });
             workers[thread].Start();
         }
-        for (int thread = 0; thread < cfg.threadCount; thread++) {
+        for (int thread = 0; thread < cfg.insertThreadCount; thread++) {
             workers[thread].Join();
         }
         return totalAborts;

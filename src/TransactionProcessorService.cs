@@ -138,7 +138,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         BenchmarkConfig ycsbCfg = new BenchmarkConfig(
             ratio: 0.2,
             attrCount: 10,
-            threadCount: 12,
+            threadCount: 4,
+            insertThreadCount: 12,
             iterationCount: 1,
             nCommitterThreads: 12
         );

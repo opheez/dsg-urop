@@ -625,12 +625,12 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
         int abortCount = 0;
-        int perThreadDataCount = keys.Count() / cfg.threadCount;
+        int perThreadDataCount = keys.Count() / cfg.insertThreadCount;
         int remainder = 0;
         // have the last thread handle the remaining data
-        if (thread_idx == cfg.threadCount - 1) {
+        if (thread_idx == cfg.insertThreadCount - 1) {
             if (perThreadDataCount == 0) thread_idx = 0;
-            remainder = keys.Count() % cfg.threadCount;
+            remainder = keys.Count() % cfg.insertThreadCount;
         }
         // Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
         for (int i = 0; i < perThreadDataCount + remainder; i += cfg.perTransactionCount){
