@@ -7,7 +7,7 @@ using FASTER.libdpr;
 
 namespace DB {
 public class TransactionManager {
-    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>(50);
+    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>(8);
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
     internal int txnc = 0;
@@ -197,12 +197,15 @@ public class TransactionManager {
         // PrintDebug("Write phase done", ctx);
     }
 
-    public void Abort(TransactionContext ctx){
+    public void Abort(TransactionContext ctx, Action<bool> callback = null){
         PrintDebug($"Aborting tid {ctx.tid}");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         // TODO: verify that should be logged before removing from active
         if (wal != null){
             wal.Finish(ctx.tid, LogType.Abort);
+        }
+        if (ctx.callback == null){
+            ctx.callback = callback;
         }
         ctx.callback?.Invoke(false);
         try {

@@ -417,8 +417,7 @@ public class TpccBenchmark : TableBenchmark {
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
             if (query.ol_i_ids[i] == 0) {
-                txnManager.Abort(ctx);
-                callback?.Invoke(false);
+                txnManager.Abort(ctx, callback);
                 return;
             }
             itemRows[i] = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, query.ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx).ToArray();
@@ -444,14 +443,12 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.Order, TableField.O_ALL_LOCAL, insertOrderData, BitConverter.GetBytes(allLocal));
         bool success = tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
         if (!success) {
-            txnManager.Abort(ctx);
-            callback?.Invoke(false);
+            txnManager.Abort(ctx, callback);
             return;
         }
         success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), emptyByteArr, ctx);
         if (!success) {
-            txnManager.Abort(ctx);
-            callback?.Invoke(false);
+            txnManager.Abort(ctx, callback);
             return;
         }
         float total_amount = 0;
@@ -493,8 +490,7 @@ public class TpccBenchmark : TableBenchmark {
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, Encoding.ASCII.GetBytes(distInfo));
             success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
             if (!success) {
-                txnManager.Abort(ctx);
-                callback?.Invoke(false);
+                txnManager.Abort(ctx, callback);
                 return;
             }
             // update total_amount
@@ -567,8 +563,7 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
         bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
         if (!success) {
-            txnManager.Abort(ctx);
-            callback?.Invoke(false);
+            txnManager.Abort(ctx, callback);
             return;
         }
         txnManager.CommitWithCallback(ctx, callback);
@@ -587,7 +582,6 @@ public class TpccBenchmark : TableBenchmark {
             Console.WriteLine($"done inserting");
             var opSw = Stopwatch.StartNew();
             // table and txnManager not used
-            // cde = new CountdownEvent(cfg.perThreadDataCount);
             WorkloadMultiThreadedTransactions(tables[6], txnManager, cfg.ratio);
             cde.Wait();
             opSw.Stop();
@@ -607,8 +601,9 @@ public class TpccBenchmark : TableBenchmark {
         Action<bool> incrementCount = (success) => {
             if (success) {
                 Interlocked.Increment(ref successCounts[thread_idx]);
-                // Console.WriteLine($"Thread {thread_idx} success count now {successCounts[thread_idx]}");
+            //     Console.WriteLine($"Thread {thread_idx} success count now {successCounts[thread_idx]}");
             // } else {
+            //     Interlocked.Increment(ref abortCounts[thread_idx]);
             //     Console.WriteLine($"Thread {thread_idx} failed count now {abortCounts[thread_idx]}");
             }
             cde.Signal();
