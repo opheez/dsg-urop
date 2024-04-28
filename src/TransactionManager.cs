@@ -7,7 +7,8 @@ using FASTER.libdpr;
 
 namespace DB {
 public class TransactionManager {
-    internal BlockingCollection<TransactionContext> txnQueue = new BlockingCollection<TransactionContext>(8);
+    private static readonly int MAX_QUEUE_SIZE = 4;
+    internal BlockingCollection<TransactionContext> txnQueue;
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
     internal int txnc = 0;
@@ -25,6 +26,8 @@ public class TransactionManager {
         this.tables = tables;
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext(tables));
         committer = new Thread[numThreads];
+        txnQueue = new BlockingCollection<TransactionContext>(MAX_QUEUE_SIZE);
+
         for (int i = 0; i < committer.Length; i++) {
             committer[i] = new Thread(() => {
                 try {
@@ -89,7 +92,7 @@ public class TransactionManager {
 
     public void Reset() {
         txnQueue.CompleteAdding();
-        txnQueue = new BlockingCollection<TransactionContext>();
+        txnQueue = new BlockingCollection<TransactionContext>(MAX_QUEUE_SIZE);
         active = new List<TransactionContext>();
         sl = new SpinLock();
         txnc = 0;
@@ -137,6 +140,7 @@ public class TransactionManager {
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
                 if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(tupleId)){
+                    // Console.WriteLine($"1 ABORT for {ctx.tid} because conflict: {tupleId} in {tnumToCtx[i & (pastTnumCircularBufferSize - 1)].tid}");
                     return false;
                 }
             }
@@ -146,7 +150,7 @@ public class TransactionManager {
             foreach (var item in pastTxn.GetWriteset()){
                 PrimaryKey tupleId = item.Item1;
                 if (ctx.InReadSet(tupleId) || ctx.InWriteSet(tupleId)){
-                    // Console.WriteLine($"ABORT because conflict: {keyAttr}");
+                    // Console.WriteLine($"2 ABORT for {ctx.tid} because conflict: {tupleId} in {pastTxn.tid}");
                     return false;
                 }
             }
