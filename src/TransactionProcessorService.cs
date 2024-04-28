@@ -123,7 +123,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             numStock: request.NumStock,
             newOrderCrossPartitionProbability: request.NewOrderCrossPartitionProbability,
             paymentCrossPartitionProbability: request.PaymentCrossPartitionProbability,
-            partitionsPerMachine: request.PartitionsPerMachine
+            partitionsPerThread: request.PartitionsPerThread
         );
         TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccCfg, cfg, tables, txnManager);
         txnManager.Run();
@@ -138,10 +138,10 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         BenchmarkConfig ycsbCfg = new BenchmarkConfig(
             ratio: 0.2,
             attrCount: 10,
-            threadCount: 4,
+            threadCount: 3,
             insertThreadCount: 12,
             iterationCount: 1,
-            nCommitterThreads: 12
+            nCommitterThreads: 4
         );
         switch (request.Workload) {
             case "ycsb_single":
@@ -156,8 +156,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 break;
             case "tpcc":
                 TpccConfig tpccConfig = new TpccConfig(
-                    numWh: 4,
-                    partitionsPerMachine: 4,
+                    numWh: 12,
+                    partitionsPerThread: 4,
                     newOrderCrossPartitionProbability: 0,
                     paymentCrossPartitionProbability: 0
                     // numCustomer: 10,

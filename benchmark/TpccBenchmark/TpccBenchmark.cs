@@ -14,7 +14,7 @@ public struct TpccConfig {
     public int NumStock;
     public int NewOrderCrossPartitionProbability;
     public int PaymentCrossPartitionProbability;
-    public int PartitionsPerMachine;
+    public int PartitionsPerThread;
 
     public TpccConfig(
         int numWh = 2,
@@ -25,7 +25,7 @@ public struct TpccConfig {
         int numStock = 100000,
         int newOrderCrossPartitionProbability = 10, 
         int paymentCrossPartitionProbability = 15,
-        int partitionsPerMachine = 4
+        int partitionsPerThread = 4
         ){
         NumWh = numWh;
         NumDistrict = numDistrict;
@@ -35,12 +35,12 @@ public struct TpccConfig {
         NumStock = numStock;
         NewOrderCrossPartitionProbability = newOrderCrossPartitionProbability;
         PaymentCrossPartitionProbability = paymentCrossPartitionProbability;
-        PartitionsPerMachine = partitionsPerMachine;
+        PartitionsPerThread = partitionsPerThread;
     }
 
     public override string ToString()
     {
-        return $"NumWh: {NumWh}, NumDistrict: {NumDistrict}, NumCustomer: {NumCustomer}, NumOrder: {NumOrder}, NumItem: {NumItem}, NumStock: {NumStock}, NewOrderCrossPartitionProbability: {NewOrderCrossPartitionProbability}, PaymentCrossPartitionProbability: {PaymentCrossPartitionProbability}, PartitionsPerMachine: {PartitionsPerMachine}";
+        return $"NumWh: {NumWh}, NumDistrict: {NumDistrict}, NumCustomer: {NumCustomer}, NumOrder: {NumOrder}, NumItem: {NumItem}, NumStock: {NumStock}, NewOrderCrossPartitionProbability: {NewOrderCrossPartitionProbability}, PaymentCrossPartitionProbability: {PaymentCrossPartitionProbability}, PartitionsPerThread: {PartitionsPerThread}";
     }
 }
 
@@ -296,6 +296,9 @@ public class TpccBenchmark : TableBenchmark {
         successCounts = new int[cfg.threadCount];
         // abortCounts = new int[cfg.threadCount];
 
+        Debug.Assert(cfg.threadCount < tpcCfg.NumWh, "Thread count must be less than number of warehouses");
+        Debug.Assert(tpcCfg.PartitionsPerThread * cfg.threadCount == tpcCfg.NumWh, "Partitions per thread * thread count must equal number of warehouses");
+
         this.ol_cnts = new int[tpcCfg.NumDistrict][];
         for (int i = 0; i < tpcCfg.NumDistrict; i++){
             ol_cnts[i] = new int[tpcCfg.NumOrder];
@@ -307,7 +310,7 @@ public class TpccBenchmark : TableBenchmark {
 
         int numNewOrders = GenerateQueryData(PartitionId, "");
 
-        stats = new BenchmarkStatistics($"TpccBenchmark", cfg, numNewOrders, cfg.datasetSize);
+        stats = new BenchmarkStatistics($"TpccBenchmark", cfg, numNewOrders, cfg.datasetSize, tpcCfg);
         System.Console.WriteLine("Done init");
     }
 
@@ -318,7 +321,7 @@ public class TpccBenchmark : TableBenchmark {
         int[] ol_supply_w_id = new int[o_ol_cnt];
         int[] ol_quantity = new int[o_ol_cnt];
         for (int j = 0; j < o_ol_cnt; j++){
-            ol_i_ids[j] = (i / cfg.perThreadDataCount) * (tpcCfg.NumItem / cfg.threadCount) + j;
+            ol_i_ids[j] = (i / cfg.perThreadDataCount) * (tpcCfg.NumItem / cfg.threadCount) + (i % (tpcCfg.NumItem / cfg.threadCount)) + 1;
             // bool retry;
             // do {
             //     retry = false;
@@ -397,8 +400,8 @@ public class TpccBenchmark : TableBenchmark {
         int numNewOrders = 0;
             for (int i = 0; i < queries.Length; i++){
                 // randomly assign NewOrder vs Payment
-                // int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerMachine) + 1, (partitionId * tpcCfg.PartitionsPerMachine) + 1 + tpcCfg.PartitionsPerMachine);
-                int w_id = ((i / cfg.perThreadDataCount) % tpcCfg.PartitionsPerMachine)+ 1;
+                // int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerThread) + 1, (partitionId * tpcCfg.PartitionsPerThread) + 1 + tpcCfg.PartitionsPerThread);
+                int w_id = (i / cfg.perThreadDataCount) * tpcCfg.PartitionsPerThread + (i % tpcCfg.PartitionsPerThread) + 1;
                 if (Frnd.Next(1, 100) <= 50){
                     numNewOrders++;
                     queries[i] = GenerateNewOrderQuery(w_id, i);
@@ -656,8 +659,8 @@ public class TpccBenchmark : TableBenchmark {
 
     public void GenerateTables(){
         GenerateItemData();
-        for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
-            int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
+        for (int j = 0; j < tpcCfg.PartitionsPerThread * cfg.threadCount; j++) {
+            int w_id = (PartitionId * tpcCfg.PartitionsPerThread * cfg.threadCount) + 1 + j;
             GenerateWarehouseData(w_id);
             GenerateCustomerData(w_id);
             GenerateDistrictData(w_id);
@@ -670,8 +673,8 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     public void PopulateTables(){
-        for (int j = 0; j < tpcCfg.PartitionsPerMachine; j++) {
-            int w_id = (PartitionId * tpcCfg.PartitionsPerMachine) + 1 + j;
+        for (int j = 0; j < tpcCfg.PartitionsPerThread * cfg.threadCount; j++) {
+            int w_id = (PartitionId * tpcCfg.PartitionsPerThread * cfg.threadCount) + 1 + j;
             foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
             {
                 Console.WriteLine($"Start with populating {tableType} for {w_id}");

@@ -61,7 +61,7 @@ message PopulateTablesRequest {
     int32 numStock = 15;
     int32 newOrderCrossPartitionProbability = 16;
     int32 paymentCrossPartitionProbability = 17;
-    int32 partitionsPerMachine = 18;
+    int32 partitionsPerThread = 18;
 }
 
 message PopulateTablesReply {

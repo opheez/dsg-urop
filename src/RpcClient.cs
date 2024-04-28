@@ -67,7 +67,7 @@ public abstract class RpcClient {
                     NumStock = tpccCfg.NumStock,
                     NewOrderCrossPartitionProbability = tpccCfg.NewOrderCrossPartitionProbability,
                     PaymentCrossPartitionProbability = tpccCfg.PaymentCrossPartitionProbability,
-                    PartitionsPerMachine = tpccCfg.PartitionsPerMachine
+                    PartitionsPerThread = tpccCfg.PartitionsPerThread
                 }
             );
             if (!reply.Success) throw new System.Exception("Failed to populate tables");
