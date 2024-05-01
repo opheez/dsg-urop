@@ -271,7 +271,6 @@ public class TpccBenchmark : TableBenchmark {
     internal SimpleObjectPool<byte[]> orderLineBytePool;
     internal SimpleObjectPool<byte[]> customerBytePool;
     internal SimpleObjectPool<byte[]> historyBytePool;
-    internal SimpleObjectPool<byte[][]> newOrderOlBytePool;
     CountdownEvent cde;
     internal int[] successCounts;
     // internal int[] abortCounts;
@@ -292,7 +291,6 @@ public class TpccBenchmark : TableBenchmark {
         int customerByteSize = TpccSchema.fieldsToSchema[TableField.C_BALANCE].Item1 + TpccSchema.fieldsToSchema[TableField.C_YTD_PAYMENT].Item1 + TpccSchema.fieldsToSchema[TableField.C_PAYMENT_CNT].Item1 + TpccSchema.fieldsToSchema[TableField.C_DATA].Item1;
         customerBytePool = new SimpleObjectPool<byte[]>(() => new byte[customerByteSize]);
         historyBytePool = new SimpleObjectPool<byte[]>(() => new byte[tables[(int)TableType.History].rowSize]);
-        newOrderOlBytePool = new SimpleObjectPool<byte[][]>(() => new byte[15][]);
         cde = new CountdownEvent(cfg.threadCount * cfg.perThreadDataCount);
         successCounts = new int[cfg.threadCount];
         // abortCounts = new int[cfg.threadCount];
@@ -420,20 +418,15 @@ public class TpccBenchmark : TableBenchmark {
         ReadOnlySpan<byte> districtRow = tables[(int)TableType.District].Read(districtPk, tables[(int)TableType.District].GetSchema(), ctx);
         ReadOnlySpan<byte> customerRow = tables[(int)TableType.Customer].Read(new PrimaryKey((int)TableType.Customer, query.w_id, query.d_id, query.c_id), tables[(int)TableType.Customer].GetSchema(), ctx);
 
-        byte[][] itemRows = newOrderOlBytePool.Checkout();
-        byte[][] stockRows = newOrderOlBytePool.Checkout();
         bool allLocal = true;
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
             if (query.ol_i_ids[i] == 0) {
                 txnManager.Abort(ctx, callback);
                 return;
-            }
-            itemRows[i] = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, query.ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx).ToArray();
-            stockRows[i] = tables[(int)TableType.Stock].Read(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), tables[(int)TableType.Stock].GetSchema(), ctx).ToArray();
+            }            
             if (query.ol_supply_w_id[i] != query.w_id) allLocal = false;
         }
-
         // update district with increment D_NEXT_O_ID
         ReadOnlySpan<byte> old_d_next_o_id_bytes = ExtractField(TableType.District, TableField.D_NEXT_O_ID, districtRow);
         int old_d_next_o_id = BitConverter.ToInt32(old_d_next_o_id_bytes);
@@ -461,27 +454,31 @@ public class TpccBenchmark : TableBenchmark {
             txnManager.Abort(ctx, callback);
             return;
         }
+
         float total_amount = 0;
         for (int i = 0; i < query.o_ol_cnt; i++)
         {
+            ReadOnlySpan<byte> itemRow = tables[(int)TableType.Item].Read(new PrimaryKey((int)TableType.Item, query.ol_i_ids[i]), tables[(int)TableType.Item].GetSchema(), ctx);
+            ReadOnlySpan<byte> stockRow = tables[(int)TableType.Stock].Read(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), tables[(int)TableType.Stock].GetSchema(), ctx);
+
             // update stock
             byte[] updateStockData = stockBytePool.Checkout();
-            float i_price = BitConverter.ToSingle(ExtractField(TableType.Item, TableField.I_PRICE, itemRows[i]));
+            float i_price = BitConverter.ToSingle(ExtractField(TableType.Item, TableField.I_PRICE, itemRow));
 
-            int s_quantity = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_QUANTITY, stockRows[i]));
+            int s_quantity = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_QUANTITY, stockRow));
             if (s_quantity >= query.ol_quantity[i] + 10) s_quantity -= query.ol_quantity[i];
             else s_quantity += 91 - query.ol_quantity[i];
             new ReadOnlySpan<byte>(&s_quantity, sizeof(int)).CopyTo(updateStockData.AsSpan(updateStockTds[0].Offset));
 
-            int s_ytd = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_YTD, stockRows[i])) + query.ol_quantity[i];
+            int s_ytd = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_YTD, stockRow)) + query.ol_quantity[i];
             new ReadOnlySpan<byte>(&s_ytd, sizeof(int)).CopyTo(updateStockData.AsSpan(updateStockTds[1].Offset));
 
-            int s_order_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_ORDER_CNT, stockRows[i])) + 1;
+            int s_order_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_ORDER_CNT, stockRow)) + 1;
             new ReadOnlySpan<byte>(&s_order_cnt, sizeof(int)).CopyTo(updateStockData.AsSpan(updateStockTds[2].Offset));
 
             if (query.ol_supply_w_id[i] != query.w_id)
             {
-                int s_remote_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_REMOTE_CNT, stockRows[i])) + 1;
+                int s_remote_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_REMOTE_CNT, stockRow)) + 1;
                 new ReadOnlySpan<byte>(&s_remote_cnt, sizeof(int)).CopyTo(updateStockData.AsSpan(updateStockTds[3].Offset));
                 tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), updateStockTds, updateStockData, ctx);
             } else {
@@ -502,7 +499,7 @@ public class TpccBenchmark : TableBenchmark {
                 SetField(TableType.OrderLine, TableField.OL_QUANTITY, updateOrderLineData, new ReadOnlySpan<byte>(&b[i], sizeof(int)));
             }
             SetField(TableType.OrderLine, TableField.OL_AMOUNT, updateOrderLineData, new ReadOnlySpan<byte>(&ol_amount, sizeof(float)));
-            ReadOnlySpan<byte> distInfo = ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRows[i]);
+            ReadOnlySpan<byte> distInfo = ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRow);
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, distInfo);
             success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
             if (!success) {
@@ -520,8 +517,6 @@ public class TpccBenchmark : TableBenchmark {
             orderLineBytePool.Return(updateOrderLineData);
         }
         txnManager.CommitWithCallback(ctx, callback);
-        newOrderOlBytePool.Return(itemRows);
-        newOrderOlBytePool.Return(stockRows);
         orderBytePool.Return(insertOrderData);
         return;
     }
