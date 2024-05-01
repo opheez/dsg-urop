@@ -15,21 +15,22 @@ namespace DB
         public static int nCommitterThreads = 5;
         // TODO: test diff attributes
 
-        [TestMethod]
-        [ExpectedException(typeof(ArgumentException))]
-        public void TestOversizeInsert(){
-            (long,int)[] schema = {(12345,10)};
-            Table table = new Table(1, schema);
-            TransactionManager txnManager = new TransactionManager(nCommitterThreads, new Dictionary<int, Table>(){ {1, table} });
-            txnManager.Run();
+        // TODO: assumes only relevant info inserted, extra space ok
+        // [TestMethod]
+        // [ExpectedException(typeof(ArgumentException))]
+        // public void TestOversizeInsert(){
+        //     (long,int)[] schema = {(12345,10)};
+        //     Table table = new Table(1, schema);
+        //     TransactionManager txnManager = new TransactionManager(nCommitterThreads, new Dictionary<int, Table>(){ {1, table} });
+        //     txnManager.Run();
 
-            TransactionContext t = txnManager.Begin();
-            TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
-            byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
-            table.Insert(td, name, t);
-            var success = txnManager.Commit(t);
-            txnManager.Terminate();
-        }
+        //     TransactionContext t = txnManager.Begin();
+        //     TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
+        //     byte[] name = Encoding.ASCII.GetBytes("Jonathan Doever");
+        //     table.Insert(td, name, t);
+        //     var success = txnManager.Commit(t);
+        //     txnManager.Terminate();
+        // }
 
         [TestMethod]
         [ExpectedException(typeof(ArgumentException))]

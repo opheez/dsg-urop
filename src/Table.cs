@@ -170,17 +170,19 @@ public unsafe class Table : IDisposable{
     protected internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
         this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
         (int size, int offset) = this.metadata[keyAttr.Attr];
-        byte[] valueToWrite = value.ToArray(); //TODO: possibly optimize and not ToArray()
-        if (size == -1) {
-            IntPtr addr = Marshal.AllocHGlobal(value.Length);
-            Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-            valueToWrite = new byte[IntPtr.Size * 2];
-            BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-            BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-        }
-        for (int i = 0; i < valueToWrite.Length; i++) {
-            this.data[keyAttr.Key][offset+i] = valueToWrite[i];
-        }
+        // byte[] valueToWrite = value.ToArray(); 
+        // TODO: restore varLen capability
+        // if (size == -1) {
+        //     IntPtr addr = Marshal.AllocHGlobal(value.Length);
+        //     Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
+        //     valueToWrite = new byte[IntPtr.Size * 2];
+        //     BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
+        //     BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
+        // }
+        value.CopyTo(this.data[keyAttr.Key].AsSpan(offset));
+        // for (int i = 0; i < valueToWrite.Length; i++) {
+        //     this.data[keyAttr.Key][offset+i] = valueToWrite[i];
+        // }
     }
 
     public void AddSecondaryIndex(Dictionary<byte[], PrimaryKey> index){
