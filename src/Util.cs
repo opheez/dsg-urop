@@ -103,77 +103,77 @@ namespace DB {
         public long Key6 = 0;
         public readonly int Table;
 
-        public PrimaryKey (int t, params long[] keys){
+        // public PrimaryKey (int t, params long[] keys){
+        //     Table = t;
+        //     for (int i = 0; i < keys.Length; i++){
+        //         switch (i){
+        //             case 0:
+        //                 Key1 = keys[i];
+        //                 break;
+        //             case 1:
+        //                 Key2 = keys[i];
+        //                 break;
+        //             case 2:
+        //                 Key3 = keys[i];
+        //                 break;
+        //             case 3:
+        //                 Key4 = keys[i];
+        //                 break;
+        //             case 4:
+        //                 Key5 = keys[i];
+        //                 break;
+        //             case 5:
+        //                 Key6 = keys[i];
+        //                 break;
+        //             default:
+        //                 throw new ArgumentException("Too many keys");
+        //         }
+        //     }
+        // }
+        public PrimaryKey(int t, long k1, long k2, long k3, long k4, long k5, long k6){
             Table = t;
-            for (int i = 0; i < keys.Length; i++){
-                switch (i){
-                    case 0:
-                        Key1 = keys[i];
-                        break;
-                    case 1:
-                        Key2 = keys[i];
-                        break;
-                    case 2:
-                        Key3 = keys[i];
-                        break;
-                    case 3:
-                        Key4 = keys[i];
-                        break;
-                    case 4:
-                        Key5 = keys[i];
-                        break;
-                    case 5:
-                        Key6 = keys[i];
-                        break;
-                    default:
-                        throw new ArgumentException("Too many keys");
-                }
-            }
+            Key1 = k1;
+            Key2 = k2;
+            Key3 = k3;
+            Key4 = k4;
+            Key5 = k5;
+            Key6 = k6;
         }
-        // public PrimaryKey(int t, long k1, long k2, long k3, long k4, long k5, long k6){
-        //     Table = t;
-        //     Key1 = k1;
-        //     Key2 = k2;
-        //     Key3 = k3;
-        //     Key4 = k4;
-        //     Key5 = k5;
-        //     Key6 = k6;
-        // }
 
-        // public PrimaryKey(int t, long k1, long k2, long k3, long k4, long k5){
-        //     Table = t;
-        //     Key1 = k1;
-        //     Key2 = k2;
-        //     Key3 = k3;
-        //     Key4 = k4;
-        //     Key5 = k5;
-        // }
+        public PrimaryKey(int t, long k1, long k2, long k3, long k4, long k5){
+            Table = t;
+            Key1 = k1;
+            Key2 = k2;
+            Key3 = k3;
+            Key4 = k4;
+            Key5 = k5;
+        }
 
-        // public PrimaryKey(int t, long k1, long k2, long k3, long k4){
-        //     Table = t;
-        //     Key1 = k1;
-        //     Key2 = k2;
-        //     Key3 = k3;
-        //     Key4 = k4;
-        // }
+        public PrimaryKey(int t, long k1, long k2, long k3, long k4){
+            Table = t;
+            Key1 = k1;
+            Key2 = k2;
+            Key3 = k3;
+            Key4 = k4;
+        }
 
-        // public PrimaryKey(int t, long k1, long k2, long k3){
-        //     Table = t;
-        //     Key1 = k1;
-        //     Key2 = k2;
-        //     Key3 = k3;
-        // }
+        public PrimaryKey(int t, long k1, long k2, long k3){
+            Table = t;
+            Key1 = k1;
+            Key2 = k2;
+            Key3 = k3;
+        }
 
-        // public PrimaryKey(int t, long k1, long k2){
-        //     Table = t;
-        //     Key1 = k1;
-        //     Key2 = k2;
-        // }
+        public PrimaryKey(int t, long k1, long k2){
+            Table = t;
+            Key1 = k1;
+            Key2 = k2;
+        }
 
-        // public PrimaryKey(int t, long k1){
-        //     Table = t;
-        //     Key1 = k1;
-        // }
+        public PrimaryKey(int t, long k1){
+            Table = t;
+            Key1 = k1;
+        }
 
         public int Size => sizeof(long) * 6 + sizeof(int);
 
@@ -230,12 +230,26 @@ namespace DB {
             PrimaryKey result;
             fixed (byte* b = data) {
                 var head = b;
-                long[] keys = new long[6];
-                for (int i = 0; i < keys.Length; i++){
-                    keys[i] = *(long*)head;
-                    head += sizeof(long);
-                }
-                result = new PrimaryKey(*(int*)head, keys);
+                long k1 = *(long*)head;
+                head += sizeof(long);
+                long k2 = *(long*)head;
+                head += sizeof(long);
+                long k3 = *(long*)head;
+                head += sizeof(long);
+                long k4 = *(long*)head;
+                head += sizeof(long);
+                long k5 = *(long*)head;
+                head += sizeof(long);
+                long k6 = *(long*)head;
+                head += sizeof(long);
+                int table = *(int*)head;
+                result = new PrimaryKey(table, k1, k2, k3, k4, k5, k6);
+                // long[] keys = new long[6];
+                // for (int i = 0; i < keys.Length; i++){
+                //     keys[i] = *(long*)head;
+                //     head += sizeof(long);
+                // }
+                // result = new PrimaryKey(*(int*)head, keys);
             }
             return result;
         }

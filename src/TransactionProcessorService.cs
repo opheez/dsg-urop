@@ -83,7 +83,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
         Table table = tables[request.Key.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
-        PrimaryKey tupleId = new PrimaryKey(request.Key.Table, request.Key.Keys.ToArray());
+        PrimaryKey tupleId = new PrimaryKey(request.Key.Table, request.Key.Keys.ToArray()[0], request.Key.Keys.ToArray()[1], request.Key.Keys.ToArray()[2], request.Key.Keys.ToArray()[3], request.Key.Keys.ToArray()[4], request.Key.Keys.ToArray()[5]);
         TupleDesc[] tupleDescs = table.GetSchema();
         ReadReply reply = new ReadReply{ Value = ByteString.CopyFrom(table.Read(tupleId, tupleDescs, ctx))};
         return Task.FromResult(reply);
@@ -314,7 +314,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                             KeyAttr keyAttr = entry.keyAttrs[i];
                             Table table = tables[keyAttr.Key.Table];
                             (int, int) metadata = table.GetAttrMetadata(keyAttr.Attr);
-                            ctx.AddWriteSet(keyAttr.Key, new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, 0)}, entry.vals[i]);
+                            ctx.AddWriteSet(ref keyAttr.Key, new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, 0)}, entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
                         PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");

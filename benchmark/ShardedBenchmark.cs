@@ -69,7 +69,7 @@ public class ShardedBenchmark : TableBenchmark
             TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                tbl.Insert(keys[loc], td, values[loc], t);
+                tbl.Insert(ref keys[loc], td, values[loc], t);
             }
             var success = txnManager.Commit(t);
             if (!success){

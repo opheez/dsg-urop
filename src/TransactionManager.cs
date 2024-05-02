@@ -7,7 +7,7 @@ using FASTER.libdpr;
 
 namespace DB {
 public class TransactionManager {
-    private static readonly int MAX_QUEUE_SIZE = 4;
+    private static readonly int MAX_QUEUE_SIZE = 50;
     internal BlockingCollection<TransactionContext> txnQueue;
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
@@ -139,7 +139,7 @@ public class TransactionManager {
                 PrimaryKey tupleId = item.Item1;
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
-                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(tupleId)){
+                if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(ref tupleId)){
                     // Console.WriteLine($"1 ABORT for {ctx.tid} because conflict: {tupleId} in {tnumToCtx[i & (pastTnumCircularBufferSize - 1)].tid}");
                     return false;
                 }
@@ -149,7 +149,7 @@ public class TransactionManager {
         foreach (TransactionContext pastTxn in finish_active){
             foreach (var item in pastTxn.GetWriteset()){
                 PrimaryKey tupleId = item.Item1;
-                if (ctx.InReadSet(tupleId) || ctx.InWriteSet(tupleId)){
+                if (ctx.InReadSet(ref tupleId) || ctx.InWriteSet(ref tupleId)){
                     // Console.WriteLine($"2 ABORT for {ctx.tid} because conflict: {tupleId} in {pastTxn.tid}");
                     return false;
                 }
@@ -171,9 +171,9 @@ public class TransactionManager {
                 // TODO: should not throw exception here, but if it does, abort. 
                 // failure here means crashed before commit. would need to rollback
                 if (this.wal != null) {
-                    wal.Write(ctx.tid, new KeyAttr(tupleId, td.Attr), item.Item3.AsSpan(start, td.Size).ToArray());
+                    wal.Write(ctx.tid, new KeyAttr(tupleId, td.Attr), item.Item3[start..td.Size]);
                 }
-                tables[tupleId.Table].Write(new KeyAttr(tupleId, td.Attr), item.Item3.AsSpan(start, td.Size));
+                tables[tupleId.Table].Write(ref tupleId, td.Attr, item.Item3.AsSpan(start, td.Size));
                 start += td.Size;
             }
         }

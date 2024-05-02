@@ -122,7 +122,7 @@ public abstract class TableBenchmark
                     int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
                     // Span<byte> val = new Span<byte>(values[newValueIndex]).Slice(0, sizeof(long));
                     byte[] val = values[newValueIndex];
-                    tbl.Update(key, td, val, t);
+                    tbl.Update(ref key, td, val, t);
                 } else {
                     tbl.Read(key, td, t);
                 }

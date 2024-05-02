@@ -41,7 +41,7 @@ public abstract class RpcClient {
                 PartitionId = partitionId
             }
         );
-        return (reply.Value.ToByteArray(), new PrimaryKey(tempPk.Table, reply.Key.Keys.ToArray()));
+        return (reply.Value.ToByteArray(), new PrimaryKey(tempPk.Table, reply.Key.Keys.ToArray()[0], reply.Key.Keys.ToArray()[1], reply.Key.Keys.ToArray()[2], reply.Key.Keys.ToArray()[3], reply.Key.Keys.ToArray()[4], reply.Key.Keys.ToArray()[5]));
     }
 
     public void PopulateTables(BenchmarkConfig cfg, TpccConfig tpccCfg){

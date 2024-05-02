@@ -49,18 +49,18 @@ namespace DB
             PrimaryKey tupleId = new PrimaryKey(tbl.GetId(), 1);
             TupleDesc[] td = new TupleDesc[]{new TupleDesc(1, 3, 0), new TupleDesc(2, 3, 3)};
             byte[] val1 = new byte[]{1,2,3,4,5,6};
-            ctx.AddWriteSet(tupleId, td, val1);
+            ctx.AddWriteSet(ref tupleId, td, val1);
             (TupleDesc[], byte[]) res1 = ctx.GetFromWriteset(tupleId);
             
 
             TupleDesc[] td2 = new TupleDesc[]{new TupleDesc(2, 3, 0)};
             byte[] val2 = new byte[]{9,8,7};
-            ctx.AddWriteSet(tupleId, td2, val2);
+            ctx.AddWriteSet(ref tupleId, td2, val2);
             (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(tupleId);
 
             TupleDesc[] td3 = new TupleDesc[]{new TupleDesc(3, 3, 0)};
             byte[] val3 = new byte[]{5,5,5};
-            ctx.AddWriteSet(tupleId, td3, val3);
+            ctx.AddWriteSet(ref tupleId, td3, val3);
             (TupleDesc[], byte[]) res3 = ctx.GetFromWriteset(tupleId);
 
             CollectionAssert.AreEqual(val1, res1.Item2);
@@ -79,7 +79,7 @@ namespace DB
             PrimaryKey tupleId = new PrimaryKey(tbl.GetId(), 1);
             TupleDesc[] td = new TupleDesc[]{new TupleDesc(2, 3, 3)};
             byte[] val1 = new byte[]{4,5,6};
-            ctx.AddWriteSet(tupleId, td, val1);
+            ctx.AddWriteSet(ref tupleId, td, val1);
             ReadOnlySpan<byte> res1 = ctx.GetFromReadset(tupleId);
             (TupleDesc[], byte[]) res2 = ctx.GetFromWriteset(new PrimaryKey(tbl.GetId(), 2));
 

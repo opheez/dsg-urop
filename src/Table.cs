@@ -130,7 +130,7 @@ public unsafe class Table : IDisposable{
 
         long id = NewRecordId(); // TODO: make sure this new record id falls within range of this partition in shardedBenchmark
         PrimaryKey tupleId = new PrimaryKey(this.id, id);
-        ctx.AddWriteSet(tupleId, tupleDescs, value);
+        ctx.AddWriteSet(ref tupleId, tupleDescs, value);
 
         return tupleId;
     }
@@ -143,22 +143,22 @@ public unsafe class Table : IDisposable{
     /// <param name="ctx"></param>
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns>whether insert succeeded</returns>
-    public bool Insert(PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+    public bool Insert(ref PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         // PrintDebug($"Inserting {id}", ctx);
         if (this.data.ContainsKey(id)){
             return false;
         }
         Validate(tupleDescs, value, true);
 
-        ctx.AddWriteSet(id, tupleDescs, value);
+        ctx.AddWriteSet(ref id, tupleDescs, value);
 
         return true;
     }
 
-    public void Update(PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+    public void Update(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         Validate(tupleDescs, value, true);
 
-        ctx.AddWriteSet(tupleId, tupleDescs, value);
+        ctx.AddWriteSet(ref tupleId, tupleDescs, value);
 
     }
 
@@ -167,9 +167,10 @@ public unsafe class Table : IDisposable{
     /// </summary>
     /// <param name="keyAttr"></param>
     /// <param name="value"></param>
-    protected internal void Write(KeyAttr keyAttr, ReadOnlySpan<byte> value){
-        this.data.TryAdd(keyAttr.Key, new byte[rowSize]);
-        (int size, int offset) = this.metadata[keyAttr.Attr];
+    protected internal void Write(ref PrimaryKey pk, long attr, ReadOnlySpan<byte> value){
+        this.data.TryAdd(pk, new byte[rowSize]);
+
+        (int size, int offset) = this.metadata[attr];
         // byte[] valueToWrite = value.ToArray(); 
         // TODO: restore varLen capability
         // if (size == -1) {
@@ -179,7 +180,7 @@ public unsafe class Table : IDisposable{
         //     BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
         //     BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
         // }
-        value.CopyTo(this.data[keyAttr.Key].AsSpan(offset));
+        value.CopyTo(this.data[pk].AsSpan(offset));
         // for (int i = 0; i < valueToWrite.Length; i++) {
         //     this.data[keyAttr.Key][offset+i] = valueToWrite[i];
         // }

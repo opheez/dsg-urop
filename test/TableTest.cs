@@ -54,7 +54,7 @@ namespace DB
             byte[] input = Encoding.ASCII.GetBytes("John Doe");
             PrimaryKey pk = new PrimaryKey(test.GetId(), 11111);
             KeyAttr ka = new KeyAttr(pk, 12345);
-            test.Write(ka, input);
+            test.Write(ref pk, 12345, input);
             var ret = test.Read(pk);
             CollectionAssert.AreEqual(input.Concat(new byte[4]).ToArray(), ret.ToArray());
         }
@@ -70,11 +70,11 @@ namespace DB
             KeyAttr ka2 = new KeyAttr(pk, 67890);
             byte[] val1 = BitConverter.GetBytes(21);
             byte[] val2 = BitConverter.GetBytes(40);
-            test.Write(ka, name);
-            test.Write(ka2, val1);
-            test.Write(ka2, val2);
+            test.Write(ref pk, 12345, name);
+            test.Write(ref pk, 67890, val1);
+            test.Write(ref pk, 67890, val2);
             name = Encoding.ASCII.GetBytes("Anna Lee");
-            test.Write(ka, name);
+            test.Write(ref pk, 12345, name);
 
             var retName = test.Read(pk);
 

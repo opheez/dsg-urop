@@ -247,15 +247,15 @@ public class TpccBenchmark : TableBenchmark {
     private static byte[] emptyByteArr = new byte[0];
 
     Dictionary<TableType, string> tableDataFiles = new Dictionary<TableType, string> {
-        {TableType.Warehouse, "warehouseData_{0}.bin"},
-        {TableType.District, "districtData_{0}.bin"},
-        {TableType.Customer, "customerData_{0}.bin"},
-        {TableType.History, "historyData_{0}.bin"},
-        {TableType.Order, "orderData_{0}.bin"},
-        {TableType.NewOrder, "newOrderData_{0}.bin"},
-        {TableType.Item, "itemData.bin"},
-        {TableType.OrderLine, "orderLineData_{0}.bin"},
-        {TableType.Stock, "stockData_{0}.bin"}
+        {TableType.Warehouse, "data/warehouseData_{0}.bin"},
+        {TableType.District, "data/districtData_{0}.bin"},
+        {TableType.Customer, "data/customerData_{0}.bin"},
+        {TableType.History, "data/historyData_{0}.bin"},
+        {TableType.Order, "data/orderData_{0}.bin"},
+        {TableType.NewOrder, "data/newOrderData_{0}.bin"},
+        {TableType.Item, "data/itemData.bin"},
+        {TableType.OrderLine, "data/orderLineData_{0}.bin"},
+        {TableType.Stock, "data/stockData_{0}.bin"}
     };
     private int[][] ol_cnts;
     private long[][] entry_ds;
@@ -295,7 +295,7 @@ public class TpccBenchmark : TableBenchmark {
         successCounts = new int[cfg.threadCount];
         // abortCounts = new int[cfg.threadCount];
 
-        Debug.Assert(cfg.threadCount < tpcCfg.NumWh, "Thread count must be less than number of warehouses");
+        Debug.Assert(cfg.threadCount <= tpcCfg.NumWh, "Thread count must be less than number of warehouses");
         Debug.Assert(tpcCfg.PartitionsPerThread * cfg.threadCount == tpcCfg.NumWh, "Partitions per thread * thread count must equal number of warehouses");
 
         this.ol_cnts = new int[tpcCfg.NumDistrict][];
@@ -432,7 +432,7 @@ public class TpccBenchmark : TableBenchmark {
         int old_d_next_o_id = BitConverter.ToInt32(old_d_next_o_id_bytes);
         int new_d_next_o_id = old_d_next_o_id + 1;
         ReadOnlySpan<byte> new_d_next_o_id_bytes = new ReadOnlySpan<byte>(&new_d_next_o_id, sizeof(int));
-        tables[(int)TableType.District].Update(districtPk, updateDistrictNextOIdTds, new_d_next_o_id_bytes, ctx);
+        tables[(int)TableType.District].Update(ref districtPk, updateDistrictNextOIdTds, new_d_next_o_id_bytes, ctx);
 
         // insert into order and new order
         PrimaryKey newOrderPk = new PrimaryKey((int)TableType.NewOrder, query.w_id, query.d_id, old_d_next_o_id);
@@ -444,12 +444,12 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.Order, TableField.O_CARRIER_ID, insertOrderData, ZeroAsBytes);
         SetField(TableType.Order, TableField.O_OL_CNT, insertOrderData, new ReadOnlySpan<byte>(&query.o_ol_cnt, sizeof(int)));
         SetField(TableType.Order, TableField.O_ALL_LOCAL, insertOrderData, new ReadOnlySpan<byte>(&allLocal, sizeof(bool)));
-        bool success = tables[(int)TableType.Order].Insert(orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
+        bool success = tables[(int)TableType.Order].Insert(ref orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
             return;
         }
-        success = tables[(int)TableType.NewOrder].Insert(newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), emptyByteArr, ctx);
+        success = tables[(int)TableType.NewOrder].Insert(ref newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), emptyByteArr, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
             return;
@@ -476,13 +476,14 @@ public class TpccBenchmark : TableBenchmark {
             int s_order_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_ORDER_CNT, stockRow)) + 1;
             new ReadOnlySpan<byte>(&s_order_cnt, sizeof(int)).CopyTo(updateStockData.AsSpan(updateStockTds[2].Offset));
 
+            PrimaryKey stockPk = new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]);
             if (query.ol_supply_w_id[i] != query.w_id)
             {
                 int s_remote_cnt = BitConverter.ToInt32(ExtractField(TableType.Stock, TableField.S_REMOTE_CNT, stockRow)) + 1;
                 new ReadOnlySpan<byte>(&s_remote_cnt, sizeof(int)).CopyTo(updateStockData.AsSpan(updateStockTds[3].Offset));
-                tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), updateStockTds, updateStockData, ctx);
+                tables[(int)TableType.Stock].Update(ref stockPk, updateStockTds, updateStockData, ctx);
             } else {
-                tables[(int)TableType.Stock].Update(new PrimaryKey((int)TableType.Stock, query.ol_supply_w_id[i], query.ol_i_ids[i]), updateStockTds[0..3], updateStockData, ctx);
+                tables[(int)TableType.Stock].Update(ref stockPk, updateStockTds[0..3], updateStockData, ctx);
             }
 
             // insert into order line
@@ -501,7 +502,8 @@ public class TpccBenchmark : TableBenchmark {
             SetField(TableType.OrderLine, TableField.OL_AMOUNT, updateOrderLineData, new ReadOnlySpan<byte>(&ol_amount, sizeof(float)));
             ReadOnlySpan<byte> distInfo = ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRow);
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, distInfo);
-            success = tables[(int)TableType.OrderLine].Insert(new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i), tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
+            PrimaryKey orderLinePk = new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i);
+            success = tables[(int)TableType.OrderLine].Insert(ref orderLinePk, tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
             if (!success) {
                 txnManager.Abort(ctx, callback);
                 return;
@@ -540,11 +542,11 @@ public class TpccBenchmark : TableBenchmark {
         // standard tpcc write to w_ytd
         // update warehouse with increment W_YTD
         float w_ytd = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_YTD, warehouseRow)) + query.h_amount;
-        tables[(int)TableType.Warehouse].Update(warehousePk, updateWarehouseTds, BitConverter.GetBytes(w_ytd), ctx);
+        tables[(int)TableType.Warehouse].Update(ref warehousePk, updateWarehouseTds, BitConverter.GetBytes(w_ytd), ctx);
 
         // update district with increment D_YTD
         float d_ytd = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_YTD, districtRow)) + query.h_amount;
-        tables[(int)TableType.District].Update(districtPk, updateDistrictYtdTds, BitConverter.GetBytes(d_ytd), ctx);
+        tables[(int)TableType.District].Update(ref districtPk, updateDistrictYtdTds, BitConverter.GetBytes(d_ytd), ctx);
 
         // update customer
         byte[] updateCustomerData = customerBytePool.Checkout();
@@ -561,9 +563,9 @@ public class TpccBenchmark : TableBenchmark {
             string c_data_new = query.c_id + " " + query.c_d_id + " " + query.c_w_id + " " + query.d_id + " " + query.w_id + " " + String.Format("{0:0.00}", query.h_amount) + " " + c_data_old;
             c_data_new = c_data_new.Substring(0, Math.Min(c_data_new.Length, 500));
             Encoding.ASCII.GetBytes(c_data_new).CopyTo(updateCustomerData, updateCustomerTds[3].Offset);
-            tables[(int)TableType.Customer].Update(customerPk, updateCustomerTds, updateCustomerData, ctx);
+            tables[(int)TableType.Customer].Update(ref customerPk, updateCustomerTds, updateCustomerData, ctx);
         } else {
-            tables[(int)TableType.Customer].Update(customerPk, updateCustomerTds[0..3], updateCustomerData, ctx);
+            tables[(int)TableType.Customer].Update(ref customerPk, updateCustomerTds[0..3], updateCustomerData, ctx);
         }
 
         // insert into history
@@ -572,7 +574,7 @@ public class TpccBenchmark : TableBenchmark {
         byte[] insertHistoryData = historyBytePool.Checkout();
         SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(query.h_amount));
         SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
-        bool success = tables[(int)TableType.History].Insert(historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
+        bool success = tables[(int)TableType.History].Insert(ref historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
             return;
@@ -643,13 +645,13 @@ public class TpccBenchmark : TableBenchmark {
             if (perThreadDataCount == 0) thread_idx = 0;
             remainder = keys.Count() % cfg.insertThreadCount;
         }
-        // Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
+        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
         for (int i = 0; i < perThreadDataCount + remainder; i += cfg.perTransactionCount){
             TransactionContext ctx = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (perThreadDataCount * thread_idx);
                 if (loc >= keys.Count()) break;
-                bool insertSuccess = table.Insert(keys[loc], table.GetSchema(), values[loc], ctx);
+                bool insertSuccess = table.Insert(ref keys[loc], table.GetSchema(), values[loc], ctx);
                 if (!insertSuccess) throw new Exception($"Failed to insert record {loc} {keys[loc]} for table {table.GetId()}");
             }
             var success = txnManager.Commit(ctx);

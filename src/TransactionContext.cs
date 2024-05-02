@@ -26,15 +26,15 @@ public class TransactionContext {
         Wset = new List<(PrimaryKey, TupleDesc[], byte[])>();
     }
 
-    public bool InReadSet(PrimaryKey tupleId){
-        return GetReadsetKeyIndex(tupleId) != -1;
+    public bool InReadSet(ref PrimaryKey tupleId){
+        return GetReadsetKeyIndex(ref tupleId) != -1;
     }
-    public bool InWriteSet(PrimaryKey tupleId){
-        return GetWriteSetKeyIndex(tupleId) != -1;
+    public bool InWriteSet(ref PrimaryKey tupleId){
+        return GetWriteSetKeyIndex(ref tupleId) != -1;
     }
 
     public (TupleDesc[], byte[]) GetFromWriteset(PrimaryKey tupleId){
-        int index = GetWriteSetKeyIndex(tupleId);
+        int index = GetWriteSetKeyIndex(ref tupleId);
         if (index == -1){
             return (null, null);
         }
@@ -42,7 +42,7 @@ public class TransactionContext {
     }
 
     public ReadOnlySpan<byte> GetFromReadset(PrimaryKey tupleId){
-        int index = GetReadsetKeyIndex(tupleId);
+        int index = GetReadsetKeyIndex(ref tupleId);
         if (index == -1){
             return null;
         }
@@ -57,8 +57,8 @@ public class TransactionContext {
         Rset.Add((tupleId,val.ToArray()));
     }
 
-    public void AddWriteSet(PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
-        int index = GetWriteSetKeyIndex(tupleId);
+    public void AddWriteSet(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
+        int index = GetWriteSetKeyIndex(ref tupleId);
         if (index != -1){
             (PrimaryKey, TupleDesc[], byte[]) existing = Wset[index];
             // List<byte> result = new List<byte>();
@@ -142,7 +142,7 @@ public class TransactionContext {
         return Wset;
     }
 
-    private int GetWriteSetKeyIndex(PrimaryKey tupleId){
+    private int GetWriteSetKeyIndex(ref PrimaryKey tupleId){
         for (int i = Wset.Count-1; i >= 0; i--){
             if (Wset[i].Item1.Equals(tupleId)){
                 return i;
@@ -151,7 +151,7 @@ public class TransactionContext {
         return -1;
     }
     
-    private int GetReadsetKeyIndex(PrimaryKey tupleId){
+    private int GetReadsetKeyIndex(ref PrimaryKey tupleId){
         for (int i = Rset.Count-1; i >= 0; i--){
             if (Rset[i].Item1.Equals(tupleId)){
                 return i;

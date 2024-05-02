@@ -91,7 +91,7 @@ namespace DB
             TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("");
             PrimaryKey id = table.Insert(td, name, t);
-            bool success = table.Insert(id, td, name, t);
+            bool success = table.Insert(ref id, td, name, t);
             Assert.IsFalse(success, "Inserting existing key should fail");
         }
 
@@ -126,7 +126,7 @@ namespace DB
             byte[] value = BitConverter.GetBytes(21);
             PrimaryKey id = table.Insert(td, value, t);
             value = BitConverter.GetBytes(40);
-            table.Update(id, td, value, t);
+            table.Update(ref id, td, value, t);
             var v1 = table.Read(id, td, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -244,13 +244,13 @@ namespace DB
             var res2 = table.Read(new PrimaryKey(table.GetId(), 2), td, t2);
 
             byte[] val2 = BitConverter.GetBytes(5);
-            table.Update(id1, td, val2, t2);
+            table.Update(ref id1, td, val2, t2);
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
 
 
             TransactionContext t3 = txnManager.Begin();
-            var res3 = table.Read(id1, td, t3);
+            var res3 = table.Read( id1, td, t3);
             var success3 = txnManager.Commit(t3);
             txnManager.Terminate();
 
@@ -277,13 +277,13 @@ namespace DB
             byte[] val1 = BitConverter.GetBytes(21);
             PrimaryKey id1 = table.Insert(td, val1, t);
             PrimaryKey id2 = new PrimaryKey(table.GetId(), 2);
-            var res1 = table.Read(id2, td, t);
+            var res1 = table.Read( id2, td, t);
             // Thread thread = new Thread(() => Commit(txnManager, t)); 
 
             TransactionContext t2 = txnManager.Begin();
-            var res2 = table.Read(id2, td, t2);
+            var res2 = table.Read( id2, td, t2);
             byte[] val2 = BitConverter.GetBytes(5);
-            table.Update(id2, td, val2, t2);
+            table.Update(ref id2, td, val2, t2);
 
             // thread.Start();
             // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
@@ -291,8 +291,8 @@ namespace DB
             var success2 = txnManager.Commit(t2);
 
             TransactionContext t3 = txnManager.Begin();
-            var res3 = table.Read(id1, td, t3);
-            var res4 = table.Read(id2, td, t3);
+            var res3 = table.Read( id1, td, t3);
+            var res4 = table.Read( id2, td, t3);
             var success3 = txnManager.Commit(t3);
             txnManager.Terminate();
 
@@ -320,12 +320,12 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
             PrimaryKey id1 = table.Insert(td, val1, t);
-            var res1 = table.Read(id1, td, t);
+            var res1 = table.Read( id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
             byte[] val2 = BitConverter.GetBytes(5);
-            var res2 = table.Read(id1, td, t2);
-            table.Update(id1, td, val2, t2);
+            var res2 = table.Read( id1, td, t2);
+            table.Update(ref id1, td, val2, t2);
 
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
@@ -352,11 +352,11 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
             PrimaryKey id1 = table.Insert(td, val1, t);
-            var res1 = table.Read(id1, td, t);
+            var res1 = table.Read( id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
             byte[] val2 = BitConverter.GetBytes(5);
-            bool insertSuccess = table.Insert(id1, td, val2, t2);
+            bool insertSuccess = table.Insert(ref id1, td, val2, t2);
 
             txnManager.active.Add(t); // manually "commit" t and ensure it is still ongoing
             var success2 = txnManager.Commit(t2);
