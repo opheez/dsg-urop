@@ -22,7 +22,7 @@ public abstract class RpcClient {
     public ReadOnlySpan<byte> Read(PrimaryKey key, TransactionContext ctx){
         var channel = GetServerChannel(key);
         var client = new TransactionProcessor.TransactionProcessorClient(channel);
-        PbPrimaryKey pk = new PbPrimaryKey { Keys = {key.Keys}, Table = key.Table};
+        PbPrimaryKey pk = new PbPrimaryKey { Keys = {key.Key1, key.Key2, key.Key3, key.Key4, key.Key5, key.Key6}, Table = key.Table};
 
         var reply = client.Read(new ReadRequest { Key = pk, Tid = ctx.tid, PartitionId = partitionId});
         

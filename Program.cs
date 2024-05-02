@@ -17,6 +17,9 @@ using Microsoft.AspNetCore.Server.Kestrel.Core;
 unsafe class Program {
 
     public static int NumProcessors = 2;
+    public static int NComitterThreads = 2;
+    public static int PartitionsPerThread = 2;
+    public static int ThreadCount = 2;
 
     // public static void Main(){
     //     Console.WriteLine("Hello, World!");
@@ -24,7 +27,9 @@ unsafe class Program {
     //         ratio: 0.2,
     //         seed: 12345,
     //         attrCount: 10,
-    //         threadCount: 12,
+    //         threadCount: ThreadCount,
+    //         insertThreadCount: 12,
+    //         nCommitterThreads: NComitterThreads,
     //         iterationCount: 1
     //     );
     //     // TableBenchmark b = new FixedLenTableBenchmark("DictContext", ycsbCfg);
@@ -32,8 +37,8 @@ unsafe class Program {
     //     // b = new VarLenTableBenchmark(12345, 0.5);
     //     // b.Run();
     //     TpccConfig tpccConfig = new TpccConfig(
-    //         numWh: 4,
-    //         partitionsPerMachine: 4,
+    //         numWh: ThreadCount * PartitionsPerThread,
+    //         partitionsPerThread: PartitionsPerThread,
     //         newOrderCrossPartitionProbability: 0,
     //         paymentCrossPartitionProbability: 0
     //         // numCustomer: 10,
@@ -87,13 +92,14 @@ unsafe class Program {
     //         );
     //     }
     //     ShardedTransactionManager stm = new ShardedTransactionManager(
-    //         7,
+    //         NComitterThreads,
     //         rpcClient,
     //         tables
     //     );
         
     //     TpccBenchmark tpccBenchmark = new TpccBenchmark((int)0, tpccConfig, ycsbCfg, tables, stm);
     //     tpccBenchmark.RunTransactions();
+    //     // tpccBenchmark.GenerateTables();
     // }
 
     //     private static void RunDarqWithProcessor(DarqId me, IDarqClusterInfo clusterInfo)

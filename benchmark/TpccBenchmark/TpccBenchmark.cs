@@ -723,7 +723,7 @@ public class TpccBenchmark : TableBenchmark {
                 byte[] data = reader.ReadBytes(table.rowSize);
                 PrimaryKey pk = PrimaryKey.FromBytes(pkBytes);
 
-                keys[i] = new PrimaryKey(pk.Table, w_id, pk.Keys[0]);
+                keys[i] = new PrimaryKey(pk.Table, w_id, pk.Key1);
                 values[i] = data;
             }
         }

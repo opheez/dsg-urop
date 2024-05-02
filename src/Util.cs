@@ -95,40 +95,113 @@ namespace DB {
     // }
 
     public struct PrimaryKey{ //} : IEquatable<TupleId>{
-
-        public readonly long[] Keys;
+        public long Key1 = 0;
+        public long Key2 = 0;
+        public long Key3 = 0;
+        public long Key4 = 0;
+        public long Key5 = 0;
+        public long Key6 = 0;
         public readonly int Table;
-        public PrimaryKey(int t, params long[] keys){
-            Keys = keys;
+
+        public PrimaryKey (int t, params long[] keys){
             Table = t;
-        }
-
-        public int Size => sizeof(long) * Keys.Length + sizeof(int) + sizeof(int);
-
-        public override bool Equals(object o){
-            if (o == null || GetType() != o.GetType()){
-                return false;
-            }
-            if (Table != ((PrimaryKey)o).Table) return false;
-            if (((PrimaryKey)o).Keys.Length != Keys.Length) return false;
-            for (int i = 0; i < Keys.Length; i++){
-                if (Keys[i] != ((PrimaryKey)o).Keys[i]){
-                    return false;
+            for (int i = 0; i < keys.Length; i++){
+                switch (i){
+                    case 0:
+                        Key1 = keys[i];
+                        break;
+                    case 1:
+                        Key2 = keys[i];
+                        break;
+                    case 2:
+                        Key3 = keys[i];
+                        break;
+                    case 3:
+                        Key4 = keys[i];
+                        break;
+                    case 4:
+                        Key5 = keys[i];
+                        break;
+                    case 5:
+                        Key6 = keys[i];
+                        break;
+                    default:
+                        throw new ArgumentException("Too many keys");
                 }
             }
-            return true;
         }
+        // public PrimaryKey(int t, long k1, long k2, long k3, long k4, long k5, long k6){
+        //     Table = t;
+        //     Key1 = k1;
+        //     Key2 = k2;
+        //     Key3 = k3;
+        //     Key4 = k4;
+        //     Key5 = k5;
+        //     Key6 = k6;
+        // }
 
-        public override int GetHashCode(){
-            int hash = 17;
-            foreach (long l in Keys){
-                hash = hash * 31 + l.GetHashCode();
-            }
-            return hash * 31 + Table;
-        }
+        // public PrimaryKey(int t, long k1, long k2, long k3, long k4, long k5){
+        //     Table = t;
+        //     Key1 = k1;
+        //     Key2 = k2;
+        //     Key3 = k3;
+        //     Key4 = k4;
+        //     Key5 = k5;
+        // }
+
+        // public PrimaryKey(int t, long k1, long k2, long k3, long k4){
+        //     Table = t;
+        //     Key1 = k1;
+        //     Key2 = k2;
+        //     Key3 = k3;
+        //     Key4 = k4;
+        // }
+
+        // public PrimaryKey(int t, long k1, long k2, long k3){
+        //     Table = t;
+        //     Key1 = k1;
+        //     Key2 = k2;
+        //     Key3 = k3;
+        // }
+
+        // public PrimaryKey(int t, long k1, long k2){
+        //     Table = t;
+        //     Key1 = k1;
+        //     Key2 = k2;
+        // }
+
+        // public PrimaryKey(int t, long k1){
+        //     Table = t;
+        //     Key1 = k1;
+        // }
+
+        public int Size => sizeof(long) * 6 + sizeof(int);
+
+        // public override bool Equals(object o){
+        //     if (o == null || GetType() != o.GetType()){
+        //         return false;
+        //     }
+        //     PrimaryKey other = (PrimaryKey)o;
+        //     if (Table != other.Table) return false;
+        //     if (Key1 != other.Key1) return false;
+        //     if (Key2 != other.Key2) return false;
+        //     if (Key3 != other.Key3) return false;
+        //     if (Key4 != other.Key4) return false;
+        //     if (Key5 != other.Key5) return false;
+        //     if (Key6 != other.Key6) return false;
+        //     return true;
+        // }
+
+        // public override int GetHashCode(){
+        //     int hash = 17;
+        //     foreach (long l in Keys){
+        //         hash = hash * 31 + l.GetHashCode();
+        //     }
+        //     return hash * 31 + Table;
+        // }
 
         public override string ToString(){
-            return $"PK ({string.Join(", ", Keys)}) Table {Table}";
+            return $"PK ({Key1}, {Key2}, {Key3}, {Key4}, {Key5}, {Key6}) Table {Table}";
         }
 
         public unsafe byte[] ToBytes(){
@@ -136,12 +209,18 @@ namespace DB {
             
             fixed (byte* b = arr) {
                 var head = b;
-                *(int*)head = Keys.Length;
-                head += sizeof(int);
-                for (int i = 0; i < Keys.Length; i++){
-                    *(long*)head = Keys[i];
-                    head += sizeof(long);
-                }
+                *(long*)head = Key1;
+                head += sizeof(long);
+                *(long*)head = Key2;
+                head += sizeof(long);
+                *(long*)head = Key3;
+                head += sizeof(long);
+                *(long*)head = Key4;
+                head += sizeof(long);
+                *(long*)head = Key5;
+                head += sizeof(long);
+                *(long*)head = Key6;
+                head += sizeof(long);
                 *(int*)head = Table;
             }
             return arr;
@@ -151,9 +230,7 @@ namespace DB {
             PrimaryKey result;
             fixed (byte* b = data) {
                 var head = b;
-                int len = *(int*)head;
-                head += sizeof(int);
-                long[] keys = new long[len];
+                long[] keys = new long[6];
                 for (int i = 0; i < keys.Length; i++){
                     keys[i] = *(long*)head;
                     head += sizeof(long);
