@@ -6,6 +6,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Runtime.CompilerServices;
+using FASTER.common;
 
 [assembly:InternalsVisibleTo("TableTests")]
 namespace DB { 
@@ -119,18 +120,20 @@ public unsafe class Table : IDisposable{
     }
 
     /// <summary>
-    /// Insert specified attributes into table. Non-specified attributes will be 0 
+    /// Insert entire row
     /// </summary>
     /// <param name="tupleDescs"></param>
     /// <param name="value"></param>
     /// <param name="ctx"></param>
     /// <returns></returns>
-    public PrimaryKey Insert(TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
-        Validate(tupleDescs, value, true);
+    public PrimaryKey Insert(ReadOnlySpan<byte> value, TransactionContext ctx){
+        if (value.Length != this.rowSize){
+            throw new ArgumentException($"Expected size {this.rowSize} for new record but instead got size {value.Length}");
+        }
 
         long id = NewRecordId(); // TODO: make sure this new record id falls within range of this partition in shardedBenchmark
         PrimaryKey tupleId = new PrimaryKey(this.id, id);
-        ctx.AddWriteSet(ref tupleId, tupleDescs, value);
+        ctx.AddWriteSet(ref tupleId, GetSchema(), value);
 
         return tupleId;
     }
@@ -143,19 +146,24 @@ public unsafe class Table : IDisposable{
     /// <param name="ctx"></param>
     /// <exception cref="ArgumentException">Key already exists</exception>
     /// <returns>whether insert succeeded</returns>
-    public bool Insert(ref PrimaryKey id, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+    public bool Insert(ref PrimaryKey id, ReadOnlySpan<byte> value, TransactionContext ctx){
+        if (value.Length != this.rowSize){
+            throw new ArgumentException($"Expected size {this.rowSize} for new record but instead got size {value.Length}");
+        }
         // PrintDebug($"Inserting {id}", ctx);
         if (this.data.ContainsKey(id)){
             return false;
         }
-        Validate(tupleDescs, value, true);
 
-        ctx.AddWriteSet(ref id, tupleDescs, value);
+        ctx.AddWriteSet(ref id, GetSchema(), value);
 
         return true;
     }
 
     public void Update(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
+        if (!this.data.ContainsKey(tupleId) && !ctx.InWriteSet(ref tupleId)){
+            throw new ArgumentException($"Key {tupleId} does not exist");
+        }
         Validate(tupleDescs, value, true);
 
         ctx.AddWriteSet(ref tupleId, tupleDescs, value);
@@ -163,27 +171,29 @@ public unsafe class Table : IDisposable{
     }
 
     /// <summary>
-    /// Write value to specific attribute of key. If key does not exist yet, create empty row
-    /// </summary>
+    /// Write value to specific attribute of key. If key does not exist yet, this is an insert
+    /// /// </summary>
     /// <param name="keyAttr"></param>
     /// <param name="value"></param>
-    protected internal void Write(ref PrimaryKey pk, long attr, ReadOnlySpan<byte> value){
-        this.data.TryAdd(pk, new byte[rowSize]);
-
-        (int size, int offset) = this.metadata[attr];
-        // byte[] valueToWrite = value.ToArray(); 
-        // TODO: restore varLen capability
-        // if (size == -1) {
-        //     IntPtr addr = Marshal.AllocHGlobal(value.Length);
-        //     Marshal.Copy(valueToWrite, 0, addr, valueToWrite.Length);
-        //     valueToWrite = new byte[IntPtr.Size * 2];
-        //     BitConverter.GetBytes(value.Length).CopyTo(valueToWrite, 0);
-        //     BitConverter.GetBytes(addr.ToInt64()).CopyTo(valueToWrite, IntPtr.Size);
-        // }
-        value.CopyTo(this.data[pk].AsSpan(offset));
-        // for (int i = 0; i < valueToWrite.Length; i++) {
-        //     this.data[keyAttr.Key][offset+i] = valueToWrite[i];
-        // }
+    protected internal void Write(ref PrimaryKey pk, TupleDesc[] tds, byte[] value){
+        // TODO: is it safe to assume if key exists in writeset, it is an update?
+        // this will receive pk over and over again with tds building 
+        if (!this.data.ContainsKey(pk)){
+            // insert
+            if (value.Length != this.rowSize){
+                throw new ArgumentException($"Expected size {this.rowSize} for new record but instead got size {value.Length}");
+            }
+            this.data[pk] = value;
+        } else {
+            // update 
+            int start = 0;
+            foreach (TupleDesc td in tds){
+                (int size, int offset) = this.metadata[td.Attr];
+                // TODO: performance
+                value[start..td.Size].CopyTo(this.data[pk].AsSpan(offset));
+                start += td.Size;
+            }
+        }
     }
 
     public void AddSecondaryIndex(Dictionary<byte[], PrimaryKey> index){

@@ -43,7 +43,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {new TupleDesc(12345, 1, 0)};
             byte[] name = Encoding.ASCII.GetBytes("a");
-            table.Insert(td, name, t);
+            table.Insert(name, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
         }
@@ -59,7 +59,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("");
-            table.Insert(td, name, t);
+            table.Insert(name, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
         }
@@ -74,7 +74,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {};
             byte[] name = Encoding.ASCII.GetBytes("");
-            table.Insert(td, name, t);
+            table.Insert(name, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
         }
@@ -90,8 +90,8 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {new TupleDesc(12345, 10, 0)};
             byte[] name = Encoding.ASCII.GetBytes("");
-            PrimaryKey id = table.Insert(td, name, t);
-            bool success = table.Insert(ref id, td, name, t);
+            PrimaryKey id = table.Insert(name, t);
+            bool success = table.Insert(ref id, name, t);
             Assert.IsFalse(success, "Inserting existing key should fail");
         }
 
@@ -105,7 +105,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
             byte[] value = BitConverter.GetBytes(21);
-            PrimaryKey id = table.Insert(td, value, t);
+            PrimaryKey id = table.Insert(value, t);
             var v1 = table.Read(id, td, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -124,7 +124,7 @@ namespace DB
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
             byte[] value = BitConverter.GetBytes(21);
-            PrimaryKey id = table.Insert(td, value, t);
+            PrimaryKey id = table.Insert(value, t);
             value = BitConverter.GetBytes(40);
             table.Update(ref id, td, value, t);
             var v1 = table.Read(id, td, t);
@@ -144,7 +144,7 @@ namespace DB
 
             TransactionContext t = txnManager.Begin();
             TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
-            PrimaryKey tid = table.Insert(td, BitConverter.GetBytes(21).AsSpan(), t);
+            PrimaryKey tid = table.Insert(BitConverter.GetBytes(21).AsSpan(), t);
             var v1 = table.Read(tid, td, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -165,7 +165,7 @@ namespace DB
             byte[] value = BitConverter.GetBytes(21);
             byte[] value2 = BitConverter.GetBytes(95);
             
-            PrimaryKey id = table.Insert(td, value.Concat(value2).ToArray(), t);
+            PrimaryKey id = table.Insert(value.Concat(value2).ToArray(), t);
             TupleDesc[] td1 = {new TupleDesc(12345, 4, 0)};
             var v1 = table.Read(id, td1, t);
             TupleDesc[] td2 = {new TupleDesc(56789, 4, 0)};
@@ -179,6 +179,7 @@ namespace DB
         }
 
         [TestMethod]
+        [ExpectedException(typeof(ArgumentException))]
         public void TestInsertSomeAttributes(){
             (long,int)[] schema = {(12345,4), (56789, 4)};
             Table table = new Table(1, schema);
@@ -190,7 +191,7 @@ namespace DB
             TupleDesc[] td2 = {new TupleDesc(56789, 4, 0)};
             byte[] value = BitConverter.GetBytes(21);
             
-            PrimaryKey id = table.Insert(new TupleDesc[]{new TupleDesc(56789, 4, 0)}, value, t);
+            PrimaryKey id = table.Insert(value, t);
             var v1 = table.Read(id, td1, t);
             var v2 = table.Read(id, td2, t);
             var success = txnManager.Commit(t);
@@ -214,7 +215,7 @@ namespace DB
             byte[] value2 = BitConverter.GetBytes(95);
             byte[] value = value1.Concat(value2).ToArray();
             
-            PrimaryKey id = table.Insert(td, value, t);
+            PrimaryKey id = table.Insert(value, t);
             var v1 = table.Read(id, td, t);
             var success = txnManager.Commit(t);
             txnManager.Terminate();
@@ -237,20 +238,20 @@ namespace DB
 
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
-            PrimaryKey id1 = table.Insert(td, val1, t);
+            PrimaryKey id1 = table.Insert(val1, t);
             var res1 = table.Read(id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
             var res2 = table.Read(new PrimaryKey(table.GetId(), 2), td, t2);
 
             byte[] val2 = BitConverter.GetBytes(5);
-            table.Update(ref id1, td, val2, t2);
+            table.Insert(ref id1, val2, t2);
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
 
 
             TransactionContext t3 = txnManager.Begin();
-            var res3 = table.Read( id1, td, t3);
+            var res3 = table.Read(id1, td, t3);
             var success3 = txnManager.Commit(t3);
             txnManager.Terminate();
 
@@ -275,7 +276,7 @@ namespace DB
 
             TransactionContext t = txnManager.Begin();
             byte[] val1 = BitConverter.GetBytes(21);
-            PrimaryKey id1 = table.Insert(td, val1, t);
+            PrimaryKey id1 = table.Insert(val1, t);
             PrimaryKey id2 = new PrimaryKey(table.GetId(), 2);
             var res1 = table.Read( id2, td, t);
             // Thread thread = new Thread(() => Commit(txnManager, t)); 
@@ -283,7 +284,7 @@ namespace DB
             TransactionContext t2 = txnManager.Begin();
             var res2 = table.Read( id2, td, t2);
             byte[] val2 = BitConverter.GetBytes(5);
-            table.Update(ref id2, td, val2, t2);
+            table.Insert(ref id2, val2, t2);
 
             // thread.Start();
             // while (t.status == TransactionStatus.Idle){} // make sure Ti completed read phase
@@ -291,8 +292,8 @@ namespace DB
             var success2 = txnManager.Commit(t2);
 
             TransactionContext t3 = txnManager.Begin();
-            var res3 = table.Read( id1, td, t3);
-            var res4 = table.Read( id2, td, t3);
+            var res3 = table.Read(id1, td, t3);
+            var res4 = table.Read(id2, td, t3);
             var success3 = txnManager.Commit(t3);
             txnManager.Terminate();
 
@@ -314,18 +315,18 @@ namespace DB
             Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads, new Dictionary<int, Table>(){ {1, table} });
             txnManager.Run();
-            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0), new TupleDesc(56789, 4, 4)};
             TupleDesc[] td2 = {new TupleDesc(56789, 4, 4)};
 
             TransactionContext t = txnManager.Begin();
-            byte[] val1 = BitConverter.GetBytes(21);
-            PrimaryKey id1 = table.Insert(td, val1, t);
+            byte[] val1 = BitConverter.GetBytes(21).Concat(BitConverter.GetBytes(95)).ToArray();
+            PrimaryKey id1 = table.Insert(val1, t);
             var res1 = table.Read( id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
-            byte[] val2 = BitConverter.GetBytes(5);
+            byte[] val2 = BitConverter.GetBytes(5).Concat(BitConverter.GetBytes(95)).ToArray();
             var res2 = table.Read( id1, td, t2);
-            table.Update(ref id1, td, val2, t2);
+            table.Insert(ref id1, val2, t2);
 
             var success = txnManager.Commit(t);
             var success2 = txnManager.Commit(t2);
@@ -347,16 +348,16 @@ namespace DB
             Table table = new Table(1, schema);
             TransactionManager txnManager = new TransactionManager(nCommitterThreads, new Dictionary<int, Table>(){ {1, table} });
             txnManager.Run();
-            TupleDesc[] td = {new TupleDesc(12345, 4, 0)};
+            TupleDesc[] td = {new TupleDesc(12345, 4, 0), new TupleDesc(56789, 4, 4)};
 
             TransactionContext t = txnManager.Begin();
-            byte[] val1 = BitConverter.GetBytes(21);
-            PrimaryKey id1 = table.Insert(td, val1, t);
+            byte[] val1 = BitConverter.GetBytes(21).Concat(BitConverter.GetBytes(95)).ToArray();
+            PrimaryKey id1 = table.Insert(val1, t);
             var res1 = table.Read( id1, td, t);
 
             TransactionContext t2 = txnManager.Begin();
-            byte[] val2 = BitConverter.GetBytes(5);
-            bool insertSuccess = table.Insert(ref id1, td, val2, t2);
+            byte[] val2 = BitConverter.GetBytes(5).Concat(BitConverter.GetBytes(95)).ToArray();
+            bool insertSuccess = table.Insert(ref id1, val2, t2);
 
             txnManager.active.Add(t); // manually "commit" t and ensure it is still ongoing
             var success2 = txnManager.Commit(t2);

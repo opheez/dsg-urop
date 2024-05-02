@@ -166,16 +166,12 @@ public class TransactionManager {
         }
         foreach (var item in ctx.GetWriteset()){
             PrimaryKey tupleId = item.Item1;
-            int start = 0;
-            foreach (TupleDesc td in item.Item2){
-                // TODO: should not throw exception here, but if it does, abort. 
-                // failure here means crashed before commit. would need to rollback
-                if (this.wal != null) {
-                    wal.Write(ctx.tid, new KeyAttr(tupleId, td.Attr), item.Item3[start..td.Size]);
-                }
-                tables[tupleId.Table].Write(ref tupleId, td.Attr, item.Item3.AsSpan(start, td.Size));
-                start += td.Size;
-            }
+            // TODO: should not throw exception here, but if it does, abort. 
+            // failure here means crashed before commit. would need to rollback
+            // if (this.wal != null) {
+            //     wal.Write(ctx.tid, ref tupleId, td.Attr, item.Item3[start..td.Size]);
+            // }
+            tables[tupleId.Table].Write(ref tupleId, item.Item2, item.Item3);
         }
         // TODO: verify that should be logged before removing from active
         if (wal != null){

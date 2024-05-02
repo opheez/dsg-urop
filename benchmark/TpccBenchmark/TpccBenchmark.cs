@@ -444,12 +444,12 @@ public class TpccBenchmark : TableBenchmark {
         SetField(TableType.Order, TableField.O_CARRIER_ID, insertOrderData, ZeroAsBytes);
         SetField(TableType.Order, TableField.O_OL_CNT, insertOrderData, new ReadOnlySpan<byte>(&query.o_ol_cnt, sizeof(int)));
         SetField(TableType.Order, TableField.O_ALL_LOCAL, insertOrderData, new ReadOnlySpan<byte>(&allLocal, sizeof(bool)));
-        bool success = tables[(int)TableType.Order].Insert(ref orderPk, tables[(int)TableType.Order].GetSchema(), insertOrderData, ctx);
+        bool success = tables[(int)TableType.Order].Insert(ref orderPk, insertOrderData, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
             return;
         }
-        success = tables[(int)TableType.NewOrder].Insert(ref newOrderPk, tables[(int)TableType.NewOrder].GetSchema(), emptyByteArr, ctx);
+        success = tables[(int)TableType.NewOrder].Insert(ref newOrderPk, emptyByteArr, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
             return;
@@ -503,7 +503,7 @@ public class TpccBenchmark : TableBenchmark {
             ReadOnlySpan<byte> distInfo = ExtractField(TableType.Stock, TableField.S_DIST_01 + query.d_id - 1, stockRow);
             SetField(TableType.OrderLine, TableField.OL_DIST_INFO, updateOrderLineData, distInfo);
             PrimaryKey orderLinePk = new PrimaryKey((int)TableType.OrderLine, query.w_id, query.d_id, new_d_next_o_id, i);
-            success = tables[(int)TableType.OrderLine].Insert(ref orderLinePk, tables[(int)TableType.OrderLine].GetSchema(), updateOrderLineData, ctx);
+            success = tables[(int)TableType.OrderLine].Insert(ref orderLinePk, updateOrderLineData, ctx);
             if (!success) {
                 txnManager.Abort(ctx, callback);
                 return;
@@ -574,7 +574,7 @@ public class TpccBenchmark : TableBenchmark {
         byte[] insertHistoryData = historyBytePool.Checkout();
         SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(query.h_amount));
         SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
-        bool success = tables[(int)TableType.History].Insert(ref historyPk, tables[(int)TableType.History].GetSchema(), insertHistoryData, ctx);
+        bool success = tables[(int)TableType.History].Insert(ref historyPk, insertHistoryData, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
             return;
@@ -651,7 +651,7 @@ public class TpccBenchmark : TableBenchmark {
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (perThreadDataCount * thread_idx);
                 if (loc >= keys.Count()) break;
-                bool insertSuccess = table.Insert(ref keys[loc], table.GetSchema(), values[loc], ctx);
+                bool insertSuccess = table.Insert(ref keys[loc], values[loc], ctx);
                 if (!insertSuccess) throw new Exception($"Failed to insert record {loc} {keys[loc]} for table {table.GetId()}");
             }
             var success = txnManager.Commit(ctx);

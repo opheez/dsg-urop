@@ -51,12 +51,12 @@ namespace DB
             (long,int)[] schema = {(12345,8), (67890, 4)};
             Table test = new Table(1, schema);
 
-            byte[] input = Encoding.ASCII.GetBytes("John Doe");
+            byte[] input = Encoding.ASCII.GetBytes("John Doe").Concat(BitConverter.GetBytes(21)).ToArray();
             PrimaryKey pk = new PrimaryKey(test.GetId(), 11111);
-            KeyAttr ka = new KeyAttr(pk, 12345);
-            test.Write(ref pk, 12345, input);
+            TupleDesc[] td = new TupleDesc[]{new TupleDesc(12345, 8, 0), new TupleDesc(67890, 4, 8)};
+            test.Write(ref pk, td, input);
             var ret = test.Read(pk);
-            CollectionAssert.AreEqual(input.Concat(new byte[4]).ToArray(), ret.ToArray());
+            CollectionAssert.AreEqual(input, ret.ToArray());
         }
 
         [TestMethod]
@@ -66,15 +66,16 @@ namespace DB
             
             byte[] name = Encoding.ASCII.GetBytes("John Doe");
             PrimaryKey pk = new PrimaryKey(test.GetId(), 11111);
-            KeyAttr ka = new KeyAttr(pk, 12345);
-            KeyAttr ka2 = new KeyAttr(pk, 67890);
+            TupleDesc[] td = new TupleDesc[]{new TupleDesc(12345, 8, 0), new TupleDesc(67890, 4, 8)};
+            TupleDesc[] td1 = new TupleDesc[]{new TupleDesc(12345, 8, 0)};
+            TupleDesc[] td2 = new TupleDesc[]{new TupleDesc(67890, 4, 0)};
             byte[] val1 = BitConverter.GetBytes(21);
             byte[] val2 = BitConverter.GetBytes(40);
-            test.Write(ref pk, 12345, name);
-            test.Write(ref pk, 67890, val1);
-            test.Write(ref pk, 67890, val2);
+            test.Write(ref pk, td, name.Concat(val1).ToArray());
+            test.Write(ref pk, td2, val1);
+            test.Write(ref pk, td2, val2);
             name = Encoding.ASCII.GetBytes("Anna Lee");
-            test.Write(ref pk, 12345, name);
+            test.Write(ref pk, td1, name);
 
             var retName = test.Read(pk);
 
