@@ -94,13 +94,13 @@ namespace DB {
 
     // }
 
-    public struct PrimaryKey{ //} : IEquatable<TupleId>{
-        public long Key1 = 0;
-        public long Key2 = 0;
-        public long Key3 = 0;
-        public long Key4 = 0;
-        public long Key5 = 0;
-        public long Key6 = 0;
+    public readonly struct PrimaryKey{ //} : IEquatable<TupleId>{
+        public readonly long Key1 = 0;
+        public readonly long Key2 = 0;
+        public readonly long Key3 = 0;
+        public readonly long Key4 = 0;
+        public readonly long Key5 = 0;
+        public readonly long Key6 = 0;
         public readonly int Table;
 
         // public PrimaryKey (int t, params long[] keys){
