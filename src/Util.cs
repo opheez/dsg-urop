@@ -312,6 +312,18 @@ namespace DB {
         public override string ToString(){
             return $"(Attr:{Attr}, Size:{Size}, Offset:{Offset})";
         }
+
+        public override bool Equals(object o){
+            if (o == null || GetType() != o.GetType()){
+                return false;
+            }
+            TupleDesc other = (TupleDesc)o;
+            return Attr == other.Attr && Size == other.Size && Offset == other.Offset;
+        }
+
+        public override int GetHashCode(){
+            return Attr.GetHashCode() + Size.GetHashCode() + Offset.GetHashCode();
+        }
     }
 
     public struct KeyAttr {
@@ -325,6 +337,18 @@ namespace DB {
 
         public override string ToString(){
             return $"KA ({Key}, {Attr})";
+        }
+
+        public override bool Equals(object o){
+            if (o == null || GetType() != o.GetType()){
+                return false;
+            }
+            KeyAttr other = (KeyAttr)o;
+            return Key.Equals(other.Key) && Attr == other.Attr;
+        }
+
+        public override int GetHashCode(){
+            return Key.GetHashCode() + Attr.GetHashCode();
         }
 
         public unsafe byte[] ToBytes(){
