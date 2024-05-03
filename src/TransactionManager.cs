@@ -4,6 +4,7 @@ using System.Threading;
 using FASTER.common;
 using FASTER.darq;
 using FASTER.libdpr;
+using System.Runtime.InteropServices;
 
 namespace DB {
 public class TransactionManager {
@@ -135,8 +136,7 @@ public class TransactionManager {
             // foreach (var x in tnumToCtx[i % pastTnumCircularBufferSize].GetWriteset()){
             //     Console.Write($"{x}, ");
             // }
-            foreach (var item in ctx.GetReadset()){
-                PrimaryKey tupleId = item.Item1;
+            foreach (ref var tupleId in CollectionsMarshal.AsSpan(ctx.GetReadsetKeys())){
                 // Console.WriteLine($"scanning for {keyAttr}");
                 // TODO: rename keyattr since tupleid is redundant
                 if (tnumToCtx[i & (pastTnumCircularBufferSize - 1)].InWriteSet(ref tupleId)){

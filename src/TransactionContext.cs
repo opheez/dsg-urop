@@ -1,17 +1,19 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace DB {
 /// <summary>
 /// Data structure holding transaction context
 /// </summary>
 public class TransactionContext {
-
+    private static int SET_SIZE = 0;
     internal TransactionStatus status;
     internal int startTxnNum;
-    internal List<(PrimaryKey, byte[])> Rset = new(50); // byte[] is the entire record
-    internal List<(TupleDesc[], byte[])> Wset = new(50); // byte[] corresponds to the TupleDesc
-    internal List<PrimaryKey> WsetKeys = new(50); // byte[] corresponds to the TupleDesc
+    internal List<byte[]> Rset; // byte[] is the entire record
+    internal List<(TupleDesc[], byte[])> Wset; // byte[] corresponds to the TupleDesc
+    internal List<PrimaryKey> WsetKeys;
+    internal List<PrimaryKey> RsetKeys;
     public long tid;
     public Dictionary<int, Table> tables;
     public Action<bool> callback;
@@ -23,9 +25,10 @@ public class TransactionContext {
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;
-        Rset = new List<(PrimaryKey, byte[])>();
-        Wset = new List<(TupleDesc[], byte[])>();
-        WsetKeys = new List<PrimaryKey>();
+        Rset = new List<byte[]>(SET_SIZE);
+        Wset = new List<(TupleDesc[], byte[])>(SET_SIZE);
+        WsetKeys = new List<PrimaryKey>(SET_SIZE);
+        RsetKeys = new List<PrimaryKey>(SET_SIZE);
     }
 
     public bool InReadSet(ref PrimaryKey tupleId){
@@ -51,7 +54,7 @@ public class TransactionContext {
         if (index == -1){
             return null;
         }
-        return Rset[index].Item2;
+        return Rset[index];
     }
 
     public void AddReadSet(PrimaryKey tupleId, ReadOnlySpan<byte> val){
@@ -59,7 +62,8 @@ public class TransactionContext {
         if (val.Length != tables[tupleId.Table].rowSize){
             throw new ArgumentException($"Readset value length {val.Length} does not match table row size {tables[tupleId.Table].rowSize}");
         }
-        Rset.Add((tupleId,val.ToArray()));
+        Rset.Add(val.ToArray());
+        RsetKeys.Add(tupleId);
     }
 
     public void AddWriteSet(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
@@ -142,8 +146,8 @@ public class TransactionContext {
         }
     }
 
-    public List<(PrimaryKey, byte[])> GetReadset(){
-        return Rset;
+    public List<PrimaryKey> GetReadsetKeys(){
+        return RsetKeys;
     }
     public List<PrimaryKey>GetWritesetKeys(){
         return WsetKeys;
@@ -167,21 +171,33 @@ public class TransactionContext {
             ){
                 return i;
             }
+            // if (Wset[i].Item1.Equals(tupleId)){
+            //     return i;
+            // }
         }
         return -1;
     }
     
     private int GetReadsetKeyIndex(ref PrimaryKey tupleId){
-        for (int i = Rset.Count-1; i >= 0; i--){
-            if (Rset[i].Item1.Equals(tupleId)){
+        var span = CollectionsMarshal.AsSpan(RsetKeys);
+        for (int i = span.Length-1; i >= 0; i--){
+            ref PrimaryKey pk = ref span[i];
+            if (pk.Table == tupleId.Table && pk.Key1 == tupleId.Key1
+                && pk.Key2 == tupleId.Key2 && pk.Key3 == tupleId.Key3
+                && pk.Key4 == tupleId.Key4 && pk.Key5 == tupleId.Key5
+                && pk.Key6 == tupleId.Key6 
+            ){
                 return i;
             }
+            // if (Rset[i].Item1.Equals(tupleId)){
+            //     return i;
+            // }
         }
         return -1;
     }
 
     public override string ToString(){
-        return $"Readset: {string.Join(Environment.NewLine, GetReadset())}\nWriteset: {string.Join(Environment.NewLine, GetWritesetKeys())}";
+        return $"Readset: {string.Join(Environment.NewLine, GetReadsetKeys())}\nWriteset: {string.Join(Environment.NewLine, GetWritesetKeys())}";
     }
 }
 
