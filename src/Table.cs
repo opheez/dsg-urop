@@ -160,6 +160,14 @@ public unsafe class Table : IDisposable{
         return true;
     }
 
+    /// <summary>
+    /// Update values described by tupleDescs
+    /// </summary>
+    /// <param name="tupleId"></param>
+    /// <param name="tupleDescs">Describes size and offset of what is in value</param>
+    /// <param name="value"></param>
+    /// <param name="ctx"></param>
+    /// <exception cref="ArgumentException"></exception>
     public void Update(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
         if (!this.data.ContainsKey(tupleId) && !ctx.InWriteSet(ref tupleId)){
             throw new ArgumentException($"Key {tupleId} does not exist");

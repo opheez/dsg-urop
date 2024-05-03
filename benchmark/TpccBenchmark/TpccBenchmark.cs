@@ -52,7 +52,7 @@ public struct Query {
     public int c_d_id;
     public int c_w_id;
     public float h_amount;
-    public string c_last;
+    public byte[] c_last;
     public int o_ol_cnt;
     public int[] ol_i_ids;
     public int[] ol_supply_w_id;
@@ -70,7 +70,7 @@ public struct Query {
         this.ol_quantity = ol_quantity;
     }
 
-    public Query(int w_id, int d_id, int c_id, int c_d_id, int c_w_id, float h_amount, string c_last) {
+    public Query(int w_id, int d_id, int c_id, int c_d_id, int c_w_id, float h_amount, byte[] c_last) {
         isNewOrder = false;
         this.w_id = w_id;
         this.d_id = d_id;
@@ -213,8 +213,10 @@ public class TpccBenchmark : TableBenchmark {
     private static byte[] ZipRandHold = Encoding.ASCII.GetBytes("1234567890");
     private static byte SpaceAsByte = (byte)' ';
     private static byte[] ZeroAsBytes = BitConverter.GetBytes(0);
-    private static string[] LastNames = new string[] {
-        "BAR", "OUGHT", "ABLE", "PRI", "PRES", "ESE", "ANTI", "CALLY", "ATION", "EING"
+    private static byte[] BcAsBytes = { (byte)'B', (byte)'C' };
+    private static byte[][] LastNames = new byte[][] {
+        Encoding.ASCII.GetBytes("BAR"), Encoding.ASCII.GetBytes("OUGHT"), Encoding.ASCII.GetBytes("ABLE"), Encoding.ASCII.GetBytes("PRI"), Encoding.ASCII.GetBytes("PRES"),
+        Encoding.ASCII.GetBytes("ESE"), Encoding.ASCII.GetBytes("ANTI"), Encoding.ASCII.GetBytes("CALLY"), Encoding.ASCII.GetBytes("ATION"), Encoding.ASCII.GetBytes("EING")
     };
 
     private static byte[] ORIGINAL = Encoding.ASCII.GetBytes("ORIGINAL");
@@ -374,7 +376,7 @@ public class TpccBenchmark : TableBenchmark {
         }
 
         int y = Frnd.Next(1, 100);
-        string c_last = "";
+        byte[] c_last;
         int c_id;
         if (y <= 60) {
             // c_last = RandLastName(0); // or testing small num
@@ -382,6 +384,7 @@ public class TpccBenchmark : TableBenchmark {
             c_id = 0;
         } else {
             c_id = NonUniformRandom(1023, 1, 3000);
+            c_last = null;
         }
         return new Query(
             w_id,
@@ -401,12 +404,12 @@ public class TpccBenchmark : TableBenchmark {
                 // randomly assign NewOrder vs Payment
                 // int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerThread) + 1, (partitionId * tpcCfg.PartitionsPerThread) + 1 + tpcCfg.PartitionsPerThread);
                 int w_id = (i / cfg.perThreadDataCount) * tpcCfg.PartitionsPerThread + (i % tpcCfg.PartitionsPerThread) + 1;
-                // if (Frnd.Next(1, 100) <= 50){
+                if (Frnd.Next(1, 100) <= 50){
                     numNewOrders++;
                     queries[i] = GenerateNewOrderQuery(w_id, i);
-                // } else {
-                //     queries[i] = GeneratePaymentQuery(w_id, i);
-                // }
+                } else {
+                    queries[i] = GeneratePaymentQuery(w_id, i);
+                }
             }
         return numNewOrders;
     }
@@ -523,7 +526,7 @@ public class TpccBenchmark : TableBenchmark {
         return;
     }
 
-    public void Payment(Query query, Action<bool> callback){
+    public unsafe void Payment(Query query, Action<bool> callback){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -532,7 +535,11 @@ public class TpccBenchmark : TableBenchmark {
         PrimaryKey customerPk;
         ReadOnlySpan<byte> customerRow;
         if (query.c_id == 0) {
-            byte[] secondaryIndexKey = BitConverter.GetBytes(query.c_w_id).Concat(BitConverter.GetBytes(query.c_d_id)).Concat(Encoding.ASCII.GetBytes(query.c_last)).ToArray();
+            // TODO
+            byte[] secondaryIndexKey = new byte[4+4+16];
+            new ReadOnlySpan<byte>(&query.c_w_id, sizeof(int)).CopyTo(secondaryIndexKey);
+            new ReadOnlySpan<byte>(&query.c_d_id, sizeof(int)).CopyTo(secondaryIndexKey.AsSpan(sizeof(int)));
+            query.c_last.CopyTo(secondaryIndexKey.AsSpan(2 * sizeof(int)));
             (customerRow, customerPk) = tables[(int)TableType.Customer].ReadSecondary(secondaryIndexKey, tables[(int)TableType.Customer].GetSchema(), ctx);
         } else {
             customerPk = new PrimaryKey((int)TableType.Customer, query.c_w_id, query.c_d_id, query.c_id);
@@ -542,11 +549,11 @@ public class TpccBenchmark : TableBenchmark {
         // standard tpcc write to w_ytd
         // update warehouse with increment W_YTD
         float w_ytd = BitConverter.ToSingle(ExtractField(TableType.Warehouse, TableField.W_YTD, warehouseRow)) + query.h_amount;
-        tables[(int)TableType.Warehouse].Update(ref warehousePk, updateWarehouseTds, BitConverter.GetBytes(w_ytd), ctx);
+        tables[(int)TableType.Warehouse].Update(ref warehousePk, updateWarehouseTds, new ReadOnlySpan<byte>(&w_ytd, sizeof(float)), ctx);
 
         // update district with increment D_YTD
         float d_ytd = BitConverter.ToSingle(ExtractField(TableType.District, TableField.D_YTD, districtRow)) + query.h_amount;
-        tables[(int)TableType.District].Update(ref districtPk, updateDistrictYtdTds, BitConverter.GetBytes(d_ytd), ctx);
+        tables[(int)TableType.District].Update(ref districtPk, updateDistrictYtdTds, new ReadOnlySpan<byte>(&d_ytd, sizeof(float)), ctx);
 
         // update customer
         byte[] updateCustomerData = customerBytePool.Checkout();
@@ -554,26 +561,41 @@ public class TpccBenchmark : TableBenchmark {
         float c_balance = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_BALANCE, customerRow)) - query.h_amount;
         float c_ytd_payment = BitConverter.ToSingle(ExtractField(TableType.Customer, TableField.C_YTD_PAYMENT, customerRow)) + query.h_amount;
         int c_payment_cnt = BitConverter.ToInt32(ExtractField(TableType.Customer, TableField.C_PAYMENT_CNT, customerRow)) + 1;
-        BitConverter.GetBytes(c_balance).CopyTo(updateCustomerData, updateCustomerTds[0].Offset);
-        BitConverter.GetBytes(c_ytd_payment).CopyTo(updateCustomerData, updateCustomerTds[1].Offset);
-        BitConverter.GetBytes(c_payment_cnt).CopyTo(updateCustomerData, updateCustomerTds[2].Offset);
-        if (Encoding.ASCII.GetString(c_credit) == "BC")
+        new ReadOnlySpan<byte>(&c_balance, sizeof(float)).CopyTo(updateCustomerData.AsSpan(updateCustomerTds[0].Offset));
+        new ReadOnlySpan<byte>(&c_ytd_payment, sizeof(float)).CopyTo(updateCustomerData.AsSpan(updateCustomerTds[1].Offset));
+        new ReadOnlySpan<byte>(&c_payment_cnt, sizeof(int)).CopyTo(updateCustomerData.AsSpan(updateCustomerTds[2].Offset));
+        if (c_credit.SequenceEqual(BcAsBytes))
         {
-            string c_data_old = Encoding.ASCII.GetString(ExtractField(TableType.Customer, TableField.C_DATA, customerRow));
-            string c_data_new = query.c_id + " " + query.c_d_id + " " + query.c_w_id + " " + query.d_id + " " + query.w_id + " " + String.Format("{0:0.00}", query.h_amount) + " " + c_data_old;
-            c_data_new = c_data_new.Substring(0, Math.Min(c_data_new.Length, 500));
-            Encoding.ASCII.GetBytes(c_data_new).CopyTo(updateCustomerData, updateCustomerTds[3].Offset);
+            ReadOnlySpan<byte> c_data_old = ExtractField(TableType.Customer, TableField.C_DATA, customerRow);
+            int offset = updateCustomerTds[3].Offset;
+            // TODO: need spaces between each; not according to spec but not used?
+            new ReadOnlySpan<byte>(&query.c_id, sizeof(int)).CopyTo(updateCustomerData.AsSpan(offset));
+            offset += sizeof(int);
+            new ReadOnlySpan<byte>(&query.c_d_id, sizeof(int)).CopyTo(updateCustomerData.AsSpan(offset));
+            offset += sizeof(int);
+            new ReadOnlySpan<byte>(&query.c_w_id, sizeof(int)).CopyTo(updateCustomerData.AsSpan(offset));
+            offset += sizeof(int);
+            new ReadOnlySpan<byte>(&query.d_id, sizeof(int)).CopyTo(updateCustomerData.AsSpan(offset));
+            offset += sizeof(int);
+            new ReadOnlySpan<byte>(&query.w_id, sizeof(int)).CopyTo(updateCustomerData.AsSpan(offset));
+            offset += sizeof(int);
+            // TODO: need formatting; not according to spec but not used? 
+            new ReadOnlySpan<byte>(&query.h_amount, sizeof(float)).CopyTo(updateCustomerData.AsSpan(offset));
+            offset += sizeof(float); 
+            c_data_old.Slice(0, 500 - offset).CopyTo(updateCustomerData.AsSpan(offset));
             tables[(int)TableType.Customer].Update(ref customerPk, updateCustomerTds, updateCustomerData, ctx);
         } else {
             tables[(int)TableType.Customer].Update(ref customerPk, updateCustomerTds[0..3], updateCustomerData, ctx);
         }
 
         // insert into history
-        string h_data = Encoding.ASCII.GetString(ExtractField(TableType.Warehouse, TableField.W_NAME, warehouseRow)) + "    " + Encoding.ASCII.GetString(ExtractField(TableType.District, TableField.D_NAME, districtRow));
         PrimaryKey historyPk = new PrimaryKey((int)TableType.History, query.w_id, query.d_id, query.c_w_id, query.c_d_id, query.c_id, DateTime.Now.ToBinary());
         byte[] insertHistoryData = historyBytePool.Checkout();
-        SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, BitConverter.GetBytes(query.h_amount));
-        SetField(TableType.History, TableField.H_DATA, insertHistoryData, Encoding.ASCII.GetBytes(h_data));
+        SetField(TableType.History, TableField.H_AMOUNT, insertHistoryData, new ReadOnlySpan<byte>(&query.h_amount, sizeof(float)));
+        // manually set field to avoid additional allocation
+        (int _, int h_offset) = tables[(int)TableType.History].GetAttrMetadata((long)TableField.H_DATA);
+        ExtractField(TableType.Warehouse, TableField.W_NAME, warehouseRow).CopyTo(insertHistoryData.AsSpan(h_offset, 10));
+        ExtractField(TableType.District, TableField.D_NAME, districtRow).CopyTo(insertHistoryData.AsSpan(h_offset + 10, 10));
         bool success = tables[(int)TableType.History].Insert(ref historyPk, insertHistoryData, ctx);
         if (!success) {
             txnManager.Abort(ctx, callback);
@@ -849,7 +871,7 @@ public class TpccBenchmark : TableBenchmark {
             }
         }
     }
-    public void GenerateCustomerData(int w_id){
+    public unsafe void GenerateCustomerData(int w_id){
         ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         // group rows by new index attribute 
         Dictionary<byte[], List<(PrimaryKey, byte[])>> groupByAttr = new Dictionary<byte[], List<(PrimaryKey, byte[])>>();
@@ -868,7 +890,7 @@ public class TpccBenchmark : TableBenchmark {
                     offset += 16;
                     new byte[]{(byte)'O', (byte)'E'}.CopyTo(span.Slice(offset)); // C_MIDDLE
                     offset += 2;
-                    byte[] lastName = Encoding.ASCII.GetBytes(RandLastName(j <= 1000 ? j - 1 : NonUniformRandom(255, 0, 999)));
+                    byte[] lastName = RandLastName(j <= 1000 ? j - 1 : NonUniformRandom(255, 0, 999));
                     lastName.CopyTo(span.Slice(offset)); // C_LAST
                     offset += 16;
                     RandomByteString(10, 20).CopyTo(span.Slice(offset)); // C_STREET_1
@@ -1252,8 +1274,13 @@ public class TpccBenchmark : TableBenchmark {
         return ((Frnd.Next(0, A) | Frnd.Next(min, max)) % (max - min + 1)) + min;
     }
 
-    private static string RandLastName(int n){
-        return LastNames[n / 100] + LastNames[(n / 10) % 10] + LastNames[n % 10];
+    private static byte[] RandLastName(int n){
+        // int len = LastNames[n / 100].Length + LastNames[(n / 10) % 10].Length + LastNames[n % 10].Length;
+        byte[] lastname = new byte[16];
+        LastNames[n / 100].CopyTo(lastname, 0);
+        LastNames[(n / 10) % 10].CopyTo(lastname, LastNames[n / 100].Length);
+        LastNames[n % 10].CopyTo(lastname, LastNames[n / 100].Length + LastNames[(n / 10) % 10].Length);
+        return lastname;
     }
 
 }
