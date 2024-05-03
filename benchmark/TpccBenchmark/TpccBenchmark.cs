@@ -645,7 +645,7 @@ public class TpccBenchmark : TableBenchmark {
             if (perThreadDataCount == 0) thread_idx = 0;
             remainder = keys.Count() % cfg.insertThreadCount;
         }
-        Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
+        // Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
         for (int i = 0; i < perThreadDataCount + remainder; i += cfg.perTransactionCount){
             TransactionContext ctx = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {

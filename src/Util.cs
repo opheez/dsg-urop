@@ -175,6 +175,32 @@ namespace DB {
             Key1 = k1;
         }
 
+        public override bool Equals(object o){
+            if (o == null || GetType() != o.GetType()){
+                return false;
+            }
+            PrimaryKey other = (PrimaryKey)o;
+            if (Table != other.Table) return false;
+            if (Key1 != other.Key1) return false;
+            if (Key2 != other.Key2) return false;
+            if (Key3 != other.Key3) return false;
+            if (Key4 != other.Key4) return false;
+            if (Key5 != other.Key5) return false;
+            if (Key6 != other.Key6) return false;
+            return true;
+        }
+
+        public override int GetHashCode(){
+            int hash = 17;
+            hash = hash * 31 + Key1.GetHashCode();
+            hash = hash * 31 + Key2.GetHashCode();
+            hash = hash * 31 + Key3.GetHashCode();
+            hash = hash * 31 + Key4.GetHashCode();
+            hash = hash * 31 + Key5.GetHashCode();
+            hash = hash * 31 + Key6.GetHashCode();
+            return hash * 31 + Table;
+        }
+
         public int Size => sizeof(long) * 6 + sizeof(int);
 
         // public override bool Equals(object o){
