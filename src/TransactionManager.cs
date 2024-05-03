@@ -147,8 +147,8 @@ public class TransactionManager {
         }
         
         foreach (TransactionContext pastTxn in finish_active){
-            foreach (var item in pastTxn.GetWriteset()){
-                PrimaryKey tupleId = item.Item1;
+            foreach (var item in pastTxn.GetWritesetKeys()){
+                PrimaryKey tupleId = item;
                 if (ctx.InReadSet(ref tupleId) || ctx.InWriteSet(ref tupleId)){
                     // Console.WriteLine($"2 ABORT for {ctx.tid} because conflict: {tupleId} in {pastTxn.tid}");
                     return false;
@@ -164,14 +164,16 @@ public class TransactionManager {
         if (wal != null) {
             wal.Begin(ctx.tid);            
         }
-        foreach (var item in ctx.GetWriteset()){
-            PrimaryKey tupleId = item.Item1;
+        List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
+        for(int i = 0; i < writesetKeys.Count; i++){
+            PrimaryKey tupleId = writesetKeys[i];
+            var item = ctx.GetFromWriteset(i);
             // TODO: should not throw exception here, but if it does, abort. 
             // failure here means crashed before commit. would need to rollback
             // if (this.wal != null) {
             //     wal.Write(ctx.tid, ref tupleId, td.Attr, item.Item3[start..td.Size]);
             // }
-            tables[tupleId.Table].Write(ref tupleId, item.Item2, item.Item3);
+            tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
         // TODO: verify that should be logged before removing from active
         if (wal != null){
@@ -281,10 +283,11 @@ public class ShardedTransactionManager : TransactionManager {
         if (valid) {
             // split writeset into shards
             Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
-            for (int i = 0; i < ctx.GetWriteset().Count; i++){
-                var item = ctx.GetWriteset()[i];
-                PrimaryKey tupleId = item.Item1;
-                TupleDesc[] tds = item.Item2;
+            List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
+            for (int i = 0; i < writesetKeys.Count; i++){
+                PrimaryKey tupleId = writesetKeys[i];
+                var item = ctx.GetFromWriteset(i);
+                TupleDesc[] tds = item.Item1;
                 long shardDest = rpcClient.HashKeyToDarqId(tupleId);
                 if (!rpcClient.IsLocalKey(tupleId)){
                     for (int j = 0; j < tds.Length; j++){
@@ -292,7 +295,7 @@ public class ShardedTransactionManager : TransactionManager {
                         if (!shardToWriteset.ContainsKey(shardDest)){
                             shardToWriteset[shardDest] = new List<(KeyAttr, byte[])>();
                         }
-                        shardToWriteset[shardDest].Add((keyAttr, item.Item3));
+                        shardToWriteset[shardDest].Add((keyAttr, item.Item2));
                     }
                 }
             }

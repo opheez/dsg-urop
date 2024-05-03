@@ -10,7 +10,8 @@ public class TransactionContext {
     internal TransactionStatus status;
     internal int startTxnNum;
     internal List<(PrimaryKey, byte[])> Rset = new(50); // byte[] is the entire record
-    internal List<(PrimaryKey, TupleDesc[], byte[])> Wset = new(50); // byte[] corresponds to the TupleDesc
+    internal List<(TupleDesc[], byte[])> Wset = new(50); // byte[] corresponds to the TupleDesc
+    internal List<PrimaryKey> WsetKeys = new(50); // byte[] corresponds to the TupleDesc
     public long tid;
     public Dictionary<int, Table> tables;
     public Action<bool> callback;
@@ -23,7 +24,8 @@ public class TransactionContext {
         this.tid = tid;
         status = TransactionStatus.Idle;
         Rset = new List<(PrimaryKey, byte[])>();
-        Wset = new List<(PrimaryKey, TupleDesc[], byte[])>();
+        Wset = new List<(TupleDesc[], byte[])>();
+        WsetKeys = new List<PrimaryKey>();
     }
 
     public bool InReadSet(ref PrimaryKey tupleId){
@@ -38,7 +40,10 @@ public class TransactionContext {
         if (index == -1){
             return (null, null);
         }
-        return (Wset[index].Item2, Wset[index].Item3);
+        return (Wset[index].Item1, Wset[index].Item2);
+    }
+    public (TupleDesc[], byte[]) GetFromWriteset(int i){
+        return (Wset[i].Item1, Wset[i].Item2);
     }
 
     public ReadOnlySpan<byte> GetFromReadset(PrimaryKey tupleId){
@@ -60,7 +65,7 @@ public class TransactionContext {
     public void AddWriteSet(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
         int index = GetWriteSetKeyIndex(ref tupleId);
         if (index != -1){
-            (PrimaryKey, TupleDesc[], byte[]) existing = Wset[index];
+            (TupleDesc[], byte[]) existing = Wset[index];
             // List<byte> result = new List<byte>();
             // int start = 0;
             // foreach (TupleDesc td in existing.Item2){
@@ -86,10 +91,10 @@ public class TransactionContext {
             // }
 
             // calculate final size
-            int finalSize = existing.Item3.Length;
+            int finalSize = existing.Item2.Length;
             foreach (TupleDesc td in tupleDescs){
                 bool included = false;
-                foreach (TupleDesc existingTd in existing.Item2){
+                foreach (TupleDesc existingTd in existing.Item1){
                     if (td.Attr == existingTd.Attr){
                         included = true;
                     }
@@ -100,7 +105,7 @@ public class TransactionContext {
             // copy values, replacing existing values with new ones
             Span<byte> newVal = new byte[finalSize];
             bool[] includedTd = new bool[tupleDescs.Length];
-            foreach (TupleDesc existingTd in existing.Item2){
+            foreach (TupleDesc existingTd in existing.Item1){
                 bool included = false;
                 for (int i = 0; i < tupleDescs.Length; i++){
                     TupleDesc newTd = tupleDescs[i];
@@ -112,15 +117,15 @@ public class TransactionContext {
                     }
                 }
                 if (!included) {
-                    existing.Item3.AsSpan(existingTd.Offset, existingTd.Size).CopyTo(newVal.Slice(existingTd.Offset, existingTd.Size));
+                    existing.Item2.AsSpan(existingTd.Offset, existingTd.Size).CopyTo(newVal.Slice(existingTd.Offset, existingTd.Size));
                 } 
             }
 
             // add remaining values, also to tupleDescs
-            TupleDesc[] newTupleDescs = new TupleDesc[existing.Item2.Length + includedTd.Count(x => !x)];
-            existing.Item2.CopyTo(newTupleDescs, 0);
-            int start = existing.Item3.Length;
-            int j = existing.Item2.Length;
+            TupleDesc[] newTupleDescs = new TupleDesc[existing.Item1.Length + includedTd.Count(x => !x)];
+            existing.Item1.CopyTo(newTupleDescs, 0);
+            int start = existing.Item2.Length;
+            int j = existing.Item1.Length;
             for (int i = 0; i < tupleDescs.Length; i++){
                 if (!includedTd[i]){
                     val.Slice(tupleDescs[i].Offset, tupleDescs[i].Size).CopyTo(newVal.Slice(start, tupleDescs[i].Size));
@@ -129,22 +134,37 @@ public class TransactionContext {
                 }
             }
 
-            Wset.Add((tupleId, newTupleDescs, newVal.ToArray()));
+            Wset.Add((newTupleDescs, newVal.ToArray()));
+            WsetKeys.Add(tupleId);
         } else {
-            Wset.Add((tupleId, tupleDescs, val.ToArray()));
+            Wset.Add((tupleDescs, val.ToArray()));
+            WsetKeys.Add(tupleId);
         }
     }
 
     public List<(PrimaryKey, byte[])> GetReadset(){
         return Rset;
     }
-    public List<(PrimaryKey, TupleDesc[], byte[])>GetWriteset(){
-        return Wset;
+    public List<PrimaryKey>GetWritesetKeys(){
+        return WsetKeys;
     }
 
     private int GetWriteSetKeyIndex(ref PrimaryKey tupleId){
-        for (int i = Wset.Count-1; i >= 0; i--){
-            if (Wset[i].Item1.Equals(tupleId)){
+        var span = CollectionsMarshal.AsSpan(WsetKeys);
+        for (int i = span.Length-1; i >= 0; i--){
+            ref PrimaryKey pk = ref span[i];
+            // TupleDesc[] tupleDescs = span[i].Item1;
+            // if (tupleDescs[0].Attr == -1){
+            //     return i;
+            // }
+            // if (pk.Equals(tupleId)){
+            //     return i;
+            // }
+            if (pk.Table == tupleId.Table && pk.Key1 == tupleId.Key1
+                && pk.Key2 == tupleId.Key2 && pk.Key3 == tupleId.Key3
+                && pk.Key4 == tupleId.Key4 && pk.Key5 == tupleId.Key5
+                && pk.Key6 == tupleId.Key6 
+            ){
                 return i;
             }
         }
@@ -161,7 +181,7 @@ public class TransactionContext {
     }
 
     public override string ToString(){
-        return $"Readset: {string.Join(Environment.NewLine, GetReadset())}\nWriteset: {string.Join(Environment.NewLine, GetWriteset())}";
+        return $"Readset: {string.Join(Environment.NewLine, GetReadset())}\nWriteset: {string.Join(Environment.NewLine, GetWritesetKeys())}";
     }
 }
 
