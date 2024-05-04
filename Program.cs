@@ -281,11 +281,12 @@ unsafe class Program {
         
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(tables);
         ShardedTransactionManager stm = new ShardedTransactionManager(
-            12,
+            5,
             rpcClient,
             tables,
             wal: darqWal
         );
+        stm.Run();
         builder.Services.AddSingleton<ShardedTransactionManager>(stm);
 
         builder.Services.AddSingleton<DarqTransactionProcessorService>(

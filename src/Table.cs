@@ -169,9 +169,10 @@ public unsafe class Table : IDisposable{
     /// <param name="ctx"></param>
     /// <exception cref="ArgumentException"></exception>
     public void Update(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> value, TransactionContext ctx){
-        if (!this.data.ContainsKey(tupleId) && !ctx.InWriteSet(ref tupleId)){
-            throw new ArgumentException($"Key {tupleId} does not exist");
-        }
+        // TODO: how to check it already exists in other shard? 
+        // if (!this.data.ContainsKey(tupleId) && !ctx.InWriteSet(ref tupleId)){
+        //     throw new ArgumentException($"Key {tupleId} does not exist");
+        // }
         Validate(tupleDescs, value, true);
 
         ctx.AddWriteSet(ref tupleId, tupleDescs, value);
@@ -189,7 +190,7 @@ public unsafe class Table : IDisposable{
         if (!this.data.ContainsKey(pk)){
             // insert
             if (value.Length != this.rowSize){
-                throw new ArgumentException($"Expected size {this.rowSize} for new record but instead got size {value.Length}");
+                throw new ArgumentException($"Expected size {this.rowSize} for new record {pk} but instead got size {value.Length}");
             }
             this.data[pk] = value;
         } else {

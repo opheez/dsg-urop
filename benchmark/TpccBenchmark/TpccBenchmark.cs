@@ -608,13 +608,13 @@ public class TpccBenchmark : TableBenchmark {
 
     override public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            txnManager.Reset();
-            txnManager.Run();
+            // txnManager.Reset();
+            // txnManager.Run();
 
             // new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
-            PopulateTables();
+            // PopulateTables();
             // PopulateItemTable(tables[6], txnManager, 1);
-            Console.WriteLine($"done inserting");
+            // Console.WriteLine($"done inserting");
             var opSw = Stopwatch.StartNew();
             // table and txnManager not used
             WorkloadMultiThreadedTransactions(tables[6], txnManager, cfg.ratio);
@@ -624,7 +624,7 @@ public class TpccBenchmark : TableBenchmark {
             Console.WriteLine($"abort count {txnAborts}");
             long opMs = opSw.ElapsedMilliseconds;
             stats?.AddTransactionalResult((0, opMs, 0, txnAborts));
-            txnManager.Terminate();
+            // txnManager.Terminate();
         }
 
         stats?.ShowAllStats();

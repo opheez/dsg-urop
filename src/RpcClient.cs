@@ -105,9 +105,9 @@ public class TpccRpcClient : RpcClient
     }
 
     public override long HashKeyToDarqId(PrimaryKey key){
-        return partitionId;
+        // return partitionId;
         if (key.Table == (int)TableType.Item) return partitionId;
-        // return (key.Keys[0] - 1) / 12;
+        return (key.Key1 - 1) / 4; // TODO: make it / partitionsPerThread * threadCount
     }
 }
 

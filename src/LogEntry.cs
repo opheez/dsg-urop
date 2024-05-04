@@ -179,7 +179,7 @@ public struct LogEntry{
     }
 
     public override readonly string ToString(){
-        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type}, len={vals.Length})";
+        return $"LogEntry(lsn={lsn}, prevLsn={prevLsn}, tid={tid}, type={type})";
     }
     
 }

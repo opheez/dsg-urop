@@ -8,7 +8,7 @@ using System.Runtime.InteropServices;
 
 namespace DB {
 public class TransactionManager {
-    private static readonly int MAX_QUEUE_SIZE = 8;
+    private static readonly int MAX_QUEUE_SIZE = 4;
     internal BlockingCollection<TransactionContext> txnQueue;
     internal static int pastTnumCircularBufferSize = 1 << 14;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
@@ -158,7 +158,7 @@ public class TransactionManager {
         return true;
     }
 
-    public void Write(TransactionContext ctx, Action<long, LogType> commit){
+    virtual public void Write(TransactionContext ctx, Action<long, LogType> commit){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         if (wal != null) {
@@ -316,6 +316,48 @@ public class ShardedTransactionManager : TransactionManager {
             ctx.status = TransactionStatus.Aborted;
         }
 
+    }
+
+    override public void Write(TransactionContext ctx, Action<long, LogType> commit){
+        PrintDebug("Write phase", ctx);
+        bool lockTaken = false; // signals if this thread was able to acquire lock
+        if (wal != null) {
+            wal.Begin(ctx.tid);            
+        }
+        List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
+        for(int i = 0; i < writesetKeys.Count; i++){
+            PrimaryKey tupleId = writesetKeys[i];
+            var item = ctx.GetFromWriteset(i);
+            if (!rpcClient.IsLocalKey(tupleId)) continue;
+            // TODO: should not throw exception here, but if it does, abort. 
+            // failure here means crashed before commit. would need to rollback
+            if (this.wal != null) {
+                wal.Write(ctx.tid, ref tupleId, item.Item1, item.Item2);
+            }
+            tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
+        }
+        // TODO: verify that should be logged before removing from active
+        if (wal != null){
+            commit(ctx.tid, LogType.Commit);
+            // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+        }
+        ctx.callback?.Invoke(true);
+        // assign num 
+        int finalTxnNum;
+        try {
+            sl.Enter(ref lockTaken);
+            txnc += 1; // TODO: deal with int overflow
+            finalTxnNum = txnc;
+            active.Remove(ctx);
+            if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
+                ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
+            }
+            tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
+        } finally {
+            if (lockTaken) sl.Exit();
+            lockTaken = false;
+        }
+        // PrintDebug("Write phase done", ctx);
     }
 
     public RpcClient GetRpcClient(){

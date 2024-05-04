@@ -33,6 +33,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     private StepRequest reusableRequest = new();
     Dictionary<int, ShardedTable> tables;
     Dictionary<DarqId, GrpcChannel> clusterMap;
+    private TpccBenchmark tpccBenchmark;
     protected ILogger logger;
     public DarqTransactionProcessorService(
         long partitionId,
@@ -51,12 +52,41 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         this.wal = wal;
         this.clusterMap = clusterMap;
 
+        int PartitionsPerThread = 2;
+        int ThreadCount = 2;
+        int MachineCount = 2;
+
+        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+            ratio: 0.2,
+            attrCount: 10,
+            threadCount: ThreadCount,
+            insertThreadCount: 12,
+            iterationCount: 1,
+            nCommitterThreads: 5
+            // perThreadDataCount: 1000000
+        );
+        TpccConfig tpccConfig = new TpccConfig(
+            numWh: PartitionsPerThread * ThreadCount * MachineCount,
+            partitionsPerThread: PartitionsPerThread
+            // newOrderCrossPartitionProbability: 0,
+            // paymentCrossPartitionProbability: 0
+            // numCustomer: 10,
+            // numDistrict: 10,
+            // numItem: 10,
+            // numOrder: 10,
+            // numStock: 10
+        );
+        
+        tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
+
         backend = darq;
         _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new TransactionProcessorProducerWrapper(clusterMap, session));
         terminationStart = new ManualResetEventSlim();
         terminationComplete = new ManualResetEventSlim();
         this.workerPool = workerPool;
         backend.ConnectToCluster(out _);
+
+        
         
         _backgroundTask.BeginProcessing();
 
@@ -135,41 +165,23 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
-        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
-            ratio: 0.2,
-            attrCount: 10,
-            threadCount: 3,
-            insertThreadCount: 12,
-            iterationCount: 1,
-            nCommitterThreads: 4
-        );
         switch (request.Workload) {
             case "ycsb_single":
                 // only uses single table
-                TableBenchmark ycsb_single = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, wal);
-                ycsb_single.RunTransactions();
+                // TableBenchmark ycsb_single = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, wal);
+                // ycsb_single.RunTransactions();
                 break;
             case "ycsb":
                 // only uses single table
-                TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
-                b.RunTransactions();
+                // TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
+                // b.RunTransactions();
                 break;
             case "tpcc":
-                TpccConfig tpccConfig = new TpccConfig(
-                    numWh: 12,
-                    partitionsPerThread: 4,
-                    newOrderCrossPartitionProbability: 0,
-                    paymentCrossPartitionProbability: 0
-                    // numCustomer: 10,
-                    // numDistrict: 10,
-                    // numItem: 10,
-                    // numOrder: 10,
-                    // numStock: 10
-                );
-                
-                TpccBenchmark tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
                 tpccBenchmark.RunTransactions();
                 // tpccBenchmark.GenerateTables();
+                break;
+            case "tpcc-populate":
+                tpccBenchmark.PopulateTables();
                 break;
             default:
                 throw new NotImplementedException();
