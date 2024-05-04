@@ -197,8 +197,7 @@ public unsafe class Table : IDisposable{
             int start = 0;
             foreach (TupleDesc td in tds){
                 (int size, int offset) = this.metadata[td.Attr];
-                // TODO: performance
-                value[start..(start+td.Size)].CopyTo(this.data[pk].AsSpan(offset));
+                value.AsSpan(start,td.Size).CopyTo(this.data[pk].AsSpan(offset));
                 start += td.Size;
             }
         }
