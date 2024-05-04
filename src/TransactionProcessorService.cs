@@ -309,12 +309,10 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
                         // add each write to context before validating
                         TransactionContext ctx = txnIdToTxnCtx[internalTid];
-                        for (int i = 0; i < entry.keyAttrs.Length; i++)
+                        for (int i = 0; i < entry.pks.Length; i++)
                         {
-                            KeyAttr keyAttr = entry.keyAttrs[i];
-                            Table table = tables[keyAttr.Key.Table];
-                            (int, int) metadata = table.GetAttrMetadata(keyAttr.Attr);
-                            ctx.AddWriteSet(ref keyAttr.Key, new TupleDesc[]{new TupleDesc(keyAttr.Attr, metadata.Item1, 0)}, entry.vals[i]);
+                            PrimaryKey pk = entry.pks[i];
+                            ctx.AddWriteSet(ref pk, entry.tupleDescs[i], entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
                         PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");

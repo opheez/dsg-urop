@@ -201,7 +201,7 @@ namespace DB {
             return hash * 31 + Table;
         }
 
-        public int Size => sizeof(long) * 6 + sizeof(int);
+        public static int SizeOf = sizeof(long) * 6 + sizeof(int);
 
         // public override bool Equals(object o){
         //     if (o == null || GetType() != o.GetType()){
@@ -231,7 +231,7 @@ namespace DB {
         }
 
         public unsafe byte[] ToBytes(){
-            byte[] arr = new byte[Size];
+            byte[] arr = new byte[SizeOf];
             
             fixed (byte* b = arr) {
                 var head = b;
@@ -308,6 +308,7 @@ namespace DB {
         public long Attr;
         public int Size;
         public int Offset;
+        public static int SizeOf = sizeof(long) + sizeof(int) + sizeof(int);
 
         public override string ToString(){
             return $"(Attr:{Attr}, Size:{Size}, Offset:{Offset})";
@@ -324,69 +325,96 @@ namespace DB {
         public override int GetHashCode(){
             return Attr.GetHashCode() + Size.GetHashCode() + Offset.GetHashCode();
         }
-    }
-
-    public struct KeyAttr {
-        public KeyAttr(PrimaryKey key, long attr){
-            Key = key;
-            Attr = attr;
-        }
-        public PrimaryKey Key;
-        public long Attr;
-        public int Size => Key.Size + sizeof(long);
-
-        public override string ToString(){
-            return $"KA ({Key}, {Attr})";
-        }
-
-        public override bool Equals(object o){
-            if (o == null || GetType() != o.GetType()){
-                return false;
-            }
-            KeyAttr other = (KeyAttr)o;
-            return Key.Equals(other.Key) && Attr == other.Attr;
-        }
-
-        public override int GetHashCode(){
-            return Key.GetHashCode() + Attr.GetHashCode();
-        }
 
         public unsafe byte[] ToBytes(){
-            byte[] arr = new byte[Size];
+            byte[] arr = new byte[SizeOf];
             fixed (byte* b = arr) {
                 var head = b;
-                Key.ToBytes().CopyTo(new Span<byte>(head, Key.Size));
-                head += Key.Size;
                 *(long*)head = Attr;
+                head += sizeof(long);
+                *(int*)head = Size;
+                head += sizeof(int);
+                *(int*)head = Offset;
             }
             return arr;
         }
 
-        public static unsafe KeyAttr FromBytes(byte[] data) {
-            KeyAttr result = new KeyAttr();
-
+        public static unsafe TupleDesc FromBytes(byte[] data){
+            TupleDesc result;
             fixed (byte* b = data) {
                 var head = b;
-                result.Key = PrimaryKey.FromBytes(new Span<byte>(head, data.Length - sizeof(long)).ToArray());
-                head += result.Key.Size;
-                result.Attr = *(long*)head;
+                long attr = *(long*)head;
+                head += sizeof(long);
+                int size = *(int*)head;
+                head += sizeof(int);
+                int offset = *(int*)head;
+                result = new TupleDesc(attr, size, offset);
             }
             return result;
         }
     }
 
-    public class OCCComparer : IEqualityComparer<KeyAttr>
-    {
-        public bool Equals(KeyAttr x, KeyAttr y)
-        {
-            return x.Key.Equals(y.Key);
-        }
+    // public struct KeyAttr {
+    //     public KeyAttr(PrimaryKey key, long attr){
+    //         Key = key;
+    //         Attr = attr;
+    //     }
+    //     public PrimaryKey Key;
+    //     public long Attr;
+    //     public int Size => Key.Size + sizeof(long);
 
-        public int GetHashCode(KeyAttr obj)
-        {
-            return obj.GetHashCode();
-        }
-    }
+    //     public override string ToString(){
+    //         return $"KA ({Key}, {Attr})";
+    //     }
+
+    //     public override bool Equals(object o){
+    //         if (o == null || GetType() != o.GetType()){
+    //             return false;
+    //         }
+    //         KeyAttr other = (KeyAttr)o;
+    //         return Key.Equals(other.Key) && Attr == other.Attr;
+    //     }
+
+    //     public override int GetHashCode(){
+    //         return Key.GetHashCode() + Attr.GetHashCode();
+    //     }
+
+    //     public unsafe byte[] ToBytes(){
+    //         byte[] arr = new byte[Size];
+    //         fixed (byte* b = arr) {
+    //             var head = b;
+    //             Key.ToBytes().CopyTo(new Span<byte>(head, Key.Size));
+    //             head += Key.Size;
+    //             *(long*)head = Attr;
+    //         }
+    //         return arr;
+    //     }
+
+    //     public static unsafe KeyAttr FromBytes(byte[] data) {
+    //         KeyAttr result = new KeyAttr();
+
+    //         fixed (byte* b = data) {
+    //             var head = b;
+    //             result.Key = PrimaryKey.FromBytes(new Span<byte>(head, data.Length - sizeof(long)).ToArray());
+    //             head += result.Key.Size;
+    //             result.Attr = *(long*)head;
+    //         }
+    //         return result;
+    //     }
+    // }
+
+    // public class OCCComparer : IEqualityComparer<KeyAttr>
+    // {
+    //     public bool Equals(KeyAttr x, KeyAttr y)
+    //     {
+    //         return x.Key.Equals(y.Key);
+    //     }
+
+    //     public int GetHashCode(KeyAttr obj)
+    //     {
+    //         return obj.GetHashCode();
+    //     }
+    // }
 
     public class ByteArrayComparer : IEqualityComparer<byte[]> {
         public bool Equals(byte[] left, byte[] right) {

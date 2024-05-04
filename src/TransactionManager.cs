@@ -170,9 +170,9 @@ public class TransactionManager {
             var item = ctx.GetFromWriteset(i);
             // TODO: should not throw exception here, but if it does, abort. 
             // failure here means crashed before commit. would need to rollback
-            // if (this.wal != null) {
-            //     wal.Write(ctx.tid, ref tupleId, td.Attr, item.Item3[start..td.Size]);
-            // }
+            if (this.wal != null) {
+                wal.Write(ctx.tid, ref tupleId, item.Item1, item.Item2);
+            }
             tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
         // TODO: verify that should be logged before removing from active
@@ -282,21 +282,17 @@ public class ShardedTransactionManager : TransactionManager {
 
         if (valid) {
             // split writeset into shards
-            Dictionary<long, List<(KeyAttr, byte[])>> shardToWriteset = new Dictionary<long, List<(KeyAttr, byte[])>>();
+            Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>> shardToWriteset = new Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>>();
             List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
             for (int i = 0; i < writesetKeys.Count; i++){
                 PrimaryKey tupleId = writesetKeys[i];
-                var item = ctx.GetFromWriteset(i);
-                TupleDesc[] tds = item.Item1;
+                (TupleDesc[] td, byte[] val) = ctx.GetFromWriteset(i);
                 long shardDest = rpcClient.HashKeyToDarqId(tupleId);
                 if (!rpcClient.IsLocalKey(tupleId)){
-                    for (int j = 0; j < tds.Length; j++){
-                        KeyAttr keyAttr = new KeyAttr(tupleId, tds[j].Attr);
-                        if (!shardToWriteset.ContainsKey(shardDest)){
-                            shardToWriteset[shardDest] = new List<(KeyAttr, byte[])>();
-                        }
-                        shardToWriteset[shardDest].Add((keyAttr, item.Item2));
+                    if (!shardToWriteset.ContainsKey(shardDest)){
+                        shardToWriteset[shardDest] = new List<(PrimaryKey, TupleDesc[], byte[])>();
                     }
+                    shardToWriteset[shardDest].Add((tupleId, td, val));
                 }
             }
             if (shardToWriteset.Count > 0) {
