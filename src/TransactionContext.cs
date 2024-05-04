@@ -107,7 +107,8 @@ public class TransactionContext {
             }
 
             // copy values, replacing existing values with new ones
-            Span<byte> newVal = new byte[finalSize];
+            byte[] newVal = new byte[finalSize];
+            Span<byte> newValSpan = newVal;
             bool[] includedTd = new bool[tupleDescs.Length];
             foreach (TupleDesc existingTd in existing.Item1){
                 bool included = false;
@@ -116,12 +117,12 @@ public class TransactionContext {
                     if (existingTd.Attr == newTd.Attr){
                         included = true;
                         includedTd[i] = true;
-                        val.Slice(newTd.Offset, newTd.Size).CopyTo(newVal.Slice(existingTd.Offset, newTd.Size));
+                        val.Slice(newTd.Offset, newTd.Size).CopyTo(newValSpan.Slice(existingTd.Offset, newTd.Size));
                         break;
                     }
                 }
                 if (!included) {
-                    existing.Item2.AsSpan(existingTd.Offset, existingTd.Size).CopyTo(newVal.Slice(existingTd.Offset, existingTd.Size));
+                    existing.Item2.AsSpan(existingTd.Offset, existingTd.Size).CopyTo(newValSpan.Slice(existingTd.Offset, existingTd.Size));
                 } 
             }
 
@@ -132,13 +133,13 @@ public class TransactionContext {
             int j = existing.Item1.Length;
             for (int i = 0; i < tupleDescs.Length; i++){
                 if (!includedTd[i]){
-                    val.Slice(tupleDescs[i].Offset, tupleDescs[i].Size).CopyTo(newVal.Slice(start, tupleDescs[i].Size));
+                    val.Slice(tupleDescs[i].Offset, tupleDescs[i].Size).CopyTo(newValSpan.Slice(start, tupleDescs[i].Size));
                     newTupleDescs[j++] = tupleDescs[i];
                     start += tupleDescs[i].Size;
                 }
             }
 
-            Wset.Add((newTupleDescs, newVal.ToArray()));
+            Wset.Add((newTupleDescs, newVal));
             WsetKeys.Add(tupleId);
         } else {
             Wset.Add((tupleDescs, val.ToArray()));
