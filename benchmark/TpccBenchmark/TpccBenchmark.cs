@@ -309,7 +309,7 @@ public class TpccBenchmark : TableBenchmark {
             entry_ds[i] = new long[tpcCfg.NumOrder];
         }
 
-        int numNewOrders = GenerateQueryData(PartitionId, "");
+        int numNewOrders = GenerateQueryData();
 
         stats = new BenchmarkStatistics($"TpccBenchmark", cfg, numNewOrders, cfg.datasetSize, tpcCfg);
         System.Console.WriteLine("Done init");
@@ -322,6 +322,7 @@ public class TpccBenchmark : TableBenchmark {
         int[] ol_supply_w_id = new int[o_ol_cnt];
         int[] ol_quantity = new int[o_ol_cnt];
         for (int j = 0; j < o_ol_cnt; j++){
+            // TODO: make not the same between machines
             ol_i_ids[j] = (i / cfg.perThreadDataCount) * (tpcCfg.NumItem / cfg.threadCount) + ((i * o_ol_cnt + j) % (tpcCfg.NumItem / cfg.threadCount)) + 1;
             // bool retry;
             // do {
@@ -397,20 +398,22 @@ public class TpccBenchmark : TableBenchmark {
         );
     }
 
-    public int GenerateQueryData(int partitionId, string filename) {
+    public int GenerateQueryData() {
         this.queries = new Query[cfg.datasetSize];
         int numNewOrders = 0;
-            for (int i = 0; i < queries.Length; i++){
-                // randomly assign NewOrder vs Payment
-                // int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerThread) + 1, (partitionId * tpcCfg.PartitionsPerThread) + 1 + tpcCfg.PartitionsPerThread);
-                int w_id = (i / cfg.perThreadDataCount) * tpcCfg.PartitionsPerThread + (i % tpcCfg.PartitionsPerThread) + 1;
-                if (Frnd.Next(1, 100) <= 50){
-                    numNewOrders++;
-                    queries[i] = GenerateNewOrderQuery(w_id, i);
-                } else {
-                    queries[i] = GeneratePaymentQuery(w_id, i);
-                }
+        int partitionsPerMachine = tpcCfg.PartitionsPerThread * cfg.threadCount;
+        for (int i = 0; i < queries.Length; i++){
+            int thread_idx = i / cfg.perThreadDataCount;
+            // int w_id = Frnd.Next((partitionId * tpcCfg.PartitionsPerThread) + 1, (partitionId * tpcCfg.PartitionsPerThread) + 1 + tpcCfg.PartitionsPerThread);
+            int w_id = (PartitionId * partitionsPerMachine) + thread_idx * tpcCfg.PartitionsPerThread + (i % tpcCfg.PartitionsPerThread) + 1;
+            // randomly assign NewOrder vs Payment
+            if (Frnd.Next(1, 100) <= 50){
+                numNewOrders++;
+                queries[i] = GenerateNewOrderQuery(w_id, i);
+            } else {
+                queries[i] = GeneratePaymentQuery(w_id, i);
             }
+        }
         return numNewOrders;
     }
 
@@ -686,8 +689,8 @@ public class TpccBenchmark : TableBenchmark {
 
     public void GenerateTables(){
         GenerateItemData();
-        for (int j = 0; j < tpcCfg.PartitionsPerThread * cfg.threadCount; j++) {
-            int w_id = (PartitionId * tpcCfg.PartitionsPerThread * cfg.threadCount) + 1 + j;
+        for (int j = 0; j < tpcCfg.NumWh; j++) {
+            int w_id = 1 + j;
             GenerateWarehouseData(w_id);
             GenerateCustomerData(w_id);
             GenerateDistrictData(w_id);
@@ -700,8 +703,9 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     public void PopulateTables(){
-        for (int j = 0; j < tpcCfg.PartitionsPerThread * cfg.threadCount; j++) {
-            int w_id = (PartitionId * tpcCfg.PartitionsPerThread * cfg.threadCount) + 1 + j;
+        int partitionsPerMachine = tpcCfg.PartitionsPerThread * cfg.threadCount;
+        for (int j = 0; j < partitionsPerMachine; j++) {
+            int w_id = (PartitionId * partitionsPerMachine) + 1 + j;
             foreach (TableType tableType in Enum.GetValues(typeof(TableType)))
             {
                 Console.WriteLine($"Start with populating {tableType} for {w_id}");
