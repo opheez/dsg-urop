@@ -322,7 +322,7 @@ public class TpccBenchmark : TableBenchmark {
         int[] ol_supply_w_id = new int[o_ol_cnt];
         int[] ol_quantity = new int[o_ol_cnt];
         for (int j = 0; j < o_ol_cnt; j++){
-            ol_i_ids[j] = (i / cfg.perThreadDataCount) * (tpcCfg.NumItem / cfg.threadCount) + (i % (tpcCfg.NumItem / cfg.threadCount)) + 1;
+            ol_i_ids[j] = (i / cfg.perThreadDataCount) * (tpcCfg.NumItem / cfg.threadCount) + ((i * o_ol_cnt + j) % (tpcCfg.NumItem / cfg.threadCount)) + 1;
             // bool retry;
             // do {
             //     retry = false;
