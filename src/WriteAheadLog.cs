@@ -1,17 +1,8 @@
-using System;
-using System.Text;
-using FASTER.client;
-using FASTER.core;
 using FASTER.darq;
 using FASTER.libdpr;
-using FASTER.server;
 using System.Diagnostics;
 using FASTER.common;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using Grpc.Net.Client;
-using darq;
-using System.Transactions;
 
 
 namespace DB 
@@ -110,15 +101,18 @@ public class DarqWal : IWriteAheadLog {
     /// <param name="tid"></param>
     /// <returns>lsn of prepare log</returns>
     public long Prepare(Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>> shardToWriteset, long tid) {
-        StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
+        StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
         // should be first 
         LogEntry entry = new LogEntry(GetNewLsn(), tid, LogType.Prepare);
         // TODO: make sure it is correct lsn/prevLsn values
         entry.lsn = entry.prevLsn;
-        entry.pks = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item1)).ToArray();
-        entry.tupleDescs = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item2)).ToArray();
-        entry.vals = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item3)).ToArray();
+        entry.pks = new PrimaryKey[0];
+        entry.tupleDescs = new TupleDesc[0][];
+        entry.vals = new byte[0][];
+        // entry.pks = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item1)).ToArray();
+        // entry.tupleDescs = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item2)).ToArray();
+        // entry.vals = shardToWriteset.SelectMany(x => x.Value.Select(y => y.Item3)).ToArray();
         
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         txnTbl[tid] = entry.lsn;
@@ -127,7 +121,7 @@ public class DarqWal : IWriteAheadLog {
         foreach (var shard in shardToWriteset) {
             long darqId = shard.Key;
             List<(PrimaryKey, TupleDesc[], byte[])> writeset = shard.Value;
-            LogEntry outEntry = new LogEntry(0, entry.tid, writeset.Select(x => x.Item1).ToArray(), writeset.Select(x => x.Item2).ToArray(), writeset.Select(x => x.Item3).ToArray());
+            LogEntry outEntry = new LogEntry(0, tid, writeset.Select(x => x.Item1).ToArray(), writeset.Select(x => x.Item2).ToArray(), writeset.Select(x => x.Item3).ToArray());
             // PrintDebug($"sending prepare msg to {darqId} with keys {string.Join(", ", writeset.Select(x => x.Item1))}");
             requestBuilder.AddOutMessage(new DarqId(darqId), outEntry.ToBytes());
         }

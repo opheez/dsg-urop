@@ -30,11 +30,13 @@ public unsafe class Table : IDisposable{
     protected ConcurrentDictionary<byte[], PrimaryKey> secondaryIndex;
 
     protected ILogger logger;
+    IWriteAheadLog? wal;
 
-    public Table(int id, (long, int)[] schema, ILogger logger = null){
+    public Table(int id, (long, int)[] schema, IWriteAheadLog? wal = null, ILogger logger = null){
         this.id = id;
         this.metadata = new Dictionary<long,(int, int)>();
         this.metadataOrder = new long[schema.Length];
+        this.wal = wal;
         this.logger = logger;
         this.secondaryIndex = new ConcurrentDictionary<byte[], PrimaryKey>(new ByteArrayComparer());
         
@@ -134,6 +136,9 @@ public unsafe class Table : IDisposable{
         long id = NewRecordId(); // TODO: make sure this new record id falls within range of this partition in shardedBenchmark
         PrimaryKey tupleId = new PrimaryKey(this.id, id);
         ctx.AddWriteSet(ref tupleId, GetSchema(), value);
+        if (wal != null){
+            wal.Write(ctx.tid, ref tupleId, GetSchema(), value.ToArray());
+        }
 
         return tupleId;
     }
@@ -154,7 +159,9 @@ public unsafe class Table : IDisposable{
         if (this.data.ContainsKey(id)){
             return false;
         }
-
+        if (wal != null){
+            wal.Write(ctx.tid, ref id, GetSchema(), value.ToArray());
+        }
         ctx.AddWriteSet(ref id, GetSchema(), value);
 
         return true;
@@ -176,7 +183,9 @@ public unsafe class Table : IDisposable{
         Validate(tupleDescs, value, true);
 
         ctx.AddWriteSet(ref tupleId, tupleDescs, value);
-
+        if (wal != null){
+            wal.Write(ctx.tid, ref tupleId, tupleDescs, value.ToArray());
+        }
     }
 
     /// <summary>
@@ -293,7 +302,7 @@ public class ShardedTable : Table {
     private RpcClient rpcClient;
     // extracts relevant values from secondary key to primary key for correct shard
     protected Func<byte[], PrimaryKey> buildTempPk;
-    public ShardedTable(int id, (long, int)[] schema, RpcClient rpcClient, ILogger logger = null) : base(id, schema, logger) {
+    public ShardedTable(int id, (long, int)[] schema, RpcClient rpcClient, IWriteAheadLog? wal = null, ILogger logger = null) : base(id, schema, wal, logger) {
         this.rpcClient = rpcClient;
     }
 

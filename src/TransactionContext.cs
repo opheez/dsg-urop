@@ -7,6 +7,7 @@ namespace DB {
 /// Data structure holding transaction context
 /// </summary>
 public class TransactionContext {
+    // TODO: find better value
     private static int SET_SIZE = 0;
     internal TransactionStatus status;
     internal int startTxnNum;

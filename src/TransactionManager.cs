@@ -50,7 +50,9 @@ public class TransactionManager {
     public TransactionContext Begin(){
         var ctx = ctxPool.Checkout();
         ctx.Init(startTxn: txnc, NewTransactionId());
-
+        if (wal != null) {
+            wal.Begin(ctx.tid);            
+        }
         return ctx;
     }
 
@@ -161,18 +163,12 @@ public class TransactionManager {
     virtual public void Write(TransactionContext ctx, Action<long, LogType> commit){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
-        if (wal != null) {
-            wal.Begin(ctx.tid);            
-        }
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
         for(int i = 0; i < writesetKeys.Count; i++){
             PrimaryKey tupleId = writesetKeys[i];
             var item = ctx.GetFromWriteset(i);
             // TODO: should not throw exception here, but if it does, abort. 
             // failure here means crashed before commit. would need to rollback
-            if (this.wal != null) {
-                wal.Write(ctx.tid, ref tupleId, item.Item1, item.Item2);
-            }
             tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
         // TODO: verify that should be logged before removing from active
@@ -321,19 +317,13 @@ public class ShardedTransactionManager : TransactionManager {
     override public void Write(TransactionContext ctx, Action<long, LogType> commit){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
-        if (wal != null) {
-            wal.Begin(ctx.tid);            
-        }
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
         for(int i = 0; i < writesetKeys.Count; i++){
             PrimaryKey tupleId = writesetKeys[i];
-            var item = ctx.GetFromWriteset(i);
             if (!rpcClient.IsLocalKey(tupleId)) continue;
+            var item = ctx.GetFromWriteset(i);
             // TODO: should not throw exception here, but if it does, abort. 
             // failure here means crashed before commit. would need to rollback
-            if (this.wal != null) {
-                wal.Write(ctx.tid, ref tupleId, item.Item1, item.Item2);
-            }
             tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
         // TODO: verify that should be logged before removing from active
