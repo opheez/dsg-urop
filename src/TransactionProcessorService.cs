@@ -33,7 +33,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     private StepRequest reusableRequest = new();
     Dictionary<int, ShardedTable> tables;
     Dictionary<DarqId, GrpcChannel> clusterMap;
-    private TpccBenchmark tpccBenchmark;
+    private TableBenchmark benchmark;
     protected ILogger logger;
     public DarqTransactionProcessorService(
         long partitionId,
@@ -43,6 +43,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         Darq darq,
         DarqBackgroundWorkerPool workerPool,
         Dictionary<DarqId, GrpcChannel> clusterMap,
+        TableBenchmark benchmark,
         ILogger logger = null
     ) {
         this.tables = tables;
@@ -51,33 +52,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         this.partitionId = partitionId;
         this.wal = wal;
         this.clusterMap = clusterMap;
-
-        int PartitionsPerThread = 2;
-        int ThreadCount = 2;
-        int MachineCount = 2;
-
-        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
-            ratio: 0.2,
-            attrCount: 10,
-            threadCount: ThreadCount,
-            insertThreadCount: 12,
-            iterationCount: 1,
-            nCommitterThreads: 5
-            // perThreadDataCount: 1000000
-        );
-        TpccConfig tpccConfig = new TpccConfig(
-            numWh: PartitionsPerThread * ThreadCount * MachineCount,
-            partitionsPerThread: PartitionsPerThread
-            // newOrderCrossPartitionProbability: 0,
-            // paymentCrossPartitionProbability: 0
-            // numCustomer: 10,
-            // numDistrict: 10,
-            // numItem: 10,
-            // numOrder: 10,
-            // numStock: 10
-        );
-        
-        tpccBenchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, txnManager);
+        this.benchmark = benchmark;
 
         backend = darq;
         _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new TransactionProcessorProducerWrapper(clusterMap, session));
@@ -86,8 +61,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         this.workerPool = workerPool;
         backend.ConnectToCluster(out _);
 
-        
-        
         _backgroundTask.BeginProcessing();
 
         refreshThread = new Thread(() =>
@@ -178,35 +151,13 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 // b.RunTransactions();
                 break;
             case "tpcc":
-                tpccBenchmark.RunTransactions();
+                benchmark.RunTransactions();
                 // tpccBenchmark.GenerateTables();
-                break;
-            case "tpcc-populate":
-                tpccBenchmark.PopulateTables();
                 break;
             default:
                 throw new NotImplementedException();
         }
 
-
-        // Table table = tables[0];
-        // txnManager.Run();
-        // var ctx = txnManager.Begin();
-        // Console.WriteLine("Should go to own");
-        // var own = table.Read(new PrimaryKey(table.GetId(), 0), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
-        // Console.WriteLine(own.ToString());
-        // foreach (var b in own.ToArray()){
-        //     Console.WriteLine(b);
-        // }
-        // Console.WriteLine("Should RPC:");
-        // var other = table.Read(new PrimaryKey(table.GetId(), 1), new TupleDesc[]{new TupleDesc(12345, 8, 0)}, ctx);
-        // Console.WriteLine(other.ToString());
-        // foreach (var b in other.ToArray()){
-        //     Console.WriteLine(b);
-        // }
-        // Console.WriteLine("Starting commit");
-        // txnManager.Commit(ctx);
-        // txnManager.Terminate();
         EnqueueWorkloadReply enqueueWorkloadReply = new EnqueueWorkloadReply{Success = true};
         return Task.FromResult(enqueueWorkloadReply);
     }

@@ -176,8 +176,8 @@ unsafe class Program {
 
     public static void Main(string[] args)
     {
-        LaunchService(Int32.Parse(args[0]));
-
+        // LaunchService(Int32.Parse(args[0]));
+        LaunchService(0);
     }
 
     public static void LaunchService(int partitionId) {
@@ -185,16 +185,15 @@ unsafe class Program {
         builder.Services.AddLogging(builder => builder.AddFilter(null, LogLevel.Error).AddConsole());
         // create channel to each server
         Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();
-        for (int i = 0; i < NumProcessors; i++){
-            string address = "http://" + IPAddress.Loopback.ToString() + ":" + (5000 + i);
-            clusterMap[i] = GrpcChannel.ForAddress(address);
-            Console.WriteLine($"Created channel to {address}");
-        }
+        clusterMap[0] = GrpcChannel.ForAddress("http://10.1.0.4:5000");        
+        clusterMap[1] = GrpcChannel.ForAddress("http://10.1.0.5:5000");        
+        // clusterMap[2] = GrpcChannel.ForAddress("http://10.1.0.6:5000");        
+        // clusterMap[3] = GrpcChannel.ForAddress("http://10.1.0.7:5000");       
 
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions =>
         {
-            serverOptions.Listen(IPAddress.Loopback, 5000 + partitionId,
+            serverOptions.Listen(IPAddress.Any, 5000,
                 listenOptions => { listenOptions.Protocols = HttpProtocols.Http2; });
         });
         // DARQ injection
@@ -281,13 +280,38 @@ unsafe class Program {
         
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(tables);
         ShardedTransactionManager stm = new ShardedTransactionManager(
-            5,
+            NComitterThreads,
             rpcClient,
             tables,
             wal: darqWal
         );
         stm.Run();
         builder.Services.AddSingleton<ShardedTransactionManager>(stm);
+
+        BenchmarkConfig ycsbCfg = new BenchmarkConfig(
+            ratio: 0.2,
+            attrCount: 10,
+            threadCount: ThreadCount,
+            insertThreadCount: 12,
+            iterationCount: 1,
+            nCommitterThreads: NComitterThreads
+            // perThreadDataCount: 1000000
+        );
+        TpccConfig tpccConfig = new TpccConfig(
+            numWh: PartitionsPerThread * ThreadCount * NumProcessors,
+            partitionsPerThread: PartitionsPerThread
+            // newOrderCrossPartitionProbability: 0,
+            // paymentCrossPartitionProbability: 0
+            // numCustomer: 10,
+            // numDistrict: 10,
+            // numItem: 10,
+            // numOrder: 10,
+            // numStock: 10
+        );
+
+        // TableBenchmark benchmark = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, darqWal);
+        // TableBenchmark benchmark = new ShardedBenchmark("2pc", ycsbCfg, stm, tables[0], darqWal);
+        TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, stm);
 
         builder.Services.AddSingleton<DarqTransactionProcessorService>(
             new DarqTransactionProcessorService(
@@ -302,9 +326,12 @@ unsafe class Program {
                         numWorkers = NumProcessors
                     }
                 ),
-                clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value)
+                clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value),
+                benchmark
             )
         );
+
+        benchmark.PopulateTables();
 
         var app = builder.Build();
         // Configure the HTTP request pipeline.

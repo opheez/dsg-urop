@@ -298,7 +298,6 @@ public class TpccBenchmark : TableBenchmark {
         // abortCounts = new int[cfg.threadCount];
 
         Debug.Assert(cfg.threadCount <= tpcCfg.NumWh, "Thread count must be less than number of warehouses");
-        Debug.Assert(tpcCfg.PartitionsPerThread * cfg.threadCount == tpcCfg.NumWh, "Partitions per thread * thread count must equal number of warehouses");
 
         this.ol_cnts = new int[tpcCfg.NumDistrict][];
         for (int i = 0; i < tpcCfg.NumDistrict; i++){
