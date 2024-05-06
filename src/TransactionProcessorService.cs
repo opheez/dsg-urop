@@ -113,7 +113,8 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
         Table table = tables[request.Key.Table];
         TransactionContext ctx = txnIdToTxnCtx[internalTid];
-        PrimaryKey tupleId = new PrimaryKey(request.Key.Table, request.Key.Keys.ToArray()[0], request.Key.Keys.ToArray()[1], request.Key.Keys.ToArray()[2], request.Key.Keys.ToArray()[3], request.Key.Keys.ToArray()[4], request.Key.Keys.ToArray()[5]);
+        long[] keys = request.Key.Keys.ToArray();
+        PrimaryKey tupleId = new PrimaryKey(request.Key.Table, keys[0], keys[1], keys[2], keys[3], keys[4], keys[5]);
         TupleDesc[] tupleDescs = table.GetSchema();
         ReadReply reply = new ReadReply{ Value = ByteString.CopyFrom(table.Read(tupleId, tupleDescs, ctx))};
         return Task.FromResult(reply);
