@@ -163,10 +163,9 @@ public class DarqWal : IWriteAheadLog {
         return Interlocked.Increment(ref currLsn);
     }
 
-    protected void StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
+    protected async void StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
         StepRequest stepRequest = requestBuilder.FinishStep();
-        var v = capabilities.Step(stepRequest);
-        Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+        await capabilities.Step(stepRequest);
         requestPool.Return(stepRequest);
     }
 

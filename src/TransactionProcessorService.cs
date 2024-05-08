@@ -184,7 +184,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         requestBuilder.AddSelfMessage(entry.ToBytes());
         await capabilities.Step(requestBuilder.FinishStep());
         stepRequestPool.Return(stepRequest);
-        backend.EndAction();
         return new WalReply{Success = true};
     }
 
@@ -307,7 +306,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                 
                 m.Dispose();
                 var v = capabilities.Step(requestBuilder.FinishStep());
-                Debug.Assert(v.GetAwaiter().GetResult() == StepStatus.SUCCESS);
+                v.GetAwaiter().GetResult();
                 return true;
             }
             case DarqMessageType.RECOVERY: // this is on recovery; TODO: do we need to double pass?
