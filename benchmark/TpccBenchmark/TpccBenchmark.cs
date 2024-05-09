@@ -610,8 +610,8 @@ public class TpccBenchmark : TableBenchmark {
 
     override public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            // txnManager.Reset();
-            // txnManager.Run();
+            txnManager.Reset();
+            txnManager.Run();
 
             // new Thread(()=> rpcClient.PopulateTables(cfg, tpcCfg)).Start(); // populate tables in other machines
             // PopulateTables();
