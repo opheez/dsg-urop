@@ -160,7 +160,7 @@ public class TransactionManager {
         return true;
     }
 
-    virtual public void Write(TransactionContext ctx, Action<long, LogType> commit){
+    virtual public void Write(TransactionContext ctx){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
@@ -173,8 +173,7 @@ public class TransactionManager {
         }
         // TODO: verify that should be logged before removing from active
         if (wal != null){
-            commit(ctx.tid, LogType.Commit);
-            // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+            wal.Finish(ctx.tid, LogType.Commit);
         }
         ctx.callback?.Invoke(true);
         // assign num 
@@ -220,7 +219,7 @@ public class TransactionManager {
 
         if (valid) {
             ctx.status = TransactionStatus.Validated;
-            Write(ctx, (tid, type) => wal.Finish(tid, type));
+            Write(ctx);
             ctx.status = TransactionStatus.Committed;
         } else {
             Abort(ctx);
@@ -266,7 +265,7 @@ public class ShardedTransactionManager : TransactionManager {
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
             PrintDebug($"done w validation", ctx);
             ctx.status = TransactionStatus.Validated;
-            Write(ctx, (tid, type) => wal.Finish2pc(tid, type, txnIdToOKDarqLsns[tid]));
+            Write2pc(ctx);
             ctx.status = TransactionStatus.Committed;
         }
     }
@@ -304,7 +303,7 @@ public class ShardedTransactionManager : TransactionManager {
                 wal.Prepare(shardToWriteset, ctx.tid);
             } else {
                 PrintDebug($"Commit on local, no waiting needed", ctx);
-                Write(ctx, (tid, type) => wal.Finish(tid, type));
+                Write(ctx);
                 ctx.status = TransactionStatus.Committed;
             }
         } else {
@@ -314,7 +313,7 @@ public class ShardedTransactionManager : TransactionManager {
 
     }
 
-    override public void Write(TransactionContext ctx, Action<long, LogType> commit){
+    override public void Write(TransactionContext ctx){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
@@ -328,8 +327,43 @@ public class ShardedTransactionManager : TransactionManager {
         }
         // TODO: verify that should be logged before removing from active
         if (wal != null){
-            commit(ctx.tid, LogType.Commit);
-            // wal.Finish(new LogEntry(prevLsn, ctx.tid, LogType.Commit));
+            wal.Finish(ctx.tid, LogType.Commit);
+        }
+        ctx.callback?.Invoke(true);
+        // assign num 
+        int finalTxnNum;
+        try {
+            sl.Enter(ref lockTaken);
+            txnc += 1; // TODO: deal with int overflow
+            finalTxnNum = txnc;
+            active.Remove(ctx);
+            if (tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] != null){ 
+                ctxPool.Return(tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)]);
+            }
+            tnumToCtx[finalTxnNum & (pastTnumCircularBufferSize - 1)] = ctx;
+        } finally {
+            if (lockTaken) sl.Exit();
+            lockTaken = false;
+        }
+        // PrintDebug("Write phase done", ctx);
+    }
+
+    // TODO: only change is WAL call, should refactor
+    public void Write2pc(TransactionContext ctx){
+        PrintDebug("Write phase 2pc", ctx);
+        bool lockTaken = false; // signals if this thread was able to acquire lock
+        List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
+        for(int i = 0; i < writesetKeys.Count; i++){
+            PrimaryKey tupleId = writesetKeys[i];
+            if (!rpcClient.IsLocalKey(tupleId)) continue;
+            var item = ctx.GetFromWriteset(i);
+            // TODO: should not throw exception here, but if it does, abort. 
+            // failure here means crashed before commit. would need to rollback
+            tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
+        }
+        // TODO: verify that should be logged before removing from active
+        if (wal != null){
+            wal.Finish2pc(tid, LogType.Commit, txnIdToOKDarqLsns[tid]);
         }
         ctx.callback?.Invoke(true);
         // assign num 
