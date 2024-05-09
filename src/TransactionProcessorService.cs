@@ -370,9 +370,10 @@ public class TransactionProcessorProducerWrapper : IDarqProducer
         });
     }
 
-    public void ForceFlush()
+    public Task ForceFlush()
     {
         // TODO(Tianyu): Not implemented for now
+        throw new NotImplementedException();
     }
 }
 }
