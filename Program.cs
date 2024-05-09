@@ -199,11 +199,12 @@ unsafe class Program {
         // DARQ injection
         builder.Services.AddSingleton<Dictionary<long, GrpcChannel>>(clusterMap);
         // builder.Services.AddSingleton<Dictionary<DarqId, GrpcChannel>>(clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value));
-        Darq darq = new Darq(
+        builder.Services.AddSingleton(
             new DarqSettings
             {
                 LogDevice = new ManagedLocalStorageDevice($"/home/azureuser/data-{partitionId}.log", deleteOnClose: true),
                 LogCommitDir = $"/home/azureuser/{partitionId}",
+                DprFinder = new LocalStubDprFinder(),
                 Me = new DarqId(partitionId),
                 PageSize = 1L << 22,
                 MemorySize = 1L << 28,
@@ -213,18 +214,17 @@ unsafe class Program {
                 FastCommitMode = true,
                 DeleteOnClose = true,
                 CleanStart = true
-            },
-            new RwLatchVersionScheme()
-        );
-        builder.Services.AddSingleton<Darq>(darq);
+            });
+        builder.Services.AddSingleton(typeof(IVersionScheme), typeof(RwLatchVersionScheme));
+        builder.Services.AddSingleton<Darq>();
+        builder.Services.AddSingleton<StateObject>(sp => sp.GetService<Darq>());
         // builder.Services.AddSingleton<DarqBackgroundWorkerPool>(new DarqBackgroundWorkerPool(
         //     new DarqBackgroundWorkerPoolSettings
         //     {
         //         numWorkers = NumProcessors
         //     }
         // ));
-        DarqWal darqWal = new DarqWal(new DarqId(partitionId));
-        builder.Services.AddSingleton<DarqWal>(darqWal);
+        builder.Services.AddSingleton<DarqWal>(new DarqWal(new DarqId(partitionId)));
         Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
 
         // // uncomment for YCSB
@@ -279,13 +279,13 @@ unsafe class Program {
         
         
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(tables);
-        ShardedTransactionManager stm = new ShardedTransactionManager(
+        builder.Services.AddSingleton<ShardedTransactionManager>(provider => new ShardedTransactionManager(
             NComitterThreads,
             rpcClient,
             tables,
-            wal: darqWal
-        );
-        builder.Services.AddSingleton<ShardedTransactionManager>(stm);
+            wal: provider.GetRequiredService<DarqWal>(),
+            logger: provider.GetRequiredService<ILogger<ShardedTransactionManager>>()
+        ));
 
         BenchmarkConfig ycsbCfg = new BenchmarkConfig(
             ratio: 0.2,
@@ -293,13 +293,13 @@ unsafe class Program {
             threadCount: ThreadCount,
             insertThreadCount: 12,
             iterationCount: 1,
-            nCommitterThreads: NComitterThreads
-            // perThreadDataCount: 1000000
+            nCommitterThreads: NComitterThreads,
+            perThreadDataCount: 100
         );
         TpccConfig tpccConfig = new TpccConfig(
             numWh: PartitionsPerThread * ThreadCount * NumProcessors,
             partitionsPerThread: PartitionsPerThread
-            // newOrderCrossPartitionProbability: 0,
+            // newOrderCrossPartitionProbability: 0
             // paymentCrossPartitionProbability: 0
             // numCustomer: 10,
             // numDistrict: 10,
@@ -310,27 +310,48 @@ unsafe class Program {
 
         // TableBenchmark benchmark = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, darqWal);
         // TableBenchmark benchmark = new ShardedBenchmark("2pc", ycsbCfg, stm, tables[0], darqWal);
-        TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, stm);
-
-        builder.Services.AddSingleton<DarqTransactionProcessorService>(
-            new DarqTransactionProcessorService(
-                partitionId,
-                tables,
-                stm,
-                darqWal,
-                darq,
-                new DarqBackgroundWorkerPool(
-                    new DarqBackgroundWorkerPoolSettings
-                    {
-                        numWorkers = NumProcessors
-                    }
-                ),
-                clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value),
-                benchmark
+        builder.Services.AddSingleton<TpccBenchmark>(provider => {
+            TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, provider.GetRequiredService<ShardedTransactionManager>());
+            benchmark.PopulateTables();
+            return benchmark;
+        }
+        );
+        builder.Services.AddSingleton<DarqMaintenanceBackgroundService>(provider =>
+            new DarqMaintenanceBackgroundService(
+                provider.GetRequiredService<ILogger<DarqMaintenanceBackgroundService>>(),
+                provider.GetRequiredService<Darq>(),
+                new DarqMaintenanceBackgroundServiceSettings
+                {
+                    morselSize = 1024,
+                    producerFactory = session => new TransactionProcessorProducerWrapper(clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value), session),
+                    speculative = true
+                }
             )
         );
 
-        benchmark.PopulateTables();
+        builder.Services.AddSingleton<DarqTransactionBackgroundService>(provider =>
+            new DarqTransactionBackgroundService(
+                partitionId,
+                tables,
+                provider.GetRequiredService<ShardedTransactionManager>(),
+                provider.GetRequiredService<DarqWal>(),
+                provider.GetRequiredService<Darq>(),
+                provider.GetRequiredService<TpccBenchmark>(),
+                provider.GetRequiredService<ILogger<DarqTransactionBackgroundService>>()
+            )
+        );
+        builder.Services.AddSingleton<DarqTransactionProcessorService>(provider =>
+            new DarqTransactionProcessorService(
+                provider.GetRequiredService<DarqTransactionBackgroundService>()
+            )
+        );
+        
+        builder.Services.AddHostedService<DarqMaintenanceBackgroundService>(provider =>
+            provider.GetRequiredService<DarqMaintenanceBackgroundService>());
+        builder.Services.AddHostedService<DarqTransactionBackgroundService>(provider =>
+            provider.GetRequiredService<DarqTransactionBackgroundService>());
+
+        // benchmark.PopulateTables();
 
         var app = builder.Build();
         // Configure the HTTP request pipeline.
