@@ -292,7 +292,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
                         long sender = entry.prevLsn; // hacky
                         long internalTid = entry.lsn; // ""
                         
-                        txnManager.Write(txnIdToTxnCtx[internalTid], (tid, type) => wal.Finish(tid, type));
+                        txnManager.Write(txnIdToTxnCtx[internalTid]);
 
                         PrintDebug($"Committed at node {partitionId}; now sending ACK to {sender}");
                         LogEntry ackEntry = new LogEntry(partitionId, entry.tid, LogType.Ack);
