@@ -673,7 +673,7 @@ public class TpccBenchmark : TableBenchmark {
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (perThreadDataCount * thread_idx);
                 if (loc >= keys.Count()) break;
-                table.Write(ref keys[i], table.GetSchema(), values[i]);
+                table.Write(ref keys[loc], table.GetSchema(), values[loc]);
             }
         }
         return 0;
