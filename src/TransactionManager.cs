@@ -363,7 +363,7 @@ public class ShardedTransactionManager : TransactionManager {
         }
         // TODO: verify that should be logged before removing from active
         if (wal != null){
-            wal.Finish2pc(tid, LogType.Commit, txnIdToOKDarqLsns[tid]);
+            wal.Finish2pc(ctx.tid, LogType.Commit, txnIdToOKDarqLsns[ctx.tid]);
         }
         ctx.callback?.Invoke(true);
         // assign num 
