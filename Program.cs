@@ -285,7 +285,6 @@ unsafe class Program {
             tables,
             wal: darqWal
         );
-        stm.Run();
         builder.Services.AddSingleton<ShardedTransactionManager>(stm);
 
         BenchmarkConfig ycsbCfg = new BenchmarkConfig(
@@ -332,7 +331,7 @@ unsafe class Program {
         builder.Services.AddHostedService<DarqTransactionBackgroundService>(provider =>
             provider.GetRequiredService<DarqTransactionBackgroundService>());
 
-        // benchmark.PopulateTables();
+        benchmark.PopulateTables();
 
         var app = builder.Build();
         // Configure the HTTP request pipeline.

@@ -661,7 +661,6 @@ public class TpccBenchmark : TableBenchmark {
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx){
-        int abortCount = 0;
         int perThreadDataCount = keys.Count() / cfg.insertThreadCount;
         int remainder = 0;
         // have the last thread handle the remaining data
@@ -671,19 +670,13 @@ public class TpccBenchmark : TableBenchmark {
         }
         // Console.WriteLine($"thread {thread_idx} writes from {(perThreadDataCount * thread_idx)} to {(perThreadDataCount * thread_idx) + perThreadDataCount + cfg.perTransactionCount - 1 + remainder}");
         for (int i = 0; i < perThreadDataCount + remainder; i += cfg.perTransactionCount){
-            TransactionContext ctx = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (perThreadDataCount * thread_idx);
                 if (loc >= keys.Count()) break;
-                bool insertSuccess = table.Insert(ref keys[loc], values[loc], ctx);
-                if (!insertSuccess) throw new Exception($"Failed to insert record {loc} {keys[loc]} for table {table.GetId()}");
-            }
-            var success = txnManager.Commit(ctx);
-            if (!success){
-                abortCount++;
+                table.Write(ref keys[i], table.GetSchema(), values[i]);
             }
         }
-        return abortCount;
+        return 0;
     }
 
     public void GenerateTables(){
