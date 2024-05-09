@@ -12,37 +12,60 @@ using System.Collections.Concurrent;
 
 namespace DB {
 
-public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase, IDarqProcessor {
+public class DarqTransactionProcessorService : TransactionProcessor.TransactionProcessorBase {
+    private DarqTransactionBackgroundService backend;
+    public DarqTransactionProcessorService(DarqTransactionBackgroundService backend){
+        this.backend = backend;
+    }
+
+    public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
+    {
+        return backend.Read(request, context);
+    }
+
+    public override Task<ReadSecondaryReply> ReadSecondary(ReadSecondaryRequest request, ServerCallContext context)
+    {
+        return backend.ReadSecondary(request, context);
+    }
+
+    public override Task<PopulateTablesReply> PopulateTables(PopulateTablesRequest request, ServerCallContext context)
+    {
+        return backend.PopulateTables(request, context);
+    }
+
+    public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
+    {
+        return backend.EnqueueWorkload(request, context);
+    }
+
+    public override Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
+    {
+        return backend.WriteWalEntry(request, context);
+    }
+
+}
+
+public class DarqTransactionBackgroundService : BackgroundService, IDarqProcessor {
     private ShardedTransactionManager txnManager;
     private ConcurrentDictionary<(long, long), long> externalToInternalTxnId = new ConcurrentDictionary<(long, long), long>();
     private ConcurrentDictionary<long, TransactionContext> txnIdToTxnCtx = new ConcurrentDictionary<long, TransactionContext>();
     private DarqWal wal;
     private long partitionId;
-    // from darqProcessor
-    private Darq backend;
-    private readonly DarqBackgroundTask _backgroundTask;
-    private readonly DarqBackgroundWorkerPool workerPool;
-    private readonly ManualResetEventSlim terminationStart, terminationComplete;
-    private Thread refreshThread, processingThread;
-    private ColocatedDarqProcessorClient processorClient;
-
-    private IDarqProcessorClientCapabilities capabilities;
-
-    private SimpleObjectPool<StepRequest> stepRequestPool = new(() => new StepRequest());
-    private int nextWorker = 0;
-    private StepRequest reusableRequest = new();
     Dictionary<int, ShardedTable> tables;
-    Dictionary<DarqId, GrpcChannel> clusterMap;
     private TableBenchmark benchmark;
+    // from darqProcessor
+    Darq backend;
+    private ColocatedDarqProcessorClient processorClient;
+    private IDarqProcessorClientCapabilities capabilities;
+    private SimpleObjectPool<StepRequest> stepRequestPool = new(() => new StepRequest());
+    private StepRequest reusableRequest = new();
     protected ILogger logger;
-    public DarqTransactionProcessorService(
+    public DarqTransactionBackgroundService(
         long partitionId,
         Dictionary<int, ShardedTable> tables,
         ShardedTransactionManager txnManager,
         DarqWal wal,
         Darq darq,
-        DarqBackgroundWorkerPool workerPool,
-        Dictionary<DarqId, GrpcChannel> clusterMap,
         TableBenchmark benchmark,
         ILogger logger = null
     ) {
@@ -51,37 +74,12 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         this.txnManager = txnManager;
         this.partitionId = partitionId;
         this.wal = wal;
-        this.clusterMap = clusterMap;
         this.benchmark = benchmark;
 
         backend = darq;
-        _backgroundTask = new DarqBackgroundTask(backend, workerPool, session => new TransactionProcessorProducerWrapper(clusterMap, session));
-        terminationStart = new ManualResetEventSlim();
-        terminationComplete = new ManualResetEventSlim();
-        this.workerPool = workerPool;
-        backend.ConnectToCluster(out _);
-
-        _backgroundTask.BeginProcessing();
-
-        refreshThread = new Thread(() =>
-        {
-            while (!terminationStart.IsSet)
-                backend.Refresh();
-            terminationComplete.Set();
-        });
-        refreshThread.Start();
-
-        processorClient = new ColocatedDarqProcessorClient(backend);
-        processingThread = new Thread(() =>
-        {
-            processorClient.StartProcessing(this);
-        });
-        processingThread.Start();
-        // TODO(Tianyu): Hacky
-        // spin until we are sure that we have started 
-        while (capabilities == null) {}
+        processorClient = new ColocatedDarqProcessorClient(backend, false);
     }
-    public override Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
+    public Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
         long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
         Table table = tables[request.Key.Table];
@@ -93,7 +91,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return Task.FromResult(reply);
     }
 
-    public override Task<ReadSecondaryReply> ReadSecondary(ReadSecondaryRequest request, ServerCallContext context)
+    public Task<ReadSecondaryReply> ReadSecondary(ReadSecondaryRequest request, ServerCallContext context)
     {
         PrintDebug($"Reading secondary from rpc service");
         long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
@@ -104,7 +102,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return Task.FromResult(reply);
     }
 
-    public override Task<PopulateTablesReply> PopulateTables(PopulateTablesRequest request, ServerCallContext context)
+    public Task<PopulateTablesReply> PopulateTables(PopulateTablesRequest request, ServerCallContext context)
     {
         PrintDebug($"Populating tables from rpc service");
         BenchmarkConfig cfg = new BenchmarkConfig(
@@ -137,7 +135,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
         return Task.FromResult(reply);
     }
 
-    public override Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
+    public Task<EnqueueWorkloadReply> EnqueueWorkload(EnqueueWorkloadRequest request, ServerCallContext context)
     {
         switch (request.Workload) {
             case "ycsb_single":
@@ -163,7 +161,7 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
     }
 
     // typically used for Prepare() and Commit() 
-    public override async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
+    public async Task<WalReply> WriteWalEntry(WalRequest request, ServerCallContext context)
     {
         // PrintDebug($"Writing to WAL from {request.PartitionId}");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray());
@@ -205,17 +203,6 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
             table.Dispose();
         }
         txnManager.Terminate();
-        terminationStart.Set();
-        // TODO(Tianyu): this shutdown process is unsafe and may leave things unsent/unprocessed in the queue
-        backend.ForceCheckpoint();
-        Thread.Sleep(1000);
-        _backgroundTask.StopProcessing();
-        _backgroundTask.Dispose();
-        processorClient.StopProcessingAsync().GetAwaiter().GetResult();
-        processorClient.Dispose();
-        terminationComplete.Wait();
-        refreshThread.Join();
-        processingThread.Join();
     }
 
     public Darq GetBackend() => backend;
@@ -331,6 +318,13 @@ public class DarqTransactionProcessorService : TransactionProcessor.TransactionP
 
     void PrintDebug(string msg, TransactionContext ctx = null){
         if (logger != null) logger.LogInformation($"[TPS {partitionId} TID {(ctx != null ? ctx.tid : -1)}]: {msg}");
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+         backend.ConnectToCluster(out _);
+         await processorClient.StartProcessingAsync(this, stoppingToken);
+         processorClient.Dispose();
     }
 }
 

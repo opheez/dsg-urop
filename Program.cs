@@ -202,8 +202,8 @@ unsafe class Program {
         Darq darq = new Darq(
             new DarqSettings
             {
-                LogDevice = new ManagedLocalStorageDevice($"/home/azureuser/data-{partitionId}.log", deleteOnClose: true),
-                LogCommitDir = $"/home/azureuser/{partitionId}",
+                LogDevice = new ManagedLocalStorageDevice($"data-{partitionId}.log", deleteOnClose: true),
+                LogCommitDir = $"{partitionId}",
                 Me = new DarqId(partitionId),
                 PageSize = 1L << 22,
                 MemorySize = 1L << 28,
@@ -313,25 +313,26 @@ unsafe class Program {
         // TableBenchmark benchmark = new ShardedBenchmark("2pc", ycsbCfg, stm, tables[0], darqWal);
         TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, stm);
 
-        builder.Services.AddSingleton<DarqTransactionProcessorService>(
-            new DarqTransactionProcessorService(
+        builder.Services.AddSingleton<DarqTransactionBackgroundService>(
+            new DarqTransactionBackgroundService(
                 partitionId,
                 tables,
                 stm,
                 darqWal,
                 darq,
-                new DarqBackgroundWorkerPool(
-                    new DarqBackgroundWorkerPoolSettings
-                    {
-                        numWorkers = NumProcessors
-                    }
-                ),
-                clusterMap.ToDictionary(o => new DarqId(o.Key), o => o.Value),
                 benchmark
             )
         );
+        builder.Services.AddSingleton<DarqTransactionProcessorService>(provider =>
+            new DarqTransactionProcessorService(
+                provider.GetRequiredService<DarqTransactionBackgroundService>()
+            )
+        );
 
-        benchmark.PopulateTables();
+        builder.Services.AddHostedService<DarqTransactionBackgroundService>(provider =>
+            provider.GetRequiredService<DarqTransactionBackgroundService>());
+
+        // benchmark.PopulateTables();
 
         var app = builder.Build();
         // Configure the HTTP request pipeline.
