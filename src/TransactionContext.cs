@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -17,12 +18,14 @@ public class TransactionContext {
     internal List<PrimaryKey> RsetKeys;
     public long tid;
     public Dictionary<int, Table> tables;
-    public Action<bool> callback;
+    public Action<bool, TransactionContext> callback;
+    public Stopwatch latSw;
     public TransactionContext(Dictionary<int, Table> tables){
         this.tables = tables;
     }
 
     public void Init(int startTxn, long tid){
+        latSw = Stopwatch.StartNew();
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;

@@ -416,7 +416,7 @@ public class TpccBenchmark : TableBenchmark {
         return numNewOrders;
     }
 
-    public unsafe void NewOrder(Query query, Action<bool> callback){
+    public unsafe void NewOrder(Query query, Action<bool, TransactionContext> callback){
         TransactionContext ctx = txnManager.Begin();
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(new PrimaryKey((int)TableType.Warehouse, query.w_id), tables[(int)TableType.Warehouse].GetSchema(), ctx);
         PrimaryKey districtPk = new PrimaryKey((int)TableType.District, query.w_id, query.d_id);
@@ -528,7 +528,7 @@ public class TpccBenchmark : TableBenchmark {
         return;
     }
 
-    public unsafe void Payment(Query query, Action<bool> callback){
+    public unsafe void Payment(Query query, Action<bool, TransactionContext> callback){
         TransactionContext ctx = txnManager.Begin();
         PrimaryKey warehousePk = new PrimaryKey((int)TableType.Warehouse, query.w_id);
         ReadOnlySpan<byte> warehouseRow = tables[(int)TableType.Warehouse].Read(warehousePk, tables[(int)TableType.Warehouse].GetSchema(), ctx);
@@ -635,7 +635,9 @@ public class TpccBenchmark : TableBenchmark {
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
-        Action<bool> incrementCount = (success) => {
+        Action<bool, TransactionContext> incrementCount = (success, ctx) => {
+            ctx.latSw.Stop();
+            stats?.AddLatencyResult(ctx.latSw.ElapsedMilliseconds);
             if (success) {
                 Interlocked.Increment(ref successCounts[thread_idx]);
             //     Console.WriteLine($"Thread {thread_idx} success count now {successCounts[thread_idx]}");

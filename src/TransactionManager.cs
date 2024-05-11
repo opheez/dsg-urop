@@ -76,7 +76,7 @@ public class TransactionManager {
         return false;
     }
 
-    public void CommitWithCallback(TransactionContext ctx, Action<bool> callback){
+    public void CommitWithCallback(TransactionContext ctx, Action<bool, TransactionContext> callback){
         PrintDebug($"adding ctx to queue for commit", ctx);
         ctx.status = TransactionStatus.Pending;
         ctx.callback = callback;
@@ -175,7 +175,7 @@ public class TransactionManager {
         if (wal != null){
             wal.Finish(ctx.tid, LogType.Commit);
         }
-        ctx.callback?.Invoke(true);
+        ctx.callback?.Invoke(true, ctx);
         // assign num 
         int finalTxnNum;
         try {
@@ -194,7 +194,7 @@ public class TransactionManager {
         // PrintDebug("Write phase done", ctx);
     }
 
-    public void Abort(TransactionContext ctx, Action<bool> callback = null){
+    public void Abort(TransactionContext ctx, Action<bool, TransactionContext> callback = null){
         PrintDebug($"Aborting tid {ctx.tid}");
         bool lockTaken = false; // signals if this thread was able to acquire lock
         // TODO: verify that should be logged before removing from active
@@ -204,7 +204,7 @@ public class TransactionManager {
         if (ctx.callback == null){
             ctx.callback = callback;
         }
-        ctx.callback?.Invoke(false);
+        ctx.callback?.Invoke(false, ctx);
         try {
             sl.Enter(ref lockTaken);
             active.Remove(ctx);
@@ -328,7 +328,7 @@ public class ShardedTransactionManager : TransactionManager {
         if (wal != null){
             wal.Finish(ctx.tid, LogType.Commit);
         }
-        ctx.callback?.Invoke(true);
+        ctx.callback?.Invoke(true, ctx);
         // assign num 
         int finalTxnNum;
         try {
@@ -364,7 +364,7 @@ public class ShardedTransactionManager : TransactionManager {
         if (wal != null){
             wal.Finish2pc(ctx.tid, LogType.Commit, txnIdToOKDarqLsns[ctx.tid]);
         }
-        ctx.callback?.Invoke(true);
+        ctx.callback?.Invoke(true, ctx);
         // assign num 
         int finalTxnNum;
         try {

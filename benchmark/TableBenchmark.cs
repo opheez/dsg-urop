@@ -184,6 +184,7 @@ public abstract class TableBenchmark
 public class BenchmarkStatistics {
     internal readonly List<long> insMsPerRun = new List<long>();
     internal readonly List<long> opsMsPerRun = new List<long>();
+    internal readonly List<long> latMsPerTxn = new List<long>();
     internal readonly List<int> insAbortsPerRun = new List<int>();
     internal readonly List<int> txnAbortsPerRun = new List<int>();
     internal string name;
@@ -215,6 +216,11 @@ public class BenchmarkStatistics {
         txnAbortsPerRun.Add(result.txnAborts);
     }
 
+    internal void AddLatencyResult(long lat)
+    {
+        latMsPerTxn.Add(lat);
+    }
+
     internal string[] GetStats() {
         string[] data = new string[]{
             $"Benchmark {name}",
@@ -224,7 +230,8 @@ public class BenchmarkStatistics {
             tpcCfg?.ToString(),
             "-----STATS-----",
             GetInsDataString(operations, insMsPerRun),
-            GetOpsDataString(inserts, operations-inserts, opsMsPerRun, txnAbortsPerRun)
+            GetOpsDataString(inserts, operations-inserts, opsMsPerRun, txnAbortsPerRun),
+            GetLatDataString(latMsPerTxn)
         };
 
         if (insAbortsPerRun.Count != 0) {
@@ -250,6 +257,7 @@ public class BenchmarkStatistics {
 
     internal string GetOpsDataString(int inserts, int reads, List<long> opsMsPerRun, List<int> txnAborts) => $"{(inserts+reads-txnAborts.Average())/opsMsPerRun.Average()} successful operations/ms {(inserts+reads)/opsMsPerRun.Average()} operations/ms ({inserts+reads} operations ({inserts} inserts, {reads} reads) in {opsMsPerRun.Average()} ms)";
     internal string GetInsDataString(int inserts, List<long> insMsPerRun) => $"{inserts/insMsPerRun.Average()} inserts/ms ({inserts} inserts in {insMsPerRun.Average()} ms)";
+    internal string GetLatDataString(List<long> latMsPerTxn) => $"{latMsPerTxn.Average()} ms (for {latMsPerTxn.Count} transactions)";
     internal string GetTxnAbortDataString(List<int> txnAborts) => $"Operations: Average {txnAborts.Average()} aborts out of {cfg.datasetSize/cfg.perTransactionCount} transactions ({txnAborts.Average()/(cfg.datasetSize/cfg.perTransactionCount)*100}% abort rate)";
     internal string GetInsAbortDataString(List<int> insAborts) => $"Insertions: Average {insAborts.Average()} aborts out of {cfg.datasetSize/cfg.perTransactionCount} transactions ({insAborts.Average()/(cfg.datasetSize/cfg.perTransactionCount)*100}% abort rate)";
 
