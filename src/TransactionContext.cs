@@ -19,13 +19,13 @@ public class TransactionContext {
     public long tid;
     public Dictionary<int, Table> tables;
     public Action<bool, TransactionContext> callback;
-    public Stopwatch latSw;
+    public long startTime;
     public TransactionContext(Dictionary<int, Table> tables){
         this.tables = tables;
     }
 
     public void Init(int startTxn, long tid){
-        latSw = Stopwatch.StartNew();
+        startTime = Stopwatch.GetTimestamp();
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;
