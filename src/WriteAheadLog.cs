@@ -24,6 +24,7 @@ public interface IWriteAheadLog
 
 public class DarqWal : IWriteAheadLog {
     protected long currLsn = 0;
+    protected Darq darq;
     protected IDarqProcessorClientCapabilities capabilities;
     protected DarqId partitionId;
     protected SimpleObjectPool<StepRequest> requestPool;
@@ -31,8 +32,9 @@ public class DarqWal : IWriteAheadLog {
     // requestBuilders should last for a Begin,Write,Finish cycle or TODO and should NEVER overlap 
     protected ConcurrentDictionary<long, StepRequestBuilder> requestBuilders = new ConcurrentDictionary<long, StepRequestBuilder>();
     protected ILogger logger;
-    public DarqWal(DarqId partitionId, ILogger logger = null){
+    public DarqWal(DarqId partitionId, Darq darq, ILogger logger = null){
         this.partitionId = partitionId;
+        this.darq = darq;
         this.logger = logger;
         requestPool = new SimpleObjectPool<StepRequest>(() => new StepRequest());
     }
@@ -166,6 +168,8 @@ public class DarqWal : IWriteAheadLog {
     protected async Task StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
         StepRequest stepRequest = requestBuilder.FinishStep();
         await capabilities.Step(stepRequest);
+        var version = darq.Version();
+        await darq.DprCommit(version);
         requestPool.Return(stepRequest);
     }
 

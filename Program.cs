@@ -9,6 +9,7 @@ using FASTER.client;
 using FASTER.core;
 using FASTER.darq;
 using FASTER.libdpr;
+using FASTER.libdpr.gRPC;
 using FASTER.server;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -224,7 +225,12 @@ unsafe class Program {
         //         numWorkers = NumProcessors
         //     }
         // ));
-        builder.Services.AddSingleton<DarqWal>(new DarqWal(new DarqId(partitionId)));
+        builder.Services.AddSingleton<DarqWal>(provider =>
+            new DarqWal(
+                new DarqId(partitionId),
+                provider.GetRequiredService<Darq>(),
+                provider.GetRequiredService<ILogger<DarqWal>>()
+            ));
         Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
 
         // // uncomment for YCSB
@@ -345,7 +351,10 @@ unsafe class Program {
                 provider.GetRequiredService<DarqTransactionBackgroundService>()
             )
         );
+        builder.Services.AddSingleton<StateObjectRefreshBackgroundService>();
         
+        builder.Services.AddHostedService<StateObjectRefreshBackgroundService>(provider =>
+            provider.GetRequiredService<StateObjectRefreshBackgroundService>());
         builder.Services.AddHostedService<DarqMaintenanceBackgroundService>(provider =>
             provider.GetRequiredService<DarqMaintenanceBackgroundService>());
         builder.Services.AddHostedService<DarqTransactionBackgroundService>(provider =>

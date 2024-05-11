@@ -163,7 +163,7 @@ public class TransactionManager {
         return true;
     }
 
-    virtual public void Write(TransactionContext ctx){
+    virtual public async void Write(TransactionContext ctx){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
@@ -174,11 +174,7 @@ public class TransactionManager {
             // failure here means crashed before commit. would need to rollback
             tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
-        // TODO: verify that should be logged before removing from active
-        if (wal != null){
-            wal.Finish(ctx.tid, LogType.Commit);
-        }
-        ctx.callback?.Invoke(true, ctx);
+
         // assign num 
         int finalTxnNum;
         try {
@@ -194,6 +190,10 @@ public class TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
+        if (wal != null){
+            await wal.Finish(ctx.tid, LogType.Commit);
+        }
+        ctx.callback?.Invoke(true, ctx);
         // PrintDebug("Write phase done", ctx);
     }
 
@@ -272,7 +272,7 @@ public class ShardedTransactionManager : TransactionManager {
         }
     }
 
-    override protected void ValidateAndWrite(TransactionContext ctx){
+    override protected async void ValidateAndWrite(TransactionContext ctx){
         ctx.status = TransactionStatus.Pending;
         // validate own, need a map to track which has responded 
         bool valid = Validate(ctx);
@@ -302,7 +302,7 @@ public class ShardedTransactionManager : TransactionManager {
                     txnIdToOKDarqLsns[ctx.tid].Add((-1, shard)); // hacky way to indicate that we don't need to wait for this shard
                 }
                 // send out prepare messages and wait; the commit is finished by calls to MarkAcked
-                wal.Prepare(shardToWriteset, ctx.tid);
+                await wal.Prepare(shardToWriteset, ctx.tid);
             } else {
                 PrintDebug($"Commit on local, no waiting needed", ctx);
                 Write(ctx);
@@ -315,7 +315,7 @@ public class ShardedTransactionManager : TransactionManager {
 
     }
 
-    override public void Write(TransactionContext ctx){
+    override public async void Write(TransactionContext ctx){
         PrintDebug("Write phase", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
@@ -327,11 +327,6 @@ public class ShardedTransactionManager : TransactionManager {
             // failure here means crashed before commit. would need to rollback
             tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
-        // TODO: verify that should be logged before removing from active
-        if (wal != null){
-            wal.Finish(ctx.tid, LogType.Commit);
-        }
-        ctx.callback?.Invoke(true, ctx);
         // assign num 
         int finalTxnNum;
         try {
@@ -347,11 +342,15 @@ public class ShardedTransactionManager : TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
+        if (wal != null){
+            await wal.Finish(ctx.tid, LogType.Commit);
+        }
+        ctx.callback?.Invoke(true, ctx);
         // PrintDebug("Write phase done", ctx);
     }
 
     // TODO: only change is WAL call, should refactor
-    public void Write2pc(TransactionContext ctx){
+    public async void Write2pc(TransactionContext ctx){
         PrintDebug("Write phase 2pc", ctx);
         bool lockTaken = false; // signals if this thread was able to acquire lock
         List<PrimaryKey> writesetKeys = ctx.GetWritesetKeys();
@@ -363,11 +362,6 @@ public class ShardedTransactionManager : TransactionManager {
             // failure here means crashed before commit. would need to rollback
             tables[tupleId.Table].Write(ref tupleId, item.Item1, item.Item2);
         }
-        // TODO: verify that should be logged before removing from active
-        if (wal != null){
-            wal.Finish2pc(ctx.tid, LogType.Commit, txnIdToOKDarqLsns[ctx.tid]);
-        }
-        ctx.callback?.Invoke(true, ctx);
         // assign num 
         int finalTxnNum;
         try {
@@ -383,6 +377,10 @@ public class ShardedTransactionManager : TransactionManager {
             if (lockTaken) sl.Exit();
             lockTaken = false;
         }
+        if (wal != null){
+            await wal.Finish2pc(ctx.tid, LogType.Commit, txnIdToOKDarqLsns[ctx.tid]);
+        }
+        ctx.callback?.Invoke(true, ctx);
         // PrintDebug("Write phase done", ctx);
     }
 
