@@ -24,8 +24,8 @@ public class TransactionContext {
         this.tables = tables;
     }
 
-    public void Init(int startTxn, long tid){
-        startTime = Stopwatch.GetTimestamp();
+    public void Init(int startTxn, long tid, long startTime = 0){
+        this.startTime = startTime;
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;

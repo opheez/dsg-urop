@@ -636,8 +636,9 @@ public class TpccBenchmark : TableBenchmark {
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
     {
         Action<bool, TransactionContext> incrementCount = (success, ctx) => {
-            stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
             if (success) {
+                Console.WriteLine($"{Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds} {(txnManager.stopwatch.ElapsedTicks - ctx.startTime) * 1000.0 / Stopwatch.Frequency}; start: {ctx.startTime}, end: {Stopwatch.GetTimestamp()}");
+                stats?.AddLatencyResult((long)((txnManager.stopwatch.ElapsedTicks - ctx.startTime) * 1000.0 / Stopwatch.Frequency));
                 Interlocked.Increment(ref successCounts[thread_idx]);
             //     Console.WriteLine($"Thread {thread_idx} success count now {successCounts[thread_idx]}");
             // } else {
