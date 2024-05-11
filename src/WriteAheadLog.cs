@@ -9,13 +9,13 @@ namespace DB
 {
 public interface IWriteAheadLog
 {
-    public long RecordOk(long tid, long shard);
+    public Task<long> RecordOk(long tid, long shard);
     public long Begin(long tid);
     public long Write(long tid, ref PrimaryKey pk, TupleDesc[] tupleDescs, byte[] val);
     
-    public long Finish(long tid, LogType type);
-    public long Prepare(Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>> shardToWriteset, long tid);
-    public long Finish2pc(long tid, LogType type, List<(long, long)> okLsnsToConsume);
+    public Task<long> Finish(long tid, LogType type);
+    public Task<long> Prepare(Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>> shardToWriteset, long tid);
+    public Task<long> Finish2pc(long tid, LogType type, List<(long, long)> okLsnsToConsume);
     // public void SetCapabilities(IDarqProcessorClientCapabilities capabilities);
     public void Terminate();
     // public void Recover();
@@ -23,7 +23,6 @@ public interface IWriteAheadLog
 }
 
 public class DarqWal : IWriteAheadLog {
-
     protected long currLsn = 0;
     protected IDarqProcessorClientCapabilities capabilities;
     protected DarqId partitionId;
@@ -61,7 +60,7 @@ public class DarqWal : IWriteAheadLog {
     }
 
     // TODO: add field for shard in log entry
-    public long RecordOk(long tid, long shard){
+    public async Task<long> RecordOk(long tid, long shard){
         // OK message is stepped by itself 
         StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
 
@@ -70,7 +69,7 @@ public class DarqWal : IWriteAheadLog {
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         txnTbl[tid] = entry.lsn;
 
-        StepAndReturnRequestBuilder(requestBuilder);
+        await StepAndReturnRequestBuilder(requestBuilder);
         return entry.lsn;
     }
 
@@ -79,7 +78,7 @@ public class DarqWal : IWriteAheadLog {
     /// </summary>
     /// <param name="entry"></param>
     /// <returns>lsn of finish log</returns>
-    public long Finish(long tid, LogType type){
+    public async Task<long> Finish(long tid, LogType type){
         // on abort, requestBuilder may not have been created
         StepRequestBuilder requestBuilder = requestBuilders.GetOrAdd(tid, _ => new StepRequestBuilder(requestPool.Checkout()));
 
@@ -88,7 +87,7 @@ public class DarqWal : IWriteAheadLog {
         entry.lsn = lsn;
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
 
-        StepAndReturnRequestBuilder(requestBuilder);
+        await StepAndReturnRequestBuilder(requestBuilder);
         requestBuilders.Remove(entry.tid, out _);
         txnTbl.TryRemove(tid, out _);
         return entry.lsn;
@@ -100,7 +99,7 @@ public class DarqWal : IWriteAheadLog {
     /// <param name="shardToWriteset"></param>
     /// <param name="tid"></param>
     /// <returns>lsn of prepare log</returns>
-    public long Prepare(Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>> shardToWriteset, long tid) {
+    public async Task<long> Prepare(Dictionary<long, List<(PrimaryKey, TupleDesc[], byte[])>> shardToWriteset, long tid) {
         StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
         // should be first 
@@ -126,7 +125,7 @@ public class DarqWal : IWriteAheadLog {
             requestBuilder.AddOutMessage(new DarqId(darqId), outEntry.ToBytes());
         }
 
-        StepAndReturnRequestBuilder(requestBuilder);
+        await StepAndReturnRequestBuilder(requestBuilder);
         return entry.lsn;
     }
 
@@ -137,7 +136,7 @@ public class DarqWal : IWriteAheadLog {
     /// <param name="type"></param>
     /// <param name="darqLsnsToConsume"></param>
     /// <returns>lsn of finish log</returns>
-    public long Finish2pc(long tid, LogType type, List<(long, long)> darqLsnsToConsume){
+    public async Task<long> Finish2pc(long tid, LogType type, List<(long, long)> darqLsnsToConsume){
         StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
 
         LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
@@ -154,7 +153,7 @@ public class DarqWal : IWriteAheadLog {
             requestBuilder.AddOutMessage(new DarqId(shard), outEntry.ToBytes());
         }
 
-        StepAndReturnRequestBuilder(requestBuilder);
+        await StepAndReturnRequestBuilder(requestBuilder);
         requestBuilders.Remove(entry.tid, out _);
         txnTbl.TryRemove(tid, out _);
         return entry.lsn;
@@ -163,7 +162,7 @@ public class DarqWal : IWriteAheadLog {
         return Interlocked.Increment(ref currLsn);
     }
 
-    protected async void StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
+    protected async Task StepAndReturnRequestBuilder(StepRequestBuilder requestBuilder){
         StepRequest stepRequest = requestBuilder.FinishStep();
         await capabilities.Step(stepRequest);
         requestPool.Return(stepRequest);

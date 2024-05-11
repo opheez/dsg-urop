@@ -77,7 +77,7 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
         this.benchmark = benchmark;
 
         backend = darq;
-        processorClient = new ColocatedDarqProcessorClient(backend, false);
+        processorClient = new ColocatedDarqProcessorClient(backend, true);
     }
     public Task<ReadReply> Read(ReadRequest request, ServerCallContext context)
     {
@@ -150,7 +150,12 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
                 // b.RunTransactions();
                 break;
             case "tpcc":
-                benchmark.RunTransactions();
+                Thread t = new Thread(() => {
+                    benchmark.RunTransactions();
+                });
+                t.Start();
+                // t.Join();
+                // benchmark.RunTransactions();
                 // tpccBenchmark.GenerateTables();
                 break;
             default:
