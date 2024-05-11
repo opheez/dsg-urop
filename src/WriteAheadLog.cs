@@ -126,6 +126,7 @@ public class DarqWal : IWriteAheadLog {
         }
 
         await StepAndReturnRequestBuilder(requestBuilder);
+        requestBuilders.Remove(entry.tid, out _);
         return entry.lsn;
     }
 
