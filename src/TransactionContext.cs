@@ -26,6 +26,7 @@ public class TransactionContext {
         this.startTxnNum = startTxn;
         this.tid = tid;
         status = TransactionStatus.Idle;
+        callback = null;
         Rset = new List<byte[]>(SET_SIZE);
         Wset = new List<(TupleDesc[], byte[])>(SET_SIZE);
         WsetKeys = new List<PrimaryKey>(SET_SIZE);
