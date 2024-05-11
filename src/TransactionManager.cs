@@ -258,7 +258,7 @@ public class ShardedTransactionManager : TransactionManager {
         }
 
         txnIdToOKDarqLsns[tid].Add((darqLsn, shard));        
-        wal.RecordOk(tid, shard);
+        // wal.RecordOk(tid, shard);
 
         PrintDebug($"Marked acked", ctx);
 

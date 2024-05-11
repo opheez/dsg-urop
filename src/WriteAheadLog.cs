@@ -137,7 +137,7 @@ public class DarqWal : IWriteAheadLog {
     /// <param name="darqLsnsToConsume"></param>
     /// <returns>lsn of finish log</returns>
     public async Task<long> Finish2pc(long tid, LogType type, List<(long, long)> darqLsnsToConsume){
-        StepRequestBuilder requestBuilder = requestBuilders[tid]; // throw error if doesn't exist
+        StepRequestBuilder requestBuilder = new StepRequestBuilder(requestPool.Checkout());
 
         LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
         entry.lsn = GetNewLsn();
