@@ -263,7 +263,6 @@ public class ShardedTransactionManager : TransactionManager {
         PrintDebug($"Marked acked", ctx);
 
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
-            PrintDebug($"done w validation", ctx);
             ctx.status = TransactionStatus.Validated;
             Write2pc(ctx);
             ctx.status = TransactionStatus.Committed;

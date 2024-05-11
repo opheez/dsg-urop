@@ -179,7 +179,7 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
             entry.prevLsn = request.PartitionId; // TODO: hacky place to put sender id
             PrintDebug($"Stepping prepare/commit {entry.lsn}");
         } else {
-            PrintDebug($"Stepping ok/ack {entry.tid}");
+            PrintDebug($"Stepping ok/ack/abort {entry.tid}");
         }
         
         var stepRequest = stepRequestPool.Checkout();
@@ -248,6 +248,13 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
                         m.Dispose();
                         return true;
                     }
+                    case LogType.Abort:
+                    {
+                        PrintDebug($"Got ABORT log entry: {entry}");
+                        txnManager.MarkAcked(entry.tid, TransactionStatus.Aborted, m.GetLsn(), entry.prevLsn);
+                        m.Dispose();
+                        return true;
+                    }
                     case LogType.Ack:
                     {
                         PrintDebug($"Got ACK log entry: {entry}");
@@ -271,11 +278,9 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
                             ctx.AddWriteSet(ref pk, entry.tupleDescs[i], entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
-                        PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");
-                        if (success) {
-                            LogEntry okEntry = new LogEntry(partitionId, entry.tid, LogType.Ok);
-                            requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
-                        }
+                        PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");                            
+                        LogEntry okEntry = new LogEntry(partitionId, entry.tid, success ? LogType.Ok : LogType.Abort);
+                        requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
                         break;
                     }
                     case LogType.Commit:

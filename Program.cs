@@ -293,8 +293,8 @@ unsafe class Program {
             threadCount: ThreadCount,
             insertThreadCount: 12,
             iterationCount: 1,
-            nCommitterThreads: NComitterThreads,
-            perThreadDataCount: 100
+            nCommitterThreads: NComitterThreads
+            // perThreadDataCount: 100
         );
         TpccConfig tpccConfig = new TpccConfig(
             numWh: PartitionsPerThread * ThreadCount * NumProcessors,
