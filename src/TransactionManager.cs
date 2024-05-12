@@ -5,7 +5,6 @@ using FASTER.common;
 using FASTER.darq;
 using FASTER.libdpr;
 using System.Runtime.InteropServices;
-using System.Diagnostics;
 
 namespace DB {
 public class TransactionManager {
@@ -21,7 +20,6 @@ public class TransactionManager {
     internal SpinLock sl = new SpinLock();
     private IWriteAheadLog? wal;
     protected Dictionary<int, Table> tables;
-    public Stopwatch stopwatch;
     protected ILogger logger;
     public TransactionManager(int numThreads, Dictionary<int, Table> tables, IWriteAheadLog? wal = null, ILogger logger = null){
         this.wal = wal;
@@ -30,7 +28,6 @@ public class TransactionManager {
         ctxPool = new SimpleObjectPool<TransactionContext>(() => new TransactionContext(tables));
         committer = new Thread[numThreads];
         txnQueue = new BlockingCollection<TransactionContext>(MAX_QUEUE_SIZE);
-        stopwatch = Stopwatch.StartNew();
 
         for (int i = 0; i < committer.Length; i++) {
             committer[i] = new Thread(() => {
@@ -52,7 +49,7 @@ public class TransactionManager {
     /// <returns>Newly created transaction context</returns>
     public TransactionContext Begin(){
         var ctx = ctxPool.Checkout();
-        ctx.Init(startTxn: txnc, NewTransactionId(), stopwatch.ElapsedTicks);
+        ctx.Init(startTxn: txnc, NewTransactionId());
         if (wal != null) {
             wal.Begin(ctx.tid);            
         }

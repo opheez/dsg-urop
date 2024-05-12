@@ -637,13 +637,8 @@ public class TpccBenchmark : TableBenchmark {
     {
         Action<bool, TransactionContext> incrementCount = (success, ctx) => {
             if (success) {
-                Console.WriteLine($"{Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds} {(txnManager.stopwatch.ElapsedTicks - ctx.startTime) * 1000.0 / Stopwatch.Frequency}; start: {ctx.startTime}, end: {Stopwatch.GetTimestamp()}");
-                stats?.AddLatencyResult((long)((txnManager.stopwatch.ElapsedTicks - ctx.startTime) * 1000.0 / Stopwatch.Frequency));
+                stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
                 Interlocked.Increment(ref successCounts[thread_idx]);
-            //     Console.WriteLine($"Thread {thread_idx} success count now {successCounts[thread_idx]}");
-            // } else {
-            //     Interlocked.Increment(ref abortCounts[thread_idx]);
-            //     Console.WriteLine($"Thread {thread_idx} failed count now {abortCounts[thread_idx]}");
             }
             cde.Signal();
         };
