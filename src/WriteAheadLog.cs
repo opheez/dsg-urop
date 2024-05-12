@@ -147,6 +147,7 @@ public class DarqWal : IWriteAheadLog {
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         foreach (var item in darqLsnsToConsume) {
             long darqLsn = item.Item1;
+            if (darqLsn == -1) continue;
             requestBuilder.MarkMessageConsumed(darqLsn);
         }
         // todo: fix lsn

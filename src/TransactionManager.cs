@@ -295,6 +295,7 @@ public class ShardedTransactionManager : TransactionManager {
                 PrintDebug($"Created waiting for OK list", ctx);
                 txnIdToOKDarqLsns[ctx.tid] = new List<(long, long)>();
                 for (int shard = 0; shard < rpcClient.GetNumServers(); shard++){
+                    // skip if self because we consider done when ack number is numServers - 1
                     if (shard == rpcClient.GetId() || shardToWriteset.ContainsKey(shard)) continue;
                     txnIdToOKDarqLsns[ctx.tid].Add((-1, shard)); // hacky way to indicate that we don't need to wait for this shard
                 }

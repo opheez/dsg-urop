@@ -637,7 +637,7 @@ public class TpccBenchmark : TableBenchmark {
     {
         Action<bool, TransactionContext> incrementCount = (success, ctx) => {
             if (success) {
-                stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
+                if (ctx.tid % 10 == 0) stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
                 Interlocked.Increment(ref successCounts[thread_idx]);
             }
             cde.Signal();
