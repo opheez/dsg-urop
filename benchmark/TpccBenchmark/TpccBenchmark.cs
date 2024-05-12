@@ -678,8 +678,9 @@ public class TpccBenchmark : TableBenchmark {
 
     public void GenerateTables(){
         GenerateItemData();
-        for (int j = 0; j < tpcCfg.NumWh; j++) {
-            int w_id = 1 + j;
+        int partitionsPerMachine = tpcCfg.PartitionsPerThread * cfg.threadCount;
+        for (int j = 0; j < partitionsPerMachine; j++) {
+            int w_id = 1 + j + (PartitionId * partitionsPerMachine);
             GenerateWarehouseData(w_id);
             GenerateCustomerData(w_id);
             GenerateDistrictData(w_id);

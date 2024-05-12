@@ -17,10 +17,10 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 unsafe class Program {
 
-    public static int NumProcessors = 2;
-    public static int NComitterThreads = 2;
-    public static int PartitionsPerThread = 2;
-    public static int ThreadCount = 2;
+    public static int NumProcessors = 4;
+    public static int NComitterThreads = 5;
+    public static int PartitionsPerThread = 4;
+    public static int ThreadCount = 3;
 
     // public static void Main(){
     //     Console.WriteLine("Hello, World!");
@@ -188,8 +188,8 @@ unsafe class Program {
         Dictionary<long, GrpcChannel> clusterMap = new Dictionary<long, GrpcChannel>();
         clusterMap[0] = GrpcChannel.ForAddress("http://10.1.0.4:5000");        
         clusterMap[1] = GrpcChannel.ForAddress("http://10.1.0.5:5000");        
-        // clusterMap[2] = GrpcChannel.ForAddress("http://10.1.0.6:5000");        
-        // clusterMap[3] = GrpcChannel.ForAddress("http://10.1.0.7:5000");       
+        clusterMap[2] = GrpcChannel.ForAddress("http://10.1.0.6:5000");        
+        clusterMap[3] = GrpcChannel.ForAddress("http://10.1.0.7:5000");       
 
         builder.Services.AddGrpc();
         builder.WebHost.ConfigureKestrel(serverOptions =>
@@ -318,7 +318,8 @@ unsafe class Program {
         // TableBenchmark benchmark = new ShardedBenchmark("2pc", ycsbCfg, stm, tables[0], darqWal);
         builder.Services.AddSingleton<TpccBenchmark>(provider => {
             TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, provider.GetRequiredService<ShardedTransactionManager>());
-            benchmark.PopulateTables();
+            benchmark.GenerateTables();
+            // benchmark.PopulateTables();
             return benchmark;
         }
         );
