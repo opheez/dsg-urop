@@ -7,6 +7,8 @@ public class ShardedBenchmark : TableBenchmark
 {
     private TransactionManager txnManager;
     private Table table;
+    private CountdownEvent cde;
+    internal int[] successCounts;
     public ShardedBenchmark(string name, BenchmarkConfig cfg, ShardedTransactionManager txnManager, ShardedTable table, IWriteAheadLog? wal = null) : base(cfg) {
         System.Console.WriteLine("Init");
         this.txnManager = txnManager;
@@ -14,6 +16,8 @@ public class ShardedBenchmark : TableBenchmark
         this.wal = wal;
         Random r = new Random(cfg.seed);
         td = table.GetSchema();
+        cde = new CountdownEvent(cfg.threadCount * cfg.perThreadDataCount);
+        successCounts = new int[cfg.threadCount];
 
         // randomly assign reads and writes
         int numWrites = (int)(cfg.datasetSize * cfg.ratio);
@@ -44,20 +48,23 @@ public class ShardedBenchmark : TableBenchmark
         txnManager.Reset();
         txnManager.Run();
         var insertSw = Stopwatch.StartNew();
-        int insertAborts = InsertMultiThreadedTransactions(table, txnManager); // setup
+        InsertMultiThreadedTransactions(table, txnManager); // setup
+        cde.Wait();
         insertSw.Stop();
         long insertMs = insertSw.ElapsedMilliseconds;
-        stats?.AddTransactionalResult(ims: insertMs, insAborts: insertAborts);
+        stats?.AddTransactionalResult(ims: insertMs, insAborts: cfg.datasetSize - successCounts.Sum());
         System.Console.WriteLine("done inserting");
     }
 
     override public void RunTransactions(){
+        cde.Reset(cfg.threadCount * cfg.perThreadDataCount);
         for (int i = 0; i < cfg.iterationCount; i++){
             var opSw = Stopwatch.StartNew();
-            int txnAborts = WorkloadMultiThreadedTransactions(table, txnManager, cfg.ratio);
+            WorkloadMultiThreadedTransactions(table, txnManager, cfg.ratio);
+            cde.Wait();
             opSw.Stop();
             long opMs = opSw.ElapsedMilliseconds;
-            stats?.AddTransactionalResult(oms: opMs, txnAborts: txnAborts);
+            stats?.AddTransactionalResult(oms: opMs, txnAborts: cfg.datasetSize - successCounts.Sum());
             txnManager.Terminate();
         }
         // TODO: reset table and 
@@ -66,6 +73,13 @@ public class ShardedBenchmark : TableBenchmark
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
+        Action<bool, TransactionContext> incrementCount = (success, ctx) => {
+            if (success) {
+                if (ctx.tid % 10 == 0) stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
+                Interlocked.Increment(ref successCounts[thread_idx]);
+            }
+            cde.Signal();
+        };
         int abortCount = 0;
         int c = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
@@ -74,14 +88,42 @@ public class ShardedBenchmark : TableBenchmark
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
                 tbl.Insert(ref keys[loc], values[loc], t);
             }
-            var success = txnManager.Commit(t);
-            if (!success){
-                abortCount++;
-            } else {
-                c++;
-            }
+            txnManager.CommitWithCallback(t, incrementCount);
         }
         return abortCount;
+    }
+
+    override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
+    {
+        Action<bool, TransactionContext> incrementCount = (success, ctx) => {
+            if (success) {
+                if (ctx.tid % 10 == 0) stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
+                Interlocked.Increment(ref successCounts[thread_idx]);
+            }
+            cde.Signal();
+        };
+        for (int i = 0; i < cfg.perThreadDataCount; i += 1){
+            TransactionContext ctx = txnManager.Begin();
+            for (int j = 0; j < cfg.perTransactionCount; j++){
+                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                PrimaryKey key = keys[loc];
+
+                if (isWrite[loc]) {
+                    // shift value by thread_idx to write new value
+                    int newValueIndex = loc + thread_idx < values.Length ?  loc + thread_idx : values.Length - 1;
+                    byte[] val = values[newValueIndex];
+                    table.Update(ref key, td, val, ctx);
+                } else {
+                    table.Read(key, td, ctx);
+                }
+            }
+            txnManager.CommitWithCallback(ctx, incrementCount);
+        }
+        // return abortCount;
+
+        // cde.Wait();
+        // return abortCount;
+        return 0;
     }
 }
 }
