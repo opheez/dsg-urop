@@ -39,22 +39,25 @@ public class ShardedBenchmark : TableBenchmark
         stats = new BenchmarkStatistics($"{name}-ShardedBenchmark", cfg, numWrites, cfg.datasetSize);
         System.Console.WriteLine("Done init");
     }
+    
+    public void PopulateTables(){
+        txnManager.Reset();
+        txnManager.Run();
+        var insertSw = Stopwatch.StartNew();
+        int insertAborts = InsertMultiThreadedTransactions(table, txnManager); // setup
+        insertSw.Stop();
+        long insertMs = insertSw.ElapsedMilliseconds;
+        stats?.AddTransactionalResult(ims: insertMs, insAborts: insertAborts);
+        System.Console.WriteLine("done inserting");
+    }
 
     override public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
-            txnManager.Reset();
-            txnManager.Run();
-            // tables.Add(tbl.GetHashCode(), tbl);
-            var insertSw = Stopwatch.StartNew();
-            int insertAborts = InsertMultiThreadedTransactions(table, txnManager); // setup
-            insertSw.Stop();
-            System.Console.WriteLine("done inserting");
-            long insertMs = insertSw.ElapsedMilliseconds;
             var opSw = Stopwatch.StartNew();
             int txnAborts = WorkloadMultiThreadedTransactions(table, txnManager, cfg.ratio);
             opSw.Stop();
             long opMs = opSw.ElapsedMilliseconds;
-            stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+            stats?.AddTransactionalResult(oms: opMs, txnAborts: txnAborts);
             txnManager.Terminate();
         }
         // TODO: reset table and 

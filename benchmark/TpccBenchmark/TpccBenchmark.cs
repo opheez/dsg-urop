@@ -625,7 +625,7 @@ public class TpccBenchmark : TableBenchmark {
             int txnAborts = cfg.datasetSize - successCounts.Sum();
             Console.WriteLine($"abort count {txnAborts}");
             long opMs = opSw.ElapsedMilliseconds;
-            stats?.AddTransactionalResult((0, opMs, 0, txnAborts));
+            stats?.AddTransactionalResult(0, opMs, 0, txnAborts);
             // txnManager.Terminate();
         }
 

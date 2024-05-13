@@ -172,7 +172,7 @@ public abstract class TableBenchmark
                 int txnAborts = WorkloadMultiThreadedTransactions(tbl, txnManager, cfg.ratio);
                 opSw.Stop();
                 long opMs = opSw.ElapsedMilliseconds;
-                stats?.AddTransactionalResult((insertMs, opMs, insertAborts, txnAborts));
+                stats?.AddTransactionalResult(insertMs, opMs, insertAborts, txnAborts);
                 txnManager.Terminate();
             }
         }
@@ -208,12 +208,12 @@ public class BenchmarkStatistics {
         opsMsPerRun.Add(result.oms);
     }
 
-    internal void AddTransactionalResult((long ims, long oms, int insAborts, int txnAborts) result)
+    internal void AddTransactionalResult(long ims = -1, long oms = -1, int insAborts = -1, int txnAborts = -1)
     {
-        insMsPerRun.Add(result.ims);
-        opsMsPerRun.Add(result.oms);
-        insAbortsPerRun.Add(result.insAborts);
-        txnAbortsPerRun.Add(result.txnAborts);
+        if (ims != -1) insMsPerRun.Add(ims);
+        if (oms != -1) opsMsPerRun.Add(oms);
+        if (insAborts != -1) insAbortsPerRun.Add(insAborts);
+        if (txnAborts != -1) txnAbortsPerRun.Add(txnAborts);
     }
 
     internal void AddLatencyResult(long lat)
