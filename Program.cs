@@ -233,55 +233,55 @@ unsafe class Program {
             ));
         Dictionary<int, ShardedTable> tables = new Dictionary<int, ShardedTable>();
 
-        // // uncomment for YCSB
-        // YcsbRpcClient rpcClient = new YcsbRpcClient(partitionId, clusterMap);
-        // builder.Services.AddSingleton<YcsbRpcClient>(rpcClient);
-        // var schema = TpccSchema.ITEM_SCHEMA;
-        // tables[0] = new ShardedTable(0, schema, rpcClient);
+        // uncomment for YCSB
+        YcsbRpcClient rpcClient = new YcsbRpcClient(partitionId, clusterMap);
+        builder.Services.AddSingleton<YcsbRpcClient>(rpcClient);
+        var schema = new (long, int)[] { (0, 10), (1, 10), (2, 10), (3, 10), (4, 10), (5, 10), (6, 10), (7, 10), (8, 10), (9, 10)};
+        tables[0] = new ShardedTable(0, schema, rpcClient);
 
-        // uncomment for TPC-C
-        TpccRpcClient rpcClient = new TpccRpcClient(partitionId, clusterMap);
-        builder.Services.AddSingleton<TpccRpcClient>(rpcClient);
-        foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
-            (long, int)[] schema;
-            switch (tEnum) {
-                case TableType.Warehouse:
-                    schema = TpccSchema.WAREHOUSE_SCHEMA;
-                    break;
-                case TableType.District:
-                    schema = TpccSchema.DISTRICT_SCHEMA;
-                    break;
-                case TableType.Customer:
-                    schema = TpccSchema.CUSTOMER_SCHEMA;
-                    break;
-                case TableType.History:
-                    schema = TpccSchema.HISTORY_SCHEMA;
-                    break;  
-                case TableType.Item:
-                    schema = TpccSchema.ITEM_SCHEMA;
-                    break;
-                case TableType.NewOrder:
-                    schema = TpccSchema.NEW_ORDER_SCHEMA;
-                    break;
-                case TableType.Order:
-                    schema = TpccSchema.ORDER_SCHEMA;
-                    break;
-                case TableType.OrderLine:
-                    schema = TpccSchema.ORDER_LINE_SCHEMA;
-                    break;
-                case TableType.Stock:
-                    schema = TpccSchema.STOCK_SCHEMA;
-                    break;
-                default:
-                    throw new Exception("Invalid table type");
-            }
-            int i = (int)tEnum;
-            tables[i] = new ShardedTable(
-                i,
-                schema,
-                rpcClient
-            );
-        }
+        // // uncomment for TPC-C
+        // TpccRpcClient rpcClient = new TpccRpcClient(partitionId, clusterMap);
+        // builder.Services.AddSingleton<TpccRpcClient>(rpcClient);
+        // foreach (TableType tEnum in Enum.GetValues(typeof(TableType))){
+        //     (long, int)[] schema;
+        //     switch (tEnum) {
+        //         case TableType.Warehouse:
+        //             schema = TpccSchema.WAREHOUSE_SCHEMA;
+        //             break;
+        //         case TableType.District:
+        //             schema = TpccSchema.DISTRICT_SCHEMA;
+        //             break;
+        //         case TableType.Customer:
+        //             schema = TpccSchema.CUSTOMER_SCHEMA;
+        //             break;
+        //         case TableType.History:
+        //             schema = TpccSchema.HISTORY_SCHEMA;
+        //             break;  
+        //         case TableType.Item:
+        //             schema = TpccSchema.ITEM_SCHEMA;
+        //             break;
+        //         case TableType.NewOrder:
+        //             schema = TpccSchema.NEW_ORDER_SCHEMA;
+        //             break;
+        //         case TableType.Order:
+        //             schema = TpccSchema.ORDER_SCHEMA;
+        //             break;
+        //         case TableType.OrderLine:
+        //             schema = TpccSchema.ORDER_LINE_SCHEMA;
+        //             break;
+        //         case TableType.Stock:
+        //             schema = TpccSchema.STOCK_SCHEMA;
+        //             break;
+        //         default:
+        //             throw new Exception("Invalid table type");
+        //     }
+        //     int i = (int)tEnum;
+        //     tables[i] = new ShardedTable(
+        //         i,
+        //         schema,
+        //         rpcClient
+        //     );
+        // }
         
         
         builder.Services.AddSingleton<Dictionary<int, ShardedTable>>(tables);
@@ -297,7 +297,7 @@ unsafe class Program {
             ratio: 0.2,
             attrCount: 10,
             threadCount: ThreadCount,
-            insertThreadCount: 12,
+            // insertThreadCount: 12,
             iterationCount: 1,
             nCommitterThreads: NComitterThreads
             // perThreadDataCount: 100
@@ -315,14 +315,16 @@ unsafe class Program {
         );
 
         // TableBenchmark benchmark = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, darqWal);
-        // TableBenchmark benchmark = new ShardedBenchmark("2pc", ycsbCfg, stm, tables[0], darqWal);
-        builder.Services.AddSingleton<TpccBenchmark>(provider => {
-            TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, provider.GetRequiredService<ShardedTransactionManager>());
-            benchmark.GenerateTables();
-            // benchmark.PopulateTables();
-            return benchmark;
-        }
+        builder.Services.AddSingleton<TableBenchmark>(provider => 
+            new ShardedBenchmark("2pc", ycsbCfg, provider.GetRequiredService<ShardedTransactionManager>(), tables[0], provider.GetRequiredService<DarqWal>());
         );
+        // builder.Services.AddSingleton<TpccBenchmark>(provider => {
+        //     TpccBenchmark benchmark = new TpccBenchmark((int)partitionId, tpccConfig, ycsbCfg, tables, provider.GetRequiredService<ShardedTransactionManager>());
+        //     benchmark.GenerateTables();
+        //     // benchmark.PopulateTables();
+        //     return benchmark;
+        // }
+        // );
         builder.Services.AddSingleton<DarqMaintenanceBackgroundService>(provider =>
             new DarqMaintenanceBackgroundService(
                 provider.GetRequiredService<ILogger<DarqMaintenanceBackgroundService>>(),
@@ -343,7 +345,7 @@ unsafe class Program {
                 provider.GetRequiredService<ShardedTransactionManager>(),
                 provider.GetRequiredService<DarqWal>(),
                 provider.GetRequiredService<Darq>(),
-                provider.GetRequiredService<TpccBenchmark>(),
+                provider.GetRequiredService<TableBenchmark>(),
                 provider.GetRequiredService<ILogger<DarqTransactionBackgroundService>>()
             )
         );

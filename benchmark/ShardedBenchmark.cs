@@ -34,7 +34,7 @@ public class ShardedBenchmark : TableBenchmark
         }
 
         for (int i = 0; i < cfg.datasetSize; i++){
-            keys[i] = new PrimaryKey(table.GetId(), (i % 100000) + 1);
+            keys[i] = new PrimaryKey(table.GetId(), i);
         }
         stats = new BenchmarkStatistics($"{name}-ShardedBenchmark", cfg, numWrites, cfg.datasetSize);
         System.Console.WriteLine("Done init");
