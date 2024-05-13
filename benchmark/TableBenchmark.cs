@@ -188,7 +188,7 @@ public abstract class TableBenchmark
 public class BenchmarkStatistics {
     internal readonly List<long> insMsPerRun = new List<long>();
     internal readonly List<long> opsMsPerRun = new List<long>();
-    internal readonly List<long> latMsPerTxn = new List<long>();
+    internal readonly List<long> latMsPerTxn = new List<long>(1200000);
     internal readonly List<int> insAbortsPerRun = new List<int>();
     internal readonly List<int> txnAbortsPerRun = new List<int>();
     internal string name;

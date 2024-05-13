@@ -316,7 +316,7 @@ unsafe class Program {
 
         // TableBenchmark benchmark = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, darqWal);
         builder.Services.AddSingleton<TableBenchmark>(provider => {
-            ShardedBenchmark benchmark = new ShardedBenchmark("2pc", ycsbCfg, provider.GetRequiredService<ShardedTransactionManager>(), tables[0], provider.GetRequiredService<DarqWal>());
+            ShardedBenchmark benchmark = new ShardedBenchmark(partitionId, NumProcessors, "2pc", ycsbCfg, provider.GetRequiredService<ShardedTransactionManager>(), tables[0], provider.GetRequiredService<DarqWal>());
             // benchmark.PopulateTables();
             return benchmark;
         });

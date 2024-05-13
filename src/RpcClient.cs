@@ -118,8 +118,8 @@ public class YcsbRpcClient : RpcClient
     }
 
     public override long HashKeyToDarqId(PrimaryKey key){
-        // round robin partitioning
-        return key.Key1 % clusterMap.Count;
+        // range partitioning
+        return (key.Key1 / 1200000) % clusterMap.Count; // TODO: make it datasetSize
     }
 
 }

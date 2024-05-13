@@ -5,12 +5,14 @@ namespace DB
 {
 public class ShardedBenchmark : TableBenchmark
 {
+    private int partitionId;
     private TransactionManager txnManager;
     private Table table;
     private CountdownEvent cde;
     internal int[] successCounts;
-    public ShardedBenchmark(string name, BenchmarkConfig cfg, ShardedTransactionManager txnManager, ShardedTable table, IWriteAheadLog? wal = null) : base(cfg) {
+    public ShardedBenchmark(int partitionId, int numProcessors, string name, BenchmarkConfig cfg, ShardedTransactionManager txnManager, ShardedTable table, IWriteAheadLog? wal = null) : base(cfg) {
         System.Console.WriteLine("Init");
+        this.partitionId = partitionId;
         this.txnManager = txnManager;
         this.table = table;
         this.wal = wal;
@@ -38,7 +40,10 @@ public class ShardedBenchmark : TableBenchmark
         }
 
         for (int i = 0; i < cfg.datasetSize; i++){
-            keys[i] = new PrimaryKey(table.GetId(), i);
+            int key = (cfg.datasetSize * partitionId) + i;
+            int randVal = r.Next(0, 100);
+            if (randVal < 20) key += cfg.datasetSize * (randVal % numProcessors);
+            keys[i] = new PrimaryKey(table.GetId(), key);
         }
         stats = new BenchmarkStatistics($"{name}-ShardedBenchmark", cfg, numWrites, cfg.datasetSize);
         System.Console.WriteLine("Done init");
