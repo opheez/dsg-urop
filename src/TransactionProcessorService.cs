@@ -139,24 +139,15 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
     {
         Console.WriteLine("Got enq");
         switch (request.Workload) {
-            case "ycsb_single":
-                // only uses single table
-                // TableBenchmark ycsb_single = new FixedLenTableBenchmark("ycsb_local", ycsbCfg, wal);
-                // ycsb_single.RunTransactions();
+            case "populate":
+                new Thread(() => {
+                    benchmark.PopulateTables();
+                }).Start();
                 break;
-            case "ycsb":
-                // only uses single table
-                // TableBenchmark b = new ShardedBenchmark("2pc", ycsbCfg, txnManager, tables[0], wal);
-                // b.RunTransactions();
-                break;
-            case "tpcc":
-                Thread t = new Thread(() => {
+            case "workload":
+                new Thread(() => {
                     benchmark.RunTransactions();
-                });
-                t.Start();
-                // t.Join();
-                // benchmark.RunTransactions();
-                // tpccBenchmark.GenerateTables();
+                }).Start();
                 break;
             default:
                 throw new NotImplementedException();

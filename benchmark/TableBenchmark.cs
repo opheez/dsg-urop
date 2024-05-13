@@ -152,6 +152,10 @@ public abstract class TableBenchmark
         return totalAborts;
     }
 
+    virtual public void PopulateTables(){
+        throw new NotImplementedException();
+    }
+
     virtual public void RunTransactions(){
         for (int i = 0; i < cfg.iterationCount; i++){
             (long, int)[] schema = new (long, int)[cfg.attrCount];

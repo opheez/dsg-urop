@@ -40,7 +40,7 @@ public class ShardedBenchmark : TableBenchmark
         System.Console.WriteLine("Done init");
     }
     
-    public void PopulateTables(){
+    override public void PopulateTables(){
         txnManager.Reset();
         txnManager.Run();
         var insertSw = Stopwatch.StartNew();
