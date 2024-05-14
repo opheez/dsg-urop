@@ -64,6 +64,8 @@ public class ShardedBenchmark : TableBenchmark
     override public void RunTransactions(){
         cde.Reset(cfg.threadCount * cfg.perThreadDataCount);
         for (int i = 0; i < cfg.iterationCount; i++){
+            txnManager.Reset();
+            txnManager.Run();
             var opSw = Stopwatch.StartNew();
             WorkloadMultiThreadedTransactions(table, txnManager, cfg.ratio);
             cde.Wait();
