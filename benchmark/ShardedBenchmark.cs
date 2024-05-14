@@ -50,14 +50,13 @@ public class ShardedBenchmark : TableBenchmark
     }
     
     override public void PopulateTables(){
-        txnManager.Reset();
-        txnManager.Run();
-        var insertSw = Stopwatch.StartNew();
+        // txnManager.Reset();
+        // txnManager.Run();
+        // var insertSw = Stopwatch.StartNew();
         InsertMultiThreadedTransactions(table, txnManager); // setup
-        cde.Wait();
-        insertSw.Stop();
-        long insertMs = insertSw.ElapsedMilliseconds;
-        stats?.AddTransactionalResult(ims: insertMs, insAborts: cfg.datasetSize - successCounts.Sum());
+        // insertSw.Stop();
+        // long insertMs = insertSw.ElapsedMilliseconds;
+        // stats?.AddTransactionalResult(ims: insertMs, insAborts: cfg.datasetSize - successCounts.Sum());
         System.Console.WriteLine("done inserting");
     }
 
@@ -78,24 +77,25 @@ public class ShardedBenchmark : TableBenchmark
     }
 
     override protected internal int InsertSingleThreadedTransactions(Table tbl, TransactionManager txnManager, int thread_idx){
-        Action<bool, TransactionContext> incrementCount = (success, ctx) => {
-            if (success) {
-                if (ctx.tid % 10 == 0) stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
-                Interlocked.Increment(ref successCounts[thread_idx]);
-            }
-            cde.Signal();
-        };
-        int abortCount = 0;
-        int c = 0;
+        // Action<bool, TransactionContext> incrementCount = (success, ctx) => {
+        //     if (success) {
+        //         if (ctx.tid % 10 == 0) stats?.AddLatencyResult(Stopwatch.GetElapsedTime(ctx.startTime).Milliseconds);
+        //         Interlocked.Increment(ref successCounts[thread_idx]);
+        //     }
+        //     cde.Signal();
+        // };
+        // int abortCount = 0;
+        // int c = 0;
         for (int i = 0; i < cfg.perThreadDataCount; i += cfg.perTransactionCount){
-            TransactionContext t = txnManager.Begin();
+            // TransactionContext t = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++) {
                 int loc = i + j + (cfg.perThreadDataCount * thread_idx);
-                tbl.Insert(ref keys[loc], values[loc], t);
+                PrimaryKey pk = new PrimaryKey(tbl.GetId(), (cfg.datasetSize * partitionId) + loc);
+                tbl.Write(ref pk, tbl.GetSchema(), values[loc]);
             }
-            txnManager.CommitWithCallback(t, incrementCount);
+            // txnManager.CommitWithCallback(t, incrementCount);
         }
-        return abortCount;
+        return 0;
     }
 
     override protected internal int WorkloadSingleThreadedTransactions(Table table, TransactionManager txnManager, int thread_idx, double ratio)
