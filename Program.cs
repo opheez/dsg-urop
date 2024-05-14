@@ -297,7 +297,7 @@ unsafe class Program {
             ratio: 0.2,
             attrCount: 10,
             threadCount: ThreadCount,
-            // insertThreadCount: 12,
+            insertThreadCount: 12,
             iterationCount: 1,
             nCommitterThreads: NComitterThreads
             // perThreadDataCount: 100

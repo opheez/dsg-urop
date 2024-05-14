@@ -19,7 +19,7 @@ public class ShardedBenchmark : TableBenchmark
         Random r = new Random(cfg.seed);
         td = table.GetSchema();
         cde = new CountdownEvent(cfg.threadCount * cfg.perThreadDataCount);
-        successCounts = new int[cfg.threadCount];
+        successCounts = new int[Math.Max(cfg.threadCount, cfg.perThreadDataCount)];
 
         // randomly assign reads and writes
         int numWrites = (int)(cfg.datasetSize * cfg.ratio);
@@ -110,7 +110,7 @@ public class ShardedBenchmark : TableBenchmark
         for (int i = 0; i < cfg.perThreadDataCount; i += 1){
             TransactionContext ctx = txnManager.Begin();
             for (int j = 0; j < cfg.perTransactionCount; j++){
-                int loc = i + j + (cfg.perThreadDataCount * thread_idx);
+                int loc = i + j + (cfg.datasetSize / cfg.insertThreadCount * thread_idx);
                 PrimaryKey key = keys[loc];
 
                 if (isWrite[loc]) {
