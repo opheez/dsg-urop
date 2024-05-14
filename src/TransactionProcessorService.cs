@@ -183,13 +183,14 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
     }
 
     private long GetOrRegisterTid(long partitionId, long tid) {
-        PrintDebug($"Getting or registering tid: ({partitionId}, {tid})");
-        if (externalToInternalTxnId.ContainsKey((partitionId, tid))) 
+        if (externalToInternalTxnId.ContainsKey((partitionId, tid))) {
+            Console.WriteLine($"Getting tid: ({partitionId}, {tid}) = {externalToInternalTxnId[(partitionId, tid)]}");
             return externalToInternalTxnId[(partitionId, tid)];
+        }
 
         var ctx = txnManager.Begin();
         long internalTid = ctx.tid;
-        PrintDebug("Registering new tid: " + internalTid);
+        Console.WriteLine($"Registering new tid: ({partitionId}, {tid}) = {internalTid}");
         externalToInternalTxnId[(partitionId, tid)] = internalTid;
         txnIdToTxnCtx[internalTid] = ctx;
         return internalTid;
