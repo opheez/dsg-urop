@@ -40,9 +40,10 @@ public class ShardedBenchmark : TableBenchmark
         }
 
         for (int i = 0; i < cfg.datasetSize; i++){
-            int key = (cfg.datasetSize * partitionId) + i;
+            int partition = partitionId;
             int randVal = r.Next(0, 100);
-            if (randVal < 20) key += cfg.datasetSize * (randVal % numProcessors);
+            if (randVal < 20) partition = randVal % numProcessors;
+            int key = (cfg.datasetSize * partition) + i;
             keys[i] = new PrimaryKey(table.GetId(), key);
         }
         stats = new BenchmarkStatistics($"{name}-ShardedBenchmark", cfg, numWrites, cfg.datasetSize);
