@@ -184,13 +184,13 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
 
     private long GetOrRegisterTid(long partitionId, long tid) {
         if (externalToInternalTxnId.ContainsKey((partitionId, tid))) {
-            Console.WriteLine($"Getting tid: ({partitionId}, {tid}) = {externalToInternalTxnId[(partitionId, tid)]}");
+            PrintDebug($"Getting tid: ({partitionId}, {tid}) = {externalToInternalTxnId[(partitionId, tid)]}");
             return externalToInternalTxnId[(partitionId, tid)];
         }
 
         var ctx = txnManager.Begin();
         long internalTid = ctx.tid;
-        Console.WriteLine($"Registering new tid: ({partitionId}, {tid}) = {internalTid}");
+        PrintDebug($"Registering new tid: ({partitionId}, {tid}) = {internalTid}");
         externalToInternalTxnId[(partitionId, tid)] = internalTid;
         txnIdToTxnCtx[internalTid] = ctx;
         return internalTid;
@@ -270,7 +270,7 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
                             ctx.AddWriteSet(ref pk, entry.tupleDescs[i], entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
-                        PrintDebug($"Validated at node {partitionId}: {success}; now sending OK to {sender}");                            
+                        PrintDebug($"Validated global tid {ctx.tid} internal tid {internalTid} at node {partitionId}: {success}; now sending OK to {sender}");                            
                         LogEntry okEntry = new LogEntry(partitionId, entry.tid, success ? LogType.Ok : LogType.Abort);
                         requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
                         break;
@@ -284,7 +284,7 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
                         
                         txnManager.Write(txnIdToTxnCtx[internalTid]);
 
-                        PrintDebug($"Committed at node {partitionId}; now sending ACK to {sender}");
+                        PrintDebug($"Committed g{entry.tid} i{internalTid} at node {partitionId}; now sending ACK to {sender}");
                         LogEntry ackEntry = new LogEntry(partitionId, entry.tid, LogType.Ack);
                         requestBuilder.AddOutMessage(new DarqId(sender), ackEntry.ToBytes());
                         break;

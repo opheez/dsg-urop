@@ -149,7 +149,8 @@ public class TransactionManager {
         }
         
         foreach (TransactionContext pastTxn in finish_active){
-            foreach (var item in pastTxn.GetWritesetKeys()){
+            PrintDebug($"validating against {pastTxn.tid}", ctx);
+            foreach (var item in pastTxn.GetWritesetKeys().ToList()){
                 PrimaryKey tupleId = item;
                 if (ctx.InReadSet(ref tupleId) || ctx.InWriteSet(ref tupleId)){
                     // Console.WriteLine($"2 ABORT for {ctx.tid} because conflict: {tupleId} in {pastTxn.tid}");
@@ -260,7 +261,7 @@ public class ShardedTransactionManager : TransactionManager {
         txnIdToOKDarqLsns[tid].Add((darqLsn, shard));        
         // wal.RecordOk(tid, shard);
 
-        PrintDebug($"Marked acked", ctx);
+        PrintDebug($"Marked acked as {status}", ctx);
 
         if (txnIdToOKDarqLsns[tid].Count == rpcClient.GetNumServers() - 1){
             ctx.status = TransactionStatus.Validated;
