@@ -233,14 +233,14 @@ public class BenchmarkStatistics {
             "-----TPCC CONFIG-----",
             tpcCfg?.ToString(),
             "-----STATS-----",
-            GetInsDataString(operations, insMsPerRun),
+            // GetInsDataString(operations, insMsPerRun),
             GetOpsDataString(inserts, operations-inserts, opsMsPerRun, txnAbortsPerRun),
             GetLatDataString(latMsPerTxn)
         };
 
         if (insAbortsPerRun.Count != 0) {
             data = data.Concat(new string[]{
-                GetInsAbortDataString(insAbortsPerRun),
+                // GetInsAbortDataString(insAbortsPerRun),
                 GetTxnAbortDataString(txnAbortsPerRun)
             }).ToArray();
         }

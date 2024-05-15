@@ -122,7 +122,7 @@ public class DarqWal : IWriteAheadLog {
         foreach (var shard in shardToWriteset) {
             long darqId = shard.Key;
             List<(PrimaryKey, TupleDesc[], byte[])> writeset = shard.Value;
-            LogEntry outEntry = new LogEntry(0, tid, writeset.Select(x => x.Item1).ToArray(), writeset.Select(x => x.Item2).ToArray(), writeset.Select(x => x.Item3).ToArray());
+            LogEntry outEntry = new LogEntry(partitionId.guid, tid, writeset.Select(x => x.Item1).ToArray(), writeset.Select(x => x.Item2).ToArray(), writeset.Select(x => x.Item3).ToArray());
             // PrintDebug($"sending prepare msg to {darqId} with keys {string.Join(", ", writeset.Select(x => x.Item1))}");
             requestBuilder.AddOutMessage(new DarqId(darqId), outEntry.ToBytes());
         }
@@ -144,16 +144,12 @@ public class DarqWal : IWriteAheadLog {
 
         LogEntry entry = new LogEntry(txnTbl[tid], tid, type);
         entry.lsn = GetNewLsn();
+        LogEntry outEntry = new LogEntry(0, entry.tid, LogType.Commit);
         requestBuilder.AddRecoveryMessage(entry.ToBytes());
         foreach (var item in darqLsnsToConsume) {
-            long darqLsn = item.Item1;
+            (long darqLsn, long shard) = item;
             if (darqLsn == -1) continue;
             requestBuilder.MarkMessageConsumed(darqLsn);
-        }
-        // todo: fix lsn
-        LogEntry outEntry = new LogEntry(0, entry.tid, LogType.Commit);
-        foreach (var item in darqLsnsToConsume) {
-            long shard = item.Item2;
             requestBuilder.AddOutMessage(new DarqId(shard), outEntry.ToBytes());
         }
 

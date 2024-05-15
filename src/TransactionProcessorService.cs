@@ -140,14 +140,10 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
         Console.WriteLine("Got enq");
         switch (request.Workload) {
             case "populate":
-                new Thread(() => {
-                    benchmark.PopulateTables();
-                }).Start();
+                benchmark.PopulateTables();
                 break;
             case "workload":
-                new Thread(() => {
-                    benchmark.RunTransactions();
-                }).Start();
+                benchmark.RunTransactions();
                 break;
             default:
                 throw new NotImplementedException();
@@ -270,7 +266,7 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
                             ctx.AddWriteSet(ref pk, entry.tupleDescs[i], entry.vals[i]);
                         }
                         bool success = txnManager.Validate(ctx);
-                        PrintDebug($"Validated global tid {ctx.tid} internal tid {internalTid} at node {partitionId}: {success}; now sending OK to {sender}");                            
+                        PrintDebug($"Validated global tid {entry.tid} internal tid {internalTid} at node {partitionId}: {success}; now sending OK to {sender}");                            
                         LogEntry okEntry = new LogEntry(partitionId, entry.tid, success ? LogType.Ok : LogType.Abort);
                         requestBuilder.AddOutMessage(new DarqId(sender), okEntry.ToBytes());
                         break;

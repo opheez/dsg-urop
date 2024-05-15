@@ -20,7 +20,7 @@ unsafe class Program {
     public static int NumProcessors = 4;
     public static int NComitterThreads = 5;
     public static int PartitionsPerThread = 4;
-    public static int ThreadCount = 3;
+    public static int ThreadCount = 12;
 
     // public static void Main(){
     //     Console.WriteLine("Hello, World!");

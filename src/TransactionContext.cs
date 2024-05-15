@@ -72,7 +72,6 @@ public class TransactionContext {
     }
 
     public void AddWriteSet(ref PrimaryKey tupleId, TupleDesc[] tupleDescs, ReadOnlySpan<byte> val){
-        Console.WriteLine($"Adding to writeset ctx {tid}");
         int index = GetWriteSetKeyIndex(ref tupleId);
         if (index != -1){
             (TupleDesc[], byte[]) existing = Wset[index];

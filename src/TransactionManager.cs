@@ -10,7 +10,7 @@ namespace DB {
 public class TransactionManager {
     private static readonly int MAX_QUEUE_SIZE = 4;
     internal BlockingCollection<TransactionContext> txnQueue;
-    internal static int pastTnumCircularBufferSize = 1 << 14;
+    internal static int pastTnumCircularBufferSize = 1 << 18;
     internal TransactionContext[] tnumToCtx = new TransactionContext[pastTnumCircularBufferSize]; // write protected by spinlock, atomic with txnc increment
     internal int txnc = 0;
     internal int tid = 0;
@@ -150,7 +150,7 @@ public class TransactionManager {
         
         foreach (TransactionContext pastTxn in finish_active){
             PrintDebug($"validating against {pastTxn.tid}", ctx);
-            foreach (var item in pastTxn.GetWritesetKeys().ToList()){
+            foreach (var item in pastTxn.GetWritesetKeys()){
                 PrimaryKey tupleId = item;
                 if (ctx.InReadSet(ref tupleId) || ctx.InWriteSet(ref tupleId)){
                     // Console.WriteLine($"2 ABORT for {ctx.tid} because conflict: {tupleId} in {pastTxn.tid}");
