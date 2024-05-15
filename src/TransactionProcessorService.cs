@@ -159,12 +159,17 @@ public class DarqTransactionBackgroundService : BackgroundService, IDarqProcesso
         // PrintDebug($"Writing to WAL from {request.PartitionId}");
         LogEntry entry = LogEntry.FromBytes(request.Message.ToArray());
 
-        if (entry.type == LogType.Prepare || entry.type == LogType.Commit)
+        if (entry.type == LogType.Prepare)
         {
             long internalTid = GetOrRegisterTid(request.PartitionId, request.Tid);
             entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
             entry.prevLsn = request.PartitionId; // TODO: hacky place to put sender id
-            PrintDebug($"Stepping prepare/commit {entry.lsn}");
+            PrintDebug($"Stepping prepare {entry.lsn}");
+        } else if (entry.type == LogType.Commit) {
+            long internalTid = externalToInternalTxnId[(request.PartitionId, request.Tid)];
+            entry.lsn = internalTid; // TODO: HACKY reuse, we keep tid to be original tid
+            entry.prevLsn = request.PartitionId; // TODO: hacky place to put sender id
+            PrintDebug($"Stepping commit {entry.lsn}");
         } else {
             PrintDebug($"Stepping ok/ack/abort {entry.tid}");
         }
